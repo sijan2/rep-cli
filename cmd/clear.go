@@ -14,13 +14,14 @@ import (
 
 var clearCmd = &cobra.Command{
 	Use:   "clear",
-	Short: "Clear all data (live session, saved sessions, ignore list, primary list)",
+	Short: "Clear all data (live session, saved sessions, ignore list, muted paths, primary list)",
 	Long: `Clear all captured data and reset the store.
 
 This clears:
   - Live session (live.json)
   - All saved sessions in store.json
-  - Ignore list
+  - Ignore list (domains)
+  - Muted paths list
   - Primary domains list
 
 Examples:
@@ -35,6 +36,7 @@ Examples:
 		// Count what we're clearing
 		sessionCount := s.SessionCount()
 		ignoredCount := len(s.GetIgnoredDomains())
+		mutedCount := len(s.GetMutedPaths())
 		primaryCount := len(s.GetPrimaryDomains())
 
 		// Get live request count before clearing
@@ -63,6 +65,7 @@ Examples:
 				"cleared_live_requests": liveCount,
 				"cleared_sessions":      sessionCount,
 				"cleared_ignored":       ignoredCount,
+				"cleared_muted":         mutedCount,
 				"cleared_primary":       primaryCount,
 				"live_path":             clearedLivePath,
 			}
@@ -78,6 +81,9 @@ Examples:
 			}
 			if ignoredCount > 0 {
 				pterm.Info.Printf("Ignored domains: %d\n", ignoredCount)
+			}
+			if mutedCount > 0 {
+				pterm.Info.Printf("Muted paths: %d\n", mutedCount)
 			}
 			if primaryCount > 0 {
 				pterm.Info.Printf("Primary domains: %d\n", primaryCount)

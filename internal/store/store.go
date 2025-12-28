@@ -226,12 +226,13 @@ func (s *Store) Clear() {
 	s.Sessions = []Session{}
 }
 
-// ClearAll clears sessions, ignore list, and primary list
+// ClearAll clears sessions, ignore list, muted paths, and primary list
 func (s *Store) ClearAll() {
 	mu.Lock()
 	defer mu.Unlock()
 	s.Sessions = []Session{}
 	s.IgnoredDomains = make(map[string]bool)
+	s.MutedPaths = nil
 	s.PrimaryDomains = make(map[string]bool)
 }
 
@@ -466,6 +467,11 @@ func (s *Store) Filter(opts FilterOptions) []Request {
 	for _, req := range s.Requests {
 		// Skip ignored domains
 		if opts.ExcludeIgnored && s.IgnoredDomains[req.Domain] {
+			continue
+		}
+
+		// Skip muted paths (check without lock since we already have RLock)
+		if opts.ExcludeIgnored && s.isMutedInternal(req.Domain, req.Path) {
 			continue
 		}
 
@@ -754,6 +760,138 @@ func (s *Store) GetPageFlows() []PageFlowInfo {
 	})
 
 	return result
+}
+
+// Mute adds a path pattern to the mute list
+// Format: "domain/path" or "*/path" for all domains
+func (s *Store) Mute(pattern string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+
+	domain, path := parseMutePattern(pattern)
+	if domain == "" || path == "" {
+		return false
+	}
+
+	// Check for duplicate
+	for _, mp := range s.MutedPaths {
+		if mp.Domain == domain && mp.Pattern == path {
+			return false
+		}
+	}
+
+	s.MutedPaths = append(s.MutedPaths, MutedPath{
+		Domain:  domain,
+		Pattern: path,
+	})
+	return true
+}
+
+// Unmute removes a path pattern from the mute list
+func (s *Store) Unmute(pattern string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+
+	domain, path := parseMutePattern(pattern)
+	if domain == "" || path == "" {
+		return false
+	}
+
+	for i, mp := range s.MutedPaths {
+		if mp.Domain == domain && mp.Pattern == path {
+			s.MutedPaths = append(s.MutedPaths[:i], s.MutedPaths[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// ClearMutedPaths clears all muted paths
+func (s *Store) ClearMutedPaths() int {
+	mu.Lock()
+	defer mu.Unlock()
+	count := len(s.MutedPaths)
+	s.MutedPaths = nil
+	return count
+}
+
+// GetMutedPaths returns all muted path patterns
+func (s *Store) GetMutedPaths() []MutedPath {
+	mu.RLock()
+	defer mu.RUnlock()
+	result := make([]MutedPath, len(s.MutedPaths))
+	copy(result, s.MutedPaths)
+	return result
+}
+
+// IsMuted checks if a request path should be muted
+func (s *Store) IsMuted(domain, path string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	return s.isMutedInternal(domain, path)
+}
+
+// isMutedInternal checks mute without locking (caller must hold lock)
+func (s *Store) isMutedInternal(domain, path string) bool {
+	for _, mp := range s.MutedPaths {
+		// Check domain match
+		if mp.Domain != "*" && !strings.EqualFold(mp.Domain, domain) {
+			continue
+		}
+
+		// Check path match
+		if matchPath(path, mp.Pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseMutePattern splits "domain/path" into domain and path components
+func parseMutePattern(pattern string) (domain, path string) {
+	// Handle */path for all domains
+	if strings.HasPrefix(pattern, "*/") {
+		return "*", pattern[1:]
+	}
+
+	// Find first / after domain
+	idx := strings.Index(pattern, "/")
+	if idx <= 0 {
+		return "", ""
+	}
+
+	return pattern[:idx], pattern[idx:]
+}
+
+// matchPath checks if reqPath matches the pattern
+// Pattern can be:
+// - Prefix: "/api/v1" matches "/api/v1/users"
+// - Exact with trailing wildcard: "/log*" matches "/log", "/logging", "/logs"
+// - Regex if starts with ^: "^/api/v[0-9]+/" matches "/api/v1/", "/api/v2/"
+func matchPath(reqPath, pattern string) bool {
+	// Regex pattern
+	if strings.HasPrefix(pattern, "^") {
+		if re, err := regexp.Compile(pattern); err == nil {
+			return re.MatchString(reqPath)
+		}
+		return false
+	}
+
+	// Wildcard suffix
+	if strings.HasSuffix(pattern, "*") {
+		prefix := pattern[:len(pattern)-1]
+		return strings.HasPrefix(reqPath, prefix)
+	}
+
+	// Exact prefix match (pattern /log matches /log, /log/, /log?x=1)
+	if reqPath == pattern {
+		return true
+	}
+	if strings.HasPrefix(reqPath, pattern+"/") || strings.HasPrefix(reqPath, pattern+"?") {
+		return true
+	}
+
+	return false
 }
 
 // GetBaseDomain extracts the base domain (e.g., "api.example.com" -> "example.com")

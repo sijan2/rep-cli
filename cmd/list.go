@@ -27,6 +27,8 @@ var (
 	listType        string // Comma-separated resource types: script,xhr,fetch,document
 	listAPI         bool   // Preset: API calls only (xmlhttprequest,fetch)
 	listInteresting bool   // Preset: Error responses + state-changing methods
+	listErrors      bool   // Preset: Only error responses (4xx/5xx)
+	listMutations   bool   // Preset: Only state-changing methods
 	listSaved       string // Session ID to read from saved sessions
 )
 
@@ -46,7 +48,9 @@ Output modes (controlled by --output flag):
 
 Presets (agent-optimized shortcuts):
   --api          API calls only (xmlhttprequest, fetch)
-  --interesting  Error responses (4xx/5xx) + state-changing methods (POST/PUT/DELETE)
+  --errors       Only error responses (4xx/5xx)
+  --mutations    Only state-changing methods (POST/PUT/DELETE/PATCH)
+  --interesting  Errors + mutations combined
 
 Data sources:
   (default)              Show live.json (real-time, same as extension)
@@ -90,6 +94,18 @@ Examples:
 			}
 		}
 
+		if listErrors {
+			// Preset: Only error responses
+			statusRanges = []string{"4xx", "5xx"}
+		}
+
+		if listMutations {
+			// Preset: Only state-changing methods
+			if len(methods) == 0 {
+				methods = []string{"POST", "PUT", "DELETE", "PATCH"}
+			}
+		}
+
 		// Build filter options
 		opts := store.FilterOptions{
 			Domain:         listDomain,
@@ -107,6 +123,7 @@ Examples:
 		}
 
 		var requests []store.Request
+		var totalCount int
 
 		if listSaved != "" {
 			// Load from saved session in store.json
@@ -132,10 +149,19 @@ Examples:
 			tempStore := store.NewTempStore(session.Requests)
 			tempStore.PrimaryDomains = s.PrimaryDomains
 			tempStore.IgnoredDomains = s.IgnoredDomains
+			tempStore.MutedPaths = s.MutedPaths
 
 			if listPrimary && len(s.GetPrimaryDomains()) == 0 {
 				pterm.Info.Println("No primary domains set. Use 'rep primary <domain>' to add.")
 				return nil
+			}
+
+			// Get total count first (without limit)
+			if opts.Limit > 0 {
+				unlimitedOpts := opts
+				unlimitedOpts.Limit = 0
+				unlimitedOpts.Offset = 0
+				totalCount = len(tempStore.Filter(unlimitedOpts))
 			}
 			requests = tempStore.Filter(opts)
 		} else {
@@ -156,15 +182,24 @@ Examples:
 			}
 			// Filter live requests using store's filter logic
 			tempStore := store.NewTempStore(export.Requests)
-			// Load ignore/primary lists from persistent store
+			// Load ignore/primary/mute lists from persistent store
 			s, err := store.Get()
 			if err == nil {
 				tempStore.PrimaryDomains = s.PrimaryDomains
 				tempStore.IgnoredDomains = s.IgnoredDomains
+				tempStore.MutedPaths = s.MutedPaths
 			}
 			if listPrimary && len(tempStore.GetPrimaryDomains()) == 0 {
 				pterm.Info.Println("No primary domains set. Use 'rep primary <domain>' to add.")
 				return nil
+			}
+
+			// Get total count first (without limit)
+			if opts.Limit > 0 {
+				unlimitedOpts := opts
+				unlimitedOpts.Limit = 0
+				unlimitedOpts.Offset = 0
+				totalCount = len(tempStore.Filter(unlimitedOpts))
 			}
 			requests = tempStore.Filter(opts)
 		}
@@ -194,25 +229,30 @@ Examples:
 
 		useLine := listLine && !listDetail && mode == store.OutputCompact
 		if useLine {
-			printRequestsLine(requests)
+			printRequestsLine(requests, totalCount, opts.Limit)
 		} else {
-			printRequests(requests, mode)
+			printRequests(requests, mode, totalCount, opts.Limit)
 		}
 
 		return nil
 	},
 }
 
-func printRequests(requests []store.Request, mode store.OutputMode) {
+func printRequests(requests []store.Request, mode store.OutputMode, totalCount int, limit int) {
 	for _, req := range requests {
 		printRequest(&req, mode)
 		fmt.Println()
 	}
-	pterm.Info.Printf("Showing %d requests\n", len(requests))
+	// Show truncation indicator when limited
+	if limit > 0 && totalCount > len(requests) {
+		pterm.Info.Printf("[Showing %d of %d requests. Use --offset to paginate]\n", len(requests), totalCount)
+	} else {
+		pterm.Info.Printf("Showing %d requests\n", len(requests))
+	}
 	fmt.Println("Use 'rep body <id>' to get full response body for a specific request")
 }
 
-func printRequestsLine(requests []store.Request) {
+func printRequestsLine(requests []store.Request, totalCount int, limit int) {
 	for _, req := range requests {
 		status := 0
 		if req.Response != nil {
@@ -220,6 +260,10 @@ func printRequestsLine(requests []store.Request) {
 		}
 		url := output.SanitizeText(req.URL)
 		fmt.Printf("[%s] %s %s → %d\n", req.ID, req.Method, url, status)
+	}
+	// Show truncation indicator when limited
+	if limit > 0 && totalCount > len(requests) {
+		fmt.Printf("[Showing %d of %d requests]\n", len(requests), totalCount)
 	}
 }
 
@@ -355,6 +399,8 @@ func init() {
 	listCmd.Flags().StringVar(&listType, "type", "", "Filter by resource type (script,xmlhttprequest,fetch,document)")
 	listCmd.Flags().BoolVar(&listAPI, "api", false, "Preset: API calls only (xmlhttprequest, fetch)")
 	listCmd.Flags().BoolVar(&listInteresting, "interesting", false, "Preset: Error responses (4xx/5xx) + state-changing methods")
+	listCmd.Flags().BoolVar(&listErrors, "errors", false, "Preset: Only error responses (4xx/5xx)")
+	listCmd.Flags().BoolVar(&listMutations, "mutations", false, "Preset: Only state-changing methods (POST/PUT/DELETE/PATCH)")
 	// Data source
 	listCmd.Flags().StringVar(&listSaved, "saved", "", "Read from saved session (ID, prefix, or 'latest')")
 }

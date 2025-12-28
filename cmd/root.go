@@ -21,6 +21,25 @@ var rootCmd = &cobra.Command{
 Designed for efficient analysis by AI agents like Claude Code.
 Works with rep+ Chrome extension for real-time traffic capture.
 
+AI Agent Workflow (token-optimized):
+  1. rep summary                       First! Get landscape + ignore suggestions
+  2. rep primary <target-domains>      Mark targets (enables --primary filter)
+  3. rep ignore <suggested-domains>    Remove noise (from summary suggestions)
+  4. rep mute <domain/noisy-path>      Fine-filter endpoints like /log, /health
+  5. rep list --primary -o meta        List target traffic (headers only = fast)
+  6. rep list --primary --interesting  Find anomalies (4xx/5xx, mutations)
+  7. rep body <id>                     Deep dive specific requests
+
+Curl replay (token-saving):
+  rep auth --save -d <domain>
+  eval "$(rep auth --vars -d <domain> --prefix TARGET)"
+  # Use $TARGET_AUTH, $TARGET_COOKIE, $TARGET_CSRF in curl
+
+Token tips:
+  - Use -o meta (headers only) for scanning, -o json for parsing
+  - Use --limit N to cap results, output shows "[X of Y]" when truncated
+  - Use rep auth --save + rep auth --vars to avoid copying huge cookies/tokens
+
 Real-time analysis (reads live.json, same as extension):
   rep summary                          Quick overview for first-pass analysis
   rep domains                          List all domains with stats
@@ -35,7 +54,8 @@ Session management:
   rep list --saved 20231227            View by session ID prefix
 
 Configuration:
-  rep ignore <domain>                  Add domain to ignore list
+  rep ignore <domain>                  Ignore entire domain (broad filter)
+  rep mute <domain/path>               Mute specific endpoint (fine filter)
   rep primary <domain>                 Mark domain as primary target
   rep clear                            Clear all data (live + saved + config)
 

@@ -42,11 +42,18 @@ type Session struct {
 	Requests  []Request `json:"requests"`
 }
 
+// MutedPath represents a path pattern to mute (fine-grained noise filtering)
+type MutedPath struct {
+	Domain  string `json:"domain"`  // Domain to match, or "*" for all domains
+	Pattern string `json:"pattern"` // Path pattern (prefix or regex if starts with ^)
+}
+
 // Store holds saved sessions and configuration
 type Store struct {
 	Sessions       []Session       `json:"sessions"`
 	IgnoredDomains map[string]bool `json:"ignored_domains"`
 	PrimaryDomains map[string]bool `json:"primary_domains"`
+	MutedPaths     []MutedPath     `json:"muted_paths,omitempty"`
 	// Legacy fields for migration (will be removed after migration)
 	Requests   []Request `json:"requests,omitempty"`
 	LastImport int64     `json:"last_import,omitempty"`

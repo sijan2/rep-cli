@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var sessionsLimit int
+
 var sessionsCmd = &cobra.Command{
 	Use:   "sessions",
 	Short: "List saved sessions",
@@ -33,6 +35,12 @@ Examples:
 			pterm.Info.Println("No saved sessions")
 			pterm.Info.Println("Use 'rep save' to save the current live session")
 			return nil
+		}
+
+		// Apply limit
+		totalCount := len(sessions)
+		if sessionsLimit > 0 && len(sessions) > sessionsLimit {
+			sessions = sessions[:sessionsLimit]
 		}
 
 		if getOutputMode() == "json" {
@@ -65,6 +73,11 @@ Examples:
 
 		pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
 
+		// Show truncation indicator
+		if sessionsLimit > 0 && len(sessions) < totalCount {
+			fmt.Printf("\n[Showing %d of %d sessions]\n", len(sessions), totalCount)
+		}
+
 		fmt.Println()
 		pterm.Info.Println("To view a session: rep list --saved <id>")
 
@@ -74,4 +87,5 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(sessionsCmd)
+	sessionsCmd.Flags().IntVarP(&sessionsLimit, "limit", "l", 0, "Limit number of sessions shown (0=unlimited)")
 }

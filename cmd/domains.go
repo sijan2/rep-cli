@@ -14,6 +14,7 @@ var (
 	domainsIgnored bool
 	domainsAll     bool
 	domainsSaved   string
+	domainsLimit   int
 )
 
 var domainsCmd = &cobra.Command{
@@ -97,18 +98,24 @@ Use --saved to view domains from archived sessions.
 			}
 		}
 
+		// Apply limit
+		totalCount := len(filtered)
+		if domainsLimit > 0 && len(filtered) > domainsLimit {
+			filtered = filtered[:domainsLimit]
+		}
+
 		if getOutputMode() == "json" {
 			out, _ := sonic.MarshalIndent(filtered, "", "  ")
 			fmt.Println(string(out))
 		} else {
-			printDomains(filtered)
+			printDomains(filtered, totalCount, domainsLimit)
 		}
 
 		return nil
 	},
 }
 
-func printDomains(domains []store.DomainInfo) {
+func printDomains(domains []store.DomainInfo, totalCount, limit int) {
 	if len(domains) == 0 {
 		pterm.Info.Println("No domains match the filter")
 		return
@@ -143,7 +150,13 @@ func printDomains(domains []store.DomainInfo) {
 	}
 
 	pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
-	fmt.Printf("\nTotal: %d domains\n", len(domains))
+
+	// Show truncation indicator
+	if limit > 0 && len(domains) < totalCount {
+		fmt.Printf("\n[Showing %d of %d domains]\n", len(domains), totalCount)
+	} else {
+		fmt.Printf("\nTotal: %d domains\n", len(domains))
+	}
 }
 
 func init() {
@@ -152,4 +165,5 @@ func init() {
 	domainsCmd.Flags().BoolVar(&domainsIgnored, "ignored", false, "Show only ignored domains")
 	domainsCmd.Flags().BoolVar(&domainsAll, "all", false, "Show all domains including ignored")
 	domainsCmd.Flags().StringVar(&domainsSaved, "saved", "", "Read from saved session (ID, prefix, or 'latest')")
+	domainsCmd.Flags().IntVarP(&domainsLimit, "limit", "l", 0, "Limit number of domains shown (0=unlimited)")
 }

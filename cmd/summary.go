@@ -296,6 +296,11 @@ func printSummary(summary Summary, domains []store.DomainInfo, s *store.Store) {
 	fmt.Println("  rep list                 List requests (compact)")
 	fmt.Println("  rep list -d <domain>     Filter by domain")
 	fmt.Println("  rep body <id>            Get full response body")
+
+	fmt.Println()
+	pterm.DefaultSection.Println("Auth Hint")
+	fmt.Println("  rep auth --save -d <domain>")
+	fmt.Println("  eval \"$(rep auth --vars -d <domain> --prefix TARGET)\"")
 }
 
 func pageDomainFromRequest(req store.Request) string {
