@@ -17,7 +17,7 @@ var (
 var saveCmd = &cobra.Command{
 	Use:   "save",
 	Short: "Save current live session to archive",
-	Long: `Save the current live.json session to store.json as a named session.
+	Long: `Save the current live.json session to sessions.jsonl as a named session.
 
 The live session remains intact after saving.
 Use 'rep list --saved <id>' to view saved sessions.
@@ -35,9 +35,7 @@ Examples:
 
 		// Check if file exists
 		if _, err := os.Stat(livePath); os.IsNotExist(err) {
-			pterm.Warning.Printf("Live file not found: %s\n", livePath)
-			pterm.Info.Println("Enable auto-export in rep+ extension first")
-			return nil
+			return emitLiveUnavailable("save", err)
 		}
 
 		// Read file
@@ -67,7 +65,10 @@ Examples:
 		sessionID := store.GenerateSessionID(saveNote)
 
 		// Add session
-		session := s.AddSession(sessionID, saveNote, export.Requests)
+		session, err := s.AddSession(sessionID, saveNote, export.Requests)
+		if err != nil {
+			return fmt.Errorf("failed to write session log: %w", err)
+		}
 
 		// Save store
 		if err := s.Save(); err != nil {
@@ -79,6 +80,7 @@ Examples:
 				"session_id": session.ID,
 				"requests":   len(session.Requests),
 				"note":       session.Note,
+				"hash_id":    session.HashID,
 				"timestamp":  session.Timestamp,
 			}
 			out, _ := sonic.MarshalIndent(result, "", "  ")
@@ -86,6 +88,9 @@ Examples:
 		} else {
 			pterm.Success.Printf("Saved session: %s\n", session.ID)
 			pterm.Info.Printf("Requests: %d\n", len(session.Requests))
+			if session.HashID != "" {
+				pterm.Info.Printf("Hash ID: %s\n", session.HashID)
+			}
 			if session.Note != "" {
 				pterm.Info.Printf("Note: %s\n", session.Note)
 			}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -111,13 +112,9 @@ func Get() (*Store, error) {
 func NewTempStore(requests []Request) *Store {
 	s := NewStore()
 	s.Requests = requests
-	// Compute Domain/Path for each request
+	// Compute Domain/Path/SemanticID for each request
 	for i := range s.Requests {
-		req := &s.Requests[i]
-		if parsed, err := url.Parse(req.URL); err == nil {
-			req.Domain = parsed.Host
-			req.Path = parsed.Path
-		}
+		ComputeRequestFields(&s.Requests[i])
 	}
 	return s
 }
@@ -171,6 +168,22 @@ func Load() (*Store, error) {
 		store.LastImport = 0 // Clear legacy field
 	}
 
+	// Load sessions from JSONL if available (merge-safe storage)
+	if sessions, found, err := LoadSessionsLog(); err == nil {
+		if found {
+			store.Sessions = sessions
+		} else if len(store.Sessions) > 0 {
+			for i := range store.Sessions {
+				if store.Sessions[i].HashID == "" {
+					store.Sessions[i].HashID = GenerateHashID("s", store.Sessions[i].ID, strconv.FormatInt(store.Sessions[i].Timestamp, 10))
+				}
+				_ = AppendSessionLog(&store.Sessions[i])
+			}
+		}
+	} else {
+		return nil, fmt.Errorf("failed to load sessions log: %w", err)
+	}
+
 	// Compute domain/path for all session requests
 	for i := range store.Sessions {
 		for j := range store.Sessions[i].Requests {
@@ -181,7 +194,7 @@ func Load() (*Store, error) {
 	return store, nil
 }
 
-// ComputeRequestFields computes Domain and Path from URL.
+// ComputeRequestFields computes Domain, Path, and SemanticID from URL.
 func ComputeRequestFields(req *Request) {
 	if parsedURL, err := url.Parse(req.URL); err == nil {
 		req.Domain = parsedURL.Host
@@ -190,8 +203,9 @@ func ComputeRequestFields(req *Request) {
 			req.Path += "?" + parsedURL.RawQuery
 		}
 	}
+	// Generate semantic ID for AI-friendly reference
+	req.SemanticID = GenerateSemanticID(req)
 }
-
 
 // Save saves the store to disk
 func (s *Store) Save() error {
@@ -207,7 +221,23 @@ func (s *Store) Save() error {
 		return err
 	}
 
-	data, err := sonic.MarshalIndent(s, "", "  ")
+	type persistedStore struct {
+		IgnoredDomains map[string]bool `json:"ignored_domains"`
+		PrimaryDomains map[string]bool `json:"primary_domains"`
+		MutedPaths     []MutedPath     `json:"muted_paths,omitempty"`
+		Requests       []Request       `json:"requests,omitempty"`
+		LastImport     int64           `json:"last_import,omitempty"`
+	}
+
+	payload := persistedStore{
+		IgnoredDomains: s.IgnoredDomains,
+		PrimaryDomains: s.PrimaryDomains,
+		MutedPaths:     s.MutedPaths,
+		Requests:       s.Requests,
+		LastImport:     s.LastImport,
+	}
+
+	data, err := sonic.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal store: %w", err)
 	}
@@ -224,6 +254,7 @@ func (s *Store) Clear() {
 	mu.Lock()
 	defer mu.Unlock()
 	s.Sessions = []Session{}
+	_ = AppendSessionClear(time.Now())
 }
 
 // ClearAll clears sessions, ignore list, muted paths, and primary list
@@ -234,6 +265,7 @@ func (s *Store) ClearAll() {
 	s.IgnoredDomains = make(map[string]bool)
 	s.MutedPaths = nil
 	s.PrimaryDomains = make(map[string]bool)
+	_ = AppendSessionClear(time.Now())
 }
 
 // GenerateSessionID creates an agent-friendly session ID
@@ -265,7 +297,7 @@ func GenerateSessionID(note string) string {
 }
 
 // AddSession saves a new session to the store
-func (s *Store) AddSession(id string, note string, requests []Request) *Session {
+func (s *Store) AddSession(id string, note string, requests []Request) (*Session, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -280,8 +312,13 @@ func (s *Store) AddSession(id string, note string, requests []Request) *Session 
 		Note:      note,
 		Requests:  requests,
 	}
+	session.HashID = GenerateHashID("s", session.ID, strconv.FormatInt(session.Timestamp, 10))
+
+	if err := AppendSessionLog(&session); err != nil {
+		return nil, err
+	}
 	s.Sessions = append(s.Sessions, session)
-	return &s.Sessions[len(s.Sessions)-1]
+	return &s.Sessions[len(s.Sessions)-1], nil
 }
 
 // GetSession returns a session by ID (exact or prefix match)
@@ -294,10 +331,16 @@ func (s *Store) GetSession(id string) *Session {
 		if s.Sessions[i].ID == id {
 			return &s.Sessions[i]
 		}
+		if s.Sessions[i].HashID == id {
+			return &s.Sessions[i]
+		}
 	}
 	// Try prefix match
 	for i := range s.Sessions {
 		if strings.HasPrefix(s.Sessions[i].ID, id) {
+			return &s.Sessions[i]
+		}
+		if strings.HasPrefix(s.Sessions[i].HashID, id) {
 			return &s.Sessions[i]
 		}
 	}
@@ -342,7 +385,6 @@ func (s *Store) ClearIgnoreList() {
 	defer mu.Unlock()
 	s.IgnoredDomains = make(map[string]bool)
 }
-
 
 // IsIgnored checks if a domain is in the ignore list
 func (s *Store) IsIgnored(domain string) bool {
@@ -480,6 +522,11 @@ func (s *Store) Filter(opts FilterOptions) []Request {
 			continue
 		}
 
+		// Time filter
+		if opts.Since > 0 && req.Timestamp < opts.Since {
+			continue
+		}
+
 		// Filter by domain
 		if opts.Domain != "" && !strings.EqualFold(req.Domain, opts.Domain) {
 			continue
@@ -524,7 +571,10 @@ func (s *Store) Filter(opts FilterOptions) []Request {
 		}
 
 		// Filter by status range (e.g., "4xx", "5xx")
-		if opts.StatusRange != "" && req.Response != nil {
+		if opts.StatusRange != "" {
+			if req.Response == nil {
+				continue
+			}
 			status := req.Response.Status
 			switch opts.StatusRange {
 			case "2xx":
@@ -547,7 +597,10 @@ func (s *Store) Filter(opts FilterOptions) []Request {
 		}
 
 		// Filter by multiple status ranges (e.g., ["4xx", "5xx"])
-		if len(opts.StatusRanges) > 0 && req.Response != nil {
+		if len(opts.StatusRanges) > 0 {
+			if req.Response == nil {
+				continue
+			}
 			status := req.Response.Status
 			matched := false
 			for _, sr := range opts.StatusRanges {

@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/bytedance/sonic"
@@ -23,6 +25,8 @@ var (
 	listIncludeIgnored bool
 	listLine           bool
 	listDetail         bool
+	listBudget         string // Token budget mode: minimal, compact, standard, full
+	listSince          string // Time filter
 	// New flags for agent-optimized filtering
 	listType        string // Comma-separated resource types: script,xhr,fetch,document
 	listAPI         bool   // Preset: API calls only (xmlhttprequest,fetch)
@@ -79,6 +83,10 @@ Examples:
 		// Apply presets before building filter
 		resourceTypes := parseCommaSeparated(listType)
 		methods := parseCommaSeparated(listMethod)
+		method := ""
+		if len(methods) == 1 {
+			method = strings.ToUpper(methods[0])
+		}
 		statusRanges := []string{}
 
 		if listAPI {
@@ -109,7 +117,7 @@ Examples:
 		// Build filter options
 		opts := store.FilterOptions{
 			Domain:         listDomain,
-			Method:         strings.ToUpper(listMethod),
+			Method:         method,
 			Methods:        methods,
 			Status:         listStatus,
 			StatusRange:    listStatusRange,
@@ -120,13 +128,17 @@ Examples:
 			Offset:         listOffset,
 			PrimaryOnly:    listPrimary,
 			ExcludeIgnored: !listIncludeIgnored,
+			Since:          parseSinceTime(listSince),
 		}
 
 		var requests []store.Request
 		var totalCount int
+		var source string
+		var candidates []store.Request
+		var primaryCount int
 
 		if listSaved != "" {
-			// Load from saved session in store.json
+			// Load from saved session in sessions.jsonl
 			s, err := store.Get()
 			if err != nil {
 				return fmt.Errorf("failed to load store: %w", err)
@@ -140,20 +152,26 @@ Examples:
 			}
 
 			if session == nil {
-				pterm.Warning.Printf("Session not found: %s\n", listSaved)
-				pterm.Info.Println("Use 'rep sessions' to list available sessions")
-				return nil
+				return output.EmitAgentError(os.Stdout, output.NewAgentError(
+					output.ErrCodeSessionNotFound,
+					"list",
+					fmt.Sprintf("session not found: %s", listSaved),
+					"rep sessions",
+				), getOutputMode() == "json")
 			}
+
+			source = "saved/" + session.ID
 
 			// Create temp store for filtering
 			tempStore := store.NewTempStore(session.Requests)
 			tempStore.PrimaryDomains = s.PrimaryDomains
 			tempStore.IgnoredDomains = s.IgnoredDomains
 			tempStore.MutedPaths = s.MutedPaths
+			candidates = session.Requests
+			primaryCount = len(s.GetPrimaryDomains())
 
-			if listPrimary && len(s.GetPrimaryDomains()) == 0 {
-				pterm.Info.Println("No primary domains set. Use 'rep primary <domain>' to add.")
-				return nil
+			if listPrimary && primaryCount == 0 {
+				return emitListNoPrimary(os.Stdout, source, getOutputMode() == "json", useEnvelope())
 			}
 
 			// Get total count first (without limit)
@@ -172,26 +190,26 @@ Examples:
 			}
 			export, err := loadLiveExport(livePath)
 			if err != nil {
-				pterm.Warning.Printf("Could not read live.json: %v\n", err)
-				pterm.Info.Println("Enable auto-export in rep+ extension first")
-				return nil
+				return emitLiveUnavailable("list", err)
 			}
 			if len(export.Requests) == 0 {
-				pterm.Info.Println("No requests captured yet (live session empty)")
+				emitLiveEmpty("list")
 				return nil
 			}
+			source = "live.json"
 			// Filter live requests using store's filter logic
 			tempStore := store.NewTempStore(export.Requests)
+			candidates = export.Requests
 			// Load ignore/primary/mute lists from persistent store
 			s, err := store.Get()
 			if err == nil {
 				tempStore.PrimaryDomains = s.PrimaryDomains
 				tempStore.IgnoredDomains = s.IgnoredDomains
 				tempStore.MutedPaths = s.MutedPaths
+				primaryCount = len(s.GetPrimaryDomains())
 			}
 			if listPrimary && len(tempStore.GetPrimaryDomains()) == 0 {
-				pterm.Info.Println("No primary domains set. Use 'rep primary <domain>' to add.")
-				return nil
+				return emitListNoPrimary(os.Stdout, source, getOutputMode() == "json", useEnvelope())
 			}
 
 			// Get total count first (without limit)
@@ -205,65 +223,253 @@ Examples:
 		}
 
 		if len(requests) == 0 {
-			pterm.Info.Println("No requests match the filter")
-			return nil
+			// Build an explainer in the caller's requested output format.
+			primaries := loadPrimaryDomains()
+			distinctDomains, sampleDomains, primaryMatches := candidateStats(candidates, primaries)
+			return emitListEmptyResult(os.Stdout, output.EmptyResultContext{
+				Command:               "list",
+				Source:                source,
+				TotalCandidates:       len(candidates),
+				DistinctDomains:       distinctDomains,
+				Filters:               opts,
+				PrimaryCount:          primaryCount,
+				PrimariesInCandidates: primaryMatches,
+				SampleDomains:         sampleDomains,
+			}, getOutputMode() == "json", useEnvelope())
 		}
 
-		// Determine output mode
-		mode := store.OutputCompact
-		switch getOutputMode() {
-		case "meta":
-			mode = store.OutputMeta
-		case "full":
-			mode = store.OutputFull
-		case "json":
-			mode = store.OutputJSON
-		}
+		mode := resolvedListOutputMode()
 
-		if mode == store.OutputJSON || getOutputMode() == "json" {
+		if getOutputMode() == "json" {
 			formatted := output.FormatRequests(requests, mode)
-			out, _ := sonic.MarshalIndent(formatted, "", "  ")
+			var payload interface{} = formatted
+			if useEnvelope() {
+				env := output.WrapData("list", source, formatted)
+				env.Filters = buildListFilterMap(opts)
+				if opts.Limit > 0 && totalCount > len(formatted) {
+					nextOffset := opts.Offset + len(formatted)
+					env.Truncation = &output.TruncationInfo{
+						Reason:   "size-cap",
+						Returned: len(formatted),
+						Total:    totalCount,
+					}
+					env.Suggest = []string{
+						fmt.Sprintf("rep list --offset=%d --limit=%d", nextOffset, opts.Limit),
+					}
+				}
+				payload = env
+			}
+			out, _ := sonic.MarshalIndent(payload, "", "  ")
 			fmt.Println(string(out))
 			return nil
 		}
 
+		// Disclose data source on the first non-JSON line.
+		fmt.Println(output.FormatSourceLine(source))
+
 		useLine := listLine && !listDetail && mode == store.OutputCompact
 		if useLine {
-			printRequestsLine(requests, totalCount, opts.Limit)
+			printRequestsLine(requests, totalCount, opts.Limit, opts.Offset)
 		} else {
-			printRequests(requests, mode, totalCount, opts.Limit)
+			printRequests(requests, mode, totalCount, opts.Limit, opts.Offset)
 		}
 
 		return nil
 	},
 }
 
-func printRequests(requests []store.Request, mode store.OutputMode, totalCount int, limit int) {
+func resolvedListOutputMode() store.OutputMode {
+	return resolveListOutputMode(outputMode, jsonOutput)
+}
+
+func resolveListOutputMode(mode string, jsonFlag bool) store.OutputMode {
+	if jsonFlag {
+		return store.OutputJSON
+	}
+	switch mode {
+	case "meta":
+		return store.OutputMeta
+	case "full":
+		return store.OutputFull
+	case "json":
+		return store.OutputJSON
+	default:
+		return store.OutputCompact
+	}
+}
+
+func emitListNoPrimary(writer io.Writer, source string, jsonMode, envelopeMode bool) error {
+	if !jsonMode {
+		_, err := fmt.Fprintln(writer, "No primary domains set. Use 'rep primary <domain>' to add.")
+		return err
+	}
+	data := []output.RequestOutput{}
+	var payload interface{} = data
+	if envelopeMode {
+		envelope := output.WrapData("list", source, data)
+		envelope.Filters = map[string]interface{}{"primary": true}
+		envelope.Suggest = []string{
+			"rep primary <domain>",
+			"rep list --primary=false -o json",
+		}
+		payload = envelope
+	}
+	encoded, err := sonic.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(writer, string(encoded))
+	return err
+}
+
+func emitListEmptyResult(writer io.Writer, context output.EmptyResultContext, jsonMode, envelopeMode bool) error {
+	if !jsonMode {
+		_, err := fmt.Fprint(writer, output.FormatEmptyReason(context))
+		return err
+	}
+	data := []output.RequestOutput{}
+	var payload interface{} = data
+	if envelopeMode {
+		envelope := output.WrapData("list", context.Source, data)
+		envelope.Filters = buildListFilterMap(context.Filters)
+		if context.TotalCandidates == 0 {
+			envelope.Suggest = []string{
+				"rep browser status",
+				"rep browse <url>",
+				"rep summary",
+			}
+		} else {
+			envelope.Suggest = []string{"rep list --primary=false -o json"}
+			if len(context.SampleDomains) > 0 {
+				envelope.Suggest = append(envelope.Suggest, fmt.Sprintf("rep primary --clear && rep primary %s", context.SampleDomains[0]))
+			}
+		}
+		payload = envelope
+	}
+	encoded, err := sonic.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(writer, string(encoded))
+	return err
+}
+
+// buildListFilterMap serializes active filter state into the envelope's
+// filters map. Only non-default fields are emitted so consumers can cheaply
+// see what actually constrained the query.
+func buildListFilterMap(opts store.FilterOptions) map[string]interface{} {
+	m := map[string]interface{}{
+		"primary": opts.PrimaryOnly,
+	}
+	if opts.Domain != "" {
+		m["domain"] = opts.Domain
+	}
+	if len(opts.Methods) > 0 {
+		m["methods"] = opts.Methods
+	} else if opts.Method != "" {
+		m["method"] = opts.Method
+	}
+	if opts.Status > 0 {
+		m["status"] = opts.Status
+	}
+	if opts.StatusRange != "" {
+		m["status_range"] = opts.StatusRange
+	}
+	if len(opts.StatusRanges) > 0 {
+		m["status_ranges"] = opts.StatusRanges
+	}
+	if len(opts.ResourceTypes) > 0 {
+		m["resource_types"] = opts.ResourceTypes
+	}
+	if opts.Pattern != "" {
+		m["pattern"] = opts.Pattern
+	}
+	if opts.Limit > 0 {
+		m["limit"] = opts.Limit
+	}
+	if opts.Offset > 0 {
+		m["offset"] = opts.Offset
+	}
+	return m
+}
+
+// candidateStats computes distinct domains, a sample of top domains, and how many
+// configured primaries appear in the candidate set. Used by the empty-result explainer.
+func candidateStats(reqs []store.Request, primaries []string) (distinct int, sample []string, primaryMatches int) {
+	counts := make(map[string]int, 32)
+	for i := range reqs {
+		d := reqs[i].Domain
+		if d == "" {
+			continue
+		}
+		counts[d]++
+	}
+	distinct = len(counts)
+
+	type kv struct {
+		k string
+		v int
+	}
+	pairs := make([]kv, 0, len(counts))
+	for k, v := range counts {
+		pairs = append(pairs, kv{k, v})
+	}
+	// Simple selection of up to 3 highest-count domains; small N so no need to sort fully.
+	for i := 0; i < len(pairs); i++ {
+		maxIdx := i
+		for j := i + 1; j < len(pairs); j++ {
+			if pairs[j].v > pairs[maxIdx].v {
+				maxIdx = j
+			}
+		}
+		pairs[i], pairs[maxIdx] = pairs[maxIdx], pairs[i]
+		if i >= 2 {
+			break
+		}
+	}
+	for i := 0; i < len(pairs) && i < 3; i++ {
+		sample = append(sample, pairs[i].k)
+	}
+
+	primarySet := make(map[string]bool, len(primaries))
+	for _, p := range primaries {
+		primarySet[strings.ToLower(p)] = true
+	}
+	for d := range counts {
+		if primarySet[strings.ToLower(d)] {
+			primaryMatches++
+		}
+	}
+	return
+}
+
+// loadPrimaryDomains returns the configured primary domains, or nil on error.
+func loadPrimaryDomains() []string {
+	s, err := store.Get()
+	if err != nil {
+		return nil
+	}
+	return s.GetPrimaryDomains()
+}
+
+func printRequests(requests []store.Request, mode store.OutputMode, totalCount int, limit, offset int) {
 	for _, req := range requests {
 		printRequest(&req, mode)
 		fmt.Println()
 	}
-	// Show truncation indicator when limited
-	if limit > 0 && totalCount > len(requests) {
-		pterm.Info.Printf("[Showing %d of %d requests. Use --offset to paginate]\n", len(requests), totalCount)
-	} else {
-		pterm.Info.Printf("Showing %d requests\n", len(requests))
+	if footer := output.FormatPaginationFooter(len(requests), totalCount, offset, limit); footer != "" {
+		fmt.Println(footer)
 	}
 	fmt.Println("Use 'rep body <id>' to get full response body for a specific request")
 }
 
-func printRequestsLine(requests []store.Request, totalCount int, limit int) {
-	for _, req := range requests {
-		status := 0
-		if req.Response != nil {
-			status = req.Response.Status
-		}
-		url := output.SanitizeText(req.URL)
-		fmt.Printf("[%s] %s %s → %d\n", req.ID, req.Method, url, status)
+func printRequestsLine(requests []store.Request, totalCount int, limit, offset int) {
+	budget := output.ParseBudgetMode(listBudget)
+	for i := range requests {
+		fmt.Println(output.FormatRequestLineBudget(&requests[i], budget))
 	}
-	// Show truncation indicator when limited
-	if limit > 0 && totalCount > len(requests) {
-		fmt.Printf("[Showing %d of %d requests]\n", len(requests), totalCount)
+	if footer := output.FormatPaginationFooter(len(requests), totalCount, offset, limit); footer != "" {
+		fmt.Println(footer)
 	}
 }
 
@@ -291,12 +497,17 @@ func printRequest(req *store.Request, mode store.OutputMode) {
 			req.URL,
 			pterm.NewStyle(statusColor).Sprintf("%d", status)))
 
-	// Request headers (always show key ones)
+	// Request headers (agent-safe and bounded in meta mode).
 	if len(req.Headers) > 0 {
 		fmt.Println("  Request Headers:")
 		importantHeaders := []string{"content-type", "authorization", "cookie", "x-api-key", "accept"}
+		headers := req.Headers
+		if mode == store.OutputMeta {
+			headers = output.MetaHeaders(req.Headers, false)
+			importantHeaders = sortedHeaderNames(headers)
+		}
 		for _, h := range importantHeaders {
-			key, values := store.HeaderValuesWithKey(req.Headers, h)
+			key, values := store.HeaderValuesWithKey(headers, h)
 			if len(values) == 0 {
 				continue
 			}
@@ -305,8 +516,9 @@ func printRequest(req *store.Request, mode store.OutputMode) {
 			}
 			for _, v := range values {
 				v = output.SanitizeText(v)
-				// Mask sensitive values
-				if h == "authorization" || h == "cookie" || h == "x-api-key" {
+				// Compact/full text keeps a short hint for interactive use. Meta
+				// values are already irreversibly fingerprinted by MetaHeaders.
+				if mode != store.OutputMeta && (h == "authorization" || h == "cookie" || h == "x-api-key") {
 					if len(v) > 20 {
 						v = v[:10] + "..." + v[len(v)-5:]
 					}
@@ -316,8 +528,8 @@ func printRequest(req *store.Request, mode store.OutputMode) {
 		}
 	}
 
-	// Request body
-	if req.Body != "" {
+	// Request body (hidden in meta mode; contract: headers only)
+	if req.Body != "" && mode != store.OutputMeta {
 		fmt.Println("  Request Body:")
 		body := req.Body
 		if mode == store.OutputCompact && len(body) > 200 {
@@ -330,10 +542,16 @@ func printRequest(req *store.Request, mode store.OutputMode) {
 	}
 
 	// Response
-	if req.Response != nil && mode != store.OutputMeta {
+	if req.Response != nil {
 		fmt.Println("  Response Headers:")
-		for _, h := range []string{"content-type", "content-length"} {
-			key, values := store.HeaderValuesWithKey(req.Response.Headers, h)
+		responseHeaders := req.Response.Headers
+		responseHeaderNames := []string{"content-type", "content-length"}
+		if mode == store.OutputMeta {
+			responseHeaders = output.MetaHeaders(req.Response.Headers, true)
+			responseHeaderNames = sortedHeaderNames(responseHeaders)
+		}
+		for _, h := range responseHeaderNames {
+			key, values := store.HeaderValuesWithKey(responseHeaders, h)
 			if len(values) == 0 {
 				continue
 			}
@@ -346,7 +564,7 @@ func printRequest(req *store.Request, mode store.OutputMode) {
 			}
 		}
 
-		if req.Response.Body != "" {
+		if req.Response.Body != "" && mode != store.OutputMeta {
 			fmt.Println("  Response Body:")
 			// Get content type
 			contentType := store.HeaderFirst(req.Response.Headers, "content-type")
@@ -395,6 +613,8 @@ func init() {
 	listCmd.Flags().BoolVar(&listIncludeIgnored, "include-ignored", false, "Include requests to ignored domains")
 	listCmd.Flags().BoolVar(&listLine, "line", true, "One-line output with request ID (default)")
 	listCmd.Flags().BoolVar(&listDetail, "detail", false, "Show multi-line request details")
+	listCmd.Flags().StringVar(&listBudget, "budget", "compact", "Token budget: minimal (~15/req), compact (~30/req), standard (~100/req), full")
+	listCmd.Flags().StringVar(&listSince, "since", "", "Only requests since duration (e.g., 5m, 1h, 30s)")
 	// New agent-optimized flags
 	listCmd.Flags().StringVar(&listType, "type", "", "Filter by resource type (script,xmlhttprequest,fetch,document)")
 	listCmd.Flags().BoolVar(&listAPI, "api", false, "Preset: API calls only (xmlhttprequest, fetch)")

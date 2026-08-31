@@ -3,73 +3,52 @@ package cmd
 import (
 	"os"
 
+	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
-	// Global flags
-	outputMode string
-	jsonOutput bool
+	outputMode    string
+	jsonOutput    bool
+	forceEnvelope bool
+	rawJSON       bool
+	noColor       bool
 )
 
-// rootCmd represents the base command
 var rootCmd = &cobra.Command{
-	Use:   "rep",
-	Short: "HTTP traffic analyzer for bug bounty hunting",
+	Use:           "rep",
+	Short:         "AI-agent optimized HTTP traffic analyzer and browser bridge",
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	Long: `rep-cli - AI-agent optimized HTTP traffic analyzer
 
-Designed for efficient analysis by AI agents like Claude Code.
-Works with rep+ Chrome extension for real-time traffic capture.
+Captures traffic from the rep+ Chrome/Arc extension and can drive a connected
+browser through its existing signed-in profile.
 
-AI Agent Workflow (token-optimized):
-  1. rep summary                       First! Get landscape + ignore suggestions
-  2. rep primary <target-domains>      Mark targets (enables --primary filter)
-  3. rep ignore <suggested-domains>    Remove noise (from summary suggestions)
-  4. rep mute <domain/noisy-path>      Fine-filter endpoints like /log, /health
-  5. rep list --primary -o meta        List target traffic (headers only = fast)
-  6. rep list --primary --interesting  Find anomalies (4xx/5xx, mutations)
-  7. rep body <id>                     Deep dive specific requests
+Agent workflow:
+  rep browser status                 Confirm the Arc/Chrome bridge
+  rep browse github.com              Navigate in a background tab and capture
+  rep browser fetch <url>            Send a session-authenticated browser fetch
+  rep browser action <js> --tab <id> Run page logic with isolated capture
+  rep browser create about:blank     Create a task-owned tab without capture
+  rep summary                        Inspect the capture landscape
+  rep primary <domain>               Scope the target
+  rep list --primary -o meta         Triage request metadata
+  rep body <id>                      Read one response body
+  rep download <id> <path>           Stream a captured GET without exposing secrets
+  rep browser download <id> <path>   Stream a captured GET through the browser
+  rep save --note "flow"             Archive the live capture
 
-Curl replay (token-saving):
-  rep auth --save -d <domain>
-  eval "$(rep auth --vars -d <domain> --prefix TARGET)"
-  # Use $TARGET_AUTH, $TARGET_COOKIE, $TARGET_CSRF in curl
-
-Token tips:
-  - Use -o meta (headers only) for scanning, -o json for parsing
-  - Use --limit N to cap results, output shows "[X of Y]" when truncated
-  - Use rep auth --save + rep auth --vars to avoid copying huge cookies/tokens
-
-Real-time analysis (reads live.json, same as extension):
-  rep summary                          Quick overview for first-pass analysis
-  rep domains                          List all domains with stats
-  rep list                             List requests (compact by default)
-  rep body <id>                        Get full response body for deep analysis
-
-Session management:
-  rep save                             Save current session for later
-  rep save --note "auth flow"          Save with descriptive note
-  rep sessions                         List saved sessions
-  rep list --saved latest              View most recent saved session
-  rep list --saved 20231227            View by session ID prefix
-
-Configuration:
-  rep ignore <domain>                  Ignore entire domain (broad filter)
-  rep mute <domain/path>               Mute specific endpoint (fine filter)
-  rep primary <domain>                 Mark domain as primary target
-  rep clear                            Clear all data (live + saved + config)
-
-Output modes (--output):
-  compact   Truncated bodies, perfect for scanning (default)
-  meta      Headers only, no bodies - ultra fast
-  full      Complete bodies for deep analysis
-  json      Raw JSON for piping to other tools`,
+Output modes:
+  compact   Concise, body-limited output (default)
+  meta      Headers and metadata only
+  full      Complete captured bodies
+  json      Structured JSON`,
 }
 
-// Execute adds all child commands to the root command
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
@@ -78,13 +57,30 @@ func init() {
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 	rootCmd.PersistentFlags().StringVarP(&outputMode, "output", "o", "compact", "Output mode: compact, meta, full, json")
-	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output as JSON (shorthand for --output json)")
+	rootCmd.PersistentFlags().BoolVarP(&jsonOutput, "json", "j", false, "Output as JSON (shorthand for --output json)")
+	rootCmd.PersistentFlags().BoolVar(&forceEnvelope, "envelope", false, "Force envelope wrap on JSON output (default: auto-on for non-TTY stdout)")
+	rootCmd.PersistentFlags().BoolVar(&rawJSON, "raw-json", false, "Emit JSON without envelope (bare array/object) — for older scripts")
+	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable ANSI color (also honors NO_COLOR env)")
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if noColor || os.Getenv("NO_COLOR") != "" {
+			pterm.DisableColor()
+		}
+	}
 }
 
-// getOutputMode returns the current output mode
 func getOutputMode() string {
 	if jsonOutput {
 		return "json"
 	}
 	return outputMode
+}
+
+func useEnvelope() bool {
+	if rawJSON {
+		return false
+	}
+	if forceEnvelope {
+		return true
+	}
+	return !term.IsTerminal(int(os.Stdout.Fd()))
 }

@@ -64,6 +64,12 @@ LDFLAGS=(
   "-X" "github.com/repplus/rep-cli/cmd.BuildDate=${BUILD_DATE_VALUE}"
 )
 
+# Fail the build when the agent-UX contracts regress.
+if [[ -z "${REP_SKIP_TESTS:-}" ]]; then
+  echo "Running tests..."
+  (cd "$ROOT_DIR" && go test ./...)
+fi
+
 go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" "$ROOT_DIR"
 echo "Installed: $INSTALL_DIR/rep"
 

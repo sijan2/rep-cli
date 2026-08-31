@@ -15,7 +15,7 @@ var sessionsLimit int
 var sessionsCmd = &cobra.Command{
 	Use:   "sessions",
 	Short: "List saved sessions",
-	Long: `List all saved sessions in store.json.
+	Long: `List all saved sessions in sessions.jsonl.
 
 Use 'rep list --saved <id>' to view a specific session.
 Use 'rep save' to save the current live session.
@@ -48,6 +48,7 @@ Examples:
 			for i, sess := range sessions {
 				out[i] = map[string]interface{}{
 					"id":        sess.ID,
+					"hash_id":   sess.HashID,
 					"requests":  len(sess.Requests),
 					"note":      sess.Note,
 					"timestamp": sess.Timestamp,

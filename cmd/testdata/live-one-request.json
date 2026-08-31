@@ -1,0 +1,23 @@
+{
+  "version": "2.0",
+  "exported_at": "2026-08-25T00:00:00Z",
+  "session_id": "test-session",
+  "requests": [
+    {
+      "id": "h_test_request",
+      "method": "GET",
+      "url": "https://example.test/resource",
+      "resource_type": "fetch",
+      "timestamp": 1787616000000,
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": [
+            "application/json"
+          ]
+        },
+        "body": "{\"ok\":true}"
+      }
+    }
+  ]
+}

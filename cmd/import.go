@@ -53,7 +53,10 @@ Example:
 
 		// Generate session ID and save as session
 		sessionID := store.GenerateSessionID(importNote)
-		session := s.AddSession(sessionID, importNote, export.Requests)
+		session, err := s.AddSession(sessionID, importNote, export.Requests)
+		if err != nil {
+			return fmt.Errorf("failed to write session log: %w", err)
+		}
 
 		// Save
 		if err := s.Save(); err != nil {
@@ -68,6 +71,7 @@ Example:
 		if getOutputMode() == "json" {
 			result := map[string]interface{}{
 				"session_id":     session.ID,
+				"hash_id":        session.HashID,
 				"requests":       len(export.Requests),
 				"domains":        len(domains),
 				"source":         filePath,
@@ -78,6 +82,9 @@ Example:
 		} else {
 			pterm.Success.Printf("Imported %d requests as session: %s\n", len(export.Requests), session.ID)
 			pterm.Info.Printf("Unique domains: %d\n", len(domains))
+			if session.HashID != "" {
+				pterm.Info.Printf("Hash ID: %s\n", session.HashID)
+			}
 
 			if len(domains) > 0 {
 				fmt.Println()

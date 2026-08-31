@@ -64,12 +64,10 @@ Use --saved to view domains from archived sessions.
 			}
 			export, err := loadLiveExport(livePath)
 			if err != nil {
-				pterm.Warning.Printf("Could not read live.json: %v\n", err)
-				pterm.Info.Println("Enable auto-export in rep+ extension first")
-				return nil
+				return emitLiveUnavailable("domains", err)
 			}
 			if len(export.Requests) == 0 {
-				pterm.Info.Println("No requests captured yet (live session empty)")
+				emitLiveEmpty("domains")
 				return nil
 			}
 

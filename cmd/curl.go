@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/pterm/pterm"
+	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -61,24 +63,16 @@ With --use-vars (saves tokens):
 				return nil
 			}
 
-			for i := range session.Requests {
-				if session.Requests[i].ID == requestID {
-					req = &session.Requests[i]
-					break
-				}
-			}
+			// Prefix/semantic/short-ID lookup — match rep body's acceptance contract.
+			idx := store.BuildIndex(session.Requests)
+			req = idx.GetByAny(requestID)
 		} else {
 			// Try live.json first
 			livePath, err := store.GetLiveFilePath()
 			if err == nil {
-				export, err := loadLiveExport(livePath)
-				if err == nil {
-					for i := range export.Requests {
-						if export.Requests[i].ID == requestID {
-							req = &export.Requests[i]
-							break
-						}
-					}
+				if export, err := loadLiveExport(livePath); err == nil {
+					idx := store.BuildIndex(export.Requests)
+					req = idx.GetByAny(requestID)
 				}
 			}
 
@@ -87,14 +81,22 @@ With --use-vars (saves tokens):
 				s, err := store.Get()
 				if err == nil {
 					req = s.GetRequestFromSessions(requestID)
+					if req == nil {
+						req = findRequestByAnyID(s, requestID)
+					}
 				}
 			}
 		}
 
 		if req == nil {
-			pterm.Warning.Printf("Request not found: %s\n", requestID)
-			pterm.Info.Println("Use 'rep list' to see available request IDs")
-			return nil
+			ae := output.NewAgentError(
+				output.ErrCodeRequestNotFound,
+				"curl",
+				fmt.Sprintf("no request matched %q", requestID),
+				"rep list --line | head  # browse available IDs",
+				"rep body "+requestID+"  # also accepts ≥4-char prefixes",
+			)
+			return output.EmitAgentError(os.Stdout, ae, getOutputMode() == "json")
 		}
 
 		// Generate curl command
@@ -125,20 +127,21 @@ func generateCurl(req *store.Request, useVars bool) string {
 
 	// Headers
 	skipHeaders := map[string]bool{
-		"host":              true,
-		"content-length":    true,
-		"connection":        true,
-		"accept-encoding":   true,
-		"sec-fetch-site":    true,
-		"sec-fetch-mode":    true,
-		"sec-fetch-dest":    true,
-		"sec-ch-ua":         true,
-		"sec-ch-ua-mobile":  true,
+		"host":               true,
+		"content-length":     true,
+		"connection":         true,
+		"accept-encoding":    true,
+		"sec-fetch-site":     true,
+		"sec-fetch-mode":     true,
+		"sec-fetch-dest":     true,
+		"sec-ch-ua":          true,
+		"sec-ch-ua-mobile":   true,
 		"sec-ch-ua-platform": true,
 	}
 
 	for key, values := range req.Headers {
-		if skipHeaders[strings.ToLower(key)] {
+		lowerKey := strings.ToLower(strings.TrimSpace(key))
+		if strings.HasPrefix(lowerKey, ":") || skipHeaders[lowerKey] {
 			continue
 		}
 

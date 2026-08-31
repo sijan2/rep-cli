@@ -19,7 +19,7 @@ var clearCmd = &cobra.Command{
 
 This clears:
   - Live session (live.json)
-  - All saved sessions in store.json
+  - All saved sessions in sessions.jsonl
   - Ignore list (domains)
   - Muted paths list
   - Primary domains list

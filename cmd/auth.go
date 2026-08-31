@@ -112,8 +112,7 @@ Extracted headers:
 			}
 			export, err := loadLiveExport(livePath)
 			if err != nil {
-				pterm.Warning.Printf("Could not read live.json: %v\n", err)
-				return nil
+				return emitLiveUnavailable("auth", err)
 			}
 			requests = export.Requests
 		}
