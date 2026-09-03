@@ -121,6 +121,8 @@ var browserTabsCmd = &cobra.Command{
 				ID        int    `json:"id"`
 				WindowID  int    `json:"window_id"`
 				Active    bool   `json:"active"`
+				Pinned    bool   `json:"pinned"`
+				Incognito bool   `json:"incognito"`
 				Discarded bool   `json:"discarded"`
 				Status    string `json:"status"`
 				Title     string `json:"title"`
@@ -138,6 +140,12 @@ var browserTabsCmd = &cobra.Command{
 				}
 				if tab.Discarded {
 					flags += " discarded"
+				}
+				if tab.Pinned {
+					flags += " pinned"
+				}
+				if tab.Incognito {
+					flags += " incognito"
 				}
 				fmt.Printf("%d\t%s%s\t%s\n", tab.ID, tab.Status, flags, tab.URL)
 			}
