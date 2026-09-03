@@ -1,0 +1,6 @@
+interface:
+  display_name: "rep Browser Network"
+  short_description: "CLI-first signed-in browser network control"
+  default_prompt: "Use $rep-browser-network to retrieve this content through the real signed-in browser without UI automation."
+policy:
+  allow_implicit_invocation: true
