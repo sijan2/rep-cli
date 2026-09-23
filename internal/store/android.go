@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/repplus/rep-cli/internal/scope"
 )
 
 const AndroidFileName = "android.json"
@@ -88,11 +90,11 @@ func (r *AndroidRequest) GetReqBody() string {
 
 // AndroidPackage groups requests by app
 type AndroidPackage struct {
-	Package   string           `json:"package"`
-	AppName   string           `json:"app_name,omitempty"`
-	Requests  []AndroidRequest `json:"requests"`
-	Domains   []string         `json:"domains,omitempty"`
-	LastSeen  int64            `json:"last_seen"`
+	Package  string           `json:"package"`
+	AppName  string           `json:"app_name,omitempty"`
+	Requests []AndroidRequest `json:"requests"`
+	Domains  []string         `json:"domains,omitempty"`
+	LastSeen int64            `json:"last_seen"`
 }
 
 // AndroidData is the android.json format
@@ -109,6 +111,13 @@ var androidData *AndroidData
 // GetAndroidFilePath returns path to android.json
 func GetAndroidFilePath() (string, error) {
 	if override := os.Getenv("REPANDROID_PATH"); override != "" {
+		selected, err := scope.Current()
+		if err != nil {
+			return "", err
+		}
+		if selected.Scoped {
+			return "", fmt.Errorf("REPANDROID_PATH cannot override a scoped store; unset REPANDROID_PATH or explicitly use --global")
+		}
 		return expandHomePath(override)
 	}
 	storePath, err := GetStorePath()

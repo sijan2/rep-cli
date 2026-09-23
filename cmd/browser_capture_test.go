@@ -32,8 +32,8 @@ func TestBrowserCapturedRequestDescriptorsAreStableAndSecretFree(t *testing.T) {
 
 	got := browserCapturedRequestDescriptors(requests)
 	want := []browserCapturedRequest{
-		{Sequence: 1, ID: "h_first", Method: "POST", Status: 201, BodyBytes: len("snowman: ☃"), BodyTruncated: true},
-		{Sequence: 2, ID: "h_second", Method: "GET", Status: 0, BodyBytes: 0},
+		{Sequence: 1, ID: "h_first", Method: "POST", Status: 201, BodyBytes: len("snowman: ☃"), BodyTruncated: true, BodyState: "partial"},
+		{Sequence: 2, ID: "h_second", Method: "GET", Status: 0, BodyBytes: 0, BodyState: "unknown"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("descriptors mismatch\n got: %#v\nwant: %#v", got, want)

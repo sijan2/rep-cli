@@ -1,7 +1,7 @@
 package store
 
 import (
-	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -36,11 +36,7 @@ func AppendSessionLog(session *Session) error {
 		return err
 	}
 
-	entry := sessionLogEntry{
-		Action:  "session",
-		Session: session,
-	}
-	return appendJSONL(path, entry)
+	return appendJSONLStream(path, func(writer io.Writer) error { return encodeSessionEntry(writer, session) })
 }
 
 func AppendSessionClear(ts time.Time) error {
@@ -78,12 +74,8 @@ func LoadSessionsLog() ([]Session, bool, error) {
 	var clearCutoff int64
 	lineNum := 0
 
-	readErr := readJSONLLines(path, func(line []byte) error {
+	readErr := readSessionEntries(path, func(raw sessionLogEntry) error {
 		lineNum++
-		var raw sessionLogEntry
-		if err := json.Unmarshal(line, &raw); err != nil {
-			return err
-		}
 
 		switch raw.Action {
 		case "clear":

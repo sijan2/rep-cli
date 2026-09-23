@@ -65,7 +65,7 @@ Examples:
 		sessionID := store.GenerateSessionID(saveNote)
 
 		// Add session
-		session, err := s.AddSession(sessionID, saveNote, export.Requests)
+		session, err := s.AddSession(sessionID, saveNote, export.Requests, &export)
 		if err != nil {
 			return fmt.Errorf("failed to write session log: %w", err)
 		}

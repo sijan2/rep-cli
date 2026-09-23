@@ -6,95 +6,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bytedance/sonic"
 	"github.com/pterm/pterm"
 	"github.com/repplus/rep-cli/internal/noise"
 	"github.com/repplus/rep-cli/internal/store"
-	"github.com/spf13/cobra"
 )
 
-var (
-	summarySaved string
-)
-
-var summaryCmd = &cobra.Command{
-	Use:   "summary",
-	Short: "AI-friendly traffic overview for first-pass analysis",
-	Long: `Generate a compact summary of captured traffic.
-Designed for AI agents to quickly understand the traffic landscape.
-
-Default: Shows summary from LIVE session (real-time).
-Use --saved to view summary from archived sessions.
-
-Shows:
-  - Total requests and unique domains
-  - Domain breakdown with request counts
-  - Method distribution
-  - Suggested domains to ignore (analytics, CDN, tracking)`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		var tempStore *store.Store
-		var persistentStore *store.Store
-
-		// Load persistent store for ignore/primary lists
-		var err error
-		persistentStore, err = store.Get()
-		if err != nil {
-			return fmt.Errorf("failed to load store: %w", err)
-		}
-
-		if summarySaved != "" {
-			// Load from saved session
-			var session *store.Session
-			if summarySaved == "latest" || summarySaved == "last" {
-				session = persistentStore.GetLatestSession()
-			} else {
-				session = persistentStore.GetSession(summarySaved)
-			}
-
-			if session == nil {
-				pterm.Warning.Printf("Session not found: %s\n", summarySaved)
-				pterm.Info.Println("Use 'rep sessions' to list available sessions")
-				return nil
-			}
-
-			tempStore = store.NewTempStore(session.Requests)
-		} else {
-			// Default: Load from live.json
-			livePath, err := store.GetLiveFilePath()
-			if err != nil {
-				return fmt.Errorf("failed to get live path: %w", err)
-			}
-			export, err := loadLiveExport(livePath)
-			if err != nil {
-				return emitLiveUnavailable("summary", err)
-			}
-			if len(export.Requests) == 0 {
-				emitLiveEmpty("summary")
-				return nil
-			}
-
-			tempStore = store.NewTempStore(export.Requests)
-		}
-
-		// Apply ignore/primary lists
-		tempStore.PrimaryDomains = persistentStore.PrimaryDomains
-		tempStore.IgnoredDomains = persistentStore.IgnoredDomains
-
-		domains := tempStore.GetDomains()
-
-		// Build summary data
-		summary := buildSummary(tempStore, domains, persistentStore)
-
-		if getOutputMode() == "json" {
-			out, _ := sonic.MarshalIndent(summary, "", "  ")
-			fmt.Println(string(out))
-		} else {
-			printSummary(summary, domains, tempStore)
-		}
-
-		return nil
-	},
-}
+var summaryCmd = newTrafficSummaryCommand("summary")
 
 type Summary struct {
 	TotalRequests   int             `json:"total_requests"`
@@ -334,5 +251,4 @@ func hostFromURL(raw string) string {
 
 func init() {
 	rootCmd.AddCommand(summaryCmd)
-	summaryCmd.Flags().StringVar(&summarySaved, "saved", "", "Read from saved session (ID, prefix, or 'latest')")
 }

@@ -53,14 +53,20 @@ func newDescribeContext() describeContext {
 // knownDescriptions maps `rep describe <name>` → embedded file.
 // Adding a new command == add a file + one entry here.
 var knownDescriptions = map[string]string{
-	"arc":      "descriptions/arc.md",
-	"list":     "descriptions/list.md",
-	"body":     "descriptions/body.md",
-	"browser":  "descriptions/browser.md",
-	"curl":     "descriptions/curl.md",
-	"download": "descriptions/download.md",
-	"summary":  "descriptions/summary.md",
-	"setup":    "descriptions/setup.md",
+	"arc":       "descriptions/arc.md",
+	"list":      "descriptions/list.md",
+	"body":      "descriptions/body.md",
+	"browser":   "descriptions/browser.md",
+	"headless":  "descriptions/headless.md",
+	"curl":      "descriptions/curl.md",
+	"download":  "descriptions/download.md",
+	"jev":       "descriptions/jev.md",
+	"interact":  "descriptions/interact.md",
+	"summary":   "descriptions/summary.md",
+	"context":   "descriptions/summary.md",
+	"scope":     "descriptions/scope.md",
+	"workspace": "descriptions/scope.md",
+	"setup":     "descriptions/setup.md",
 }
 
 var describeCmd = &cobra.Command{

@@ -120,25 +120,28 @@ func SpillBodyToDisk(body, requestID, contentType string) (string, TruncationInf
 }
 
 type RequestOutput struct {
-	ID                    string          `json:"id"`
-	OriginalID            string          `json:"original_id,omitempty"`
-	Method                string          `json:"method"`
-	URL                   string          `json:"url"`
-	PageURL               string          `json:"page_url,omitempty"`
-	ResourceType          string          `json:"resource_type,omitempty"`
-	Initiator             string          `json:"initiator,omitempty"`
-	ResponseEncoding      string          `json:"response_encoding,omitempty"`
-	ResponseBodyTruncated bool            `json:"response_body_truncated,omitempty"`
-	ResponseBodyError     string          `json:"response_body_error,omitempty"`
-	ErrorText             string          `json:"error_text,omitempty"`
-	CaptureSource         string          `json:"capture_source,omitempty"`
-	TabID                 int             `json:"tab_id,omitempty"`
-	Timestamp             int64           `json:"timestamp,omitempty"`
-	Domain                string          `json:"domain"`
-	Path                  string          `json:"path"`
-	Headers               store.HeaderMap `json:"headers,omitempty"`
-	Body                  string          `json:"body,omitempty"`
-	Response              *ResponseOutput `json:"response,omitempty"`
+	ID                    string             `json:"id"`
+	OriginalID            string             `json:"original_id,omitempty"`
+	Method                string             `json:"method"`
+	URL                   string             `json:"url"`
+	PageURL               string             `json:"page_url,omitempty"`
+	ResourceType          string             `json:"resource_type,omitempty"`
+	Initiator             string             `json:"initiator,omitempty"`
+	ResponseEncoding      string             `json:"response_encoding,omitempty"`
+	ResponseBodyTruncated bool               `json:"response_body_truncated,omitempty"`
+	ResponseBodyError     string             `json:"response_body_error,omitempty"`
+	ResponseBodyCapture   *store.BodyCapture `json:"response_body_capture,omitempty"`
+	RequestBodyCapture    *store.BodyCapture `json:"request_body_capture,omitempty"`
+	NetworkState          string             `json:"network_state,omitempty"`
+	ErrorText             string             `json:"error_text,omitempty"`
+	CaptureSource         string             `json:"capture_source,omitempty"`
+	TabID                 int                `json:"tab_id,omitempty"`
+	Timestamp             int64              `json:"timestamp,omitempty"`
+	Domain                string             `json:"domain"`
+	Path                  string             `json:"path"`
+	Headers               store.HeaderMap    `json:"headers,omitempty"`
+	Body                  string             `json:"body,omitempty"`
+	Response              *ResponseOutput    `json:"response,omitempty"`
 }
 
 type ResponseOutput struct {
@@ -157,6 +160,7 @@ func FormatRequest(req *store.Request, mode store.OutputMode) RequestOutput {
 		PageURL: req.PageURL, ResourceType: req.ResourceType, Initiator: req.Initiator,
 		ResponseEncoding: req.ResponseEncoding, ResponseBodyTruncated: req.ResponseBodyTruncated,
 		ResponseBodyError: req.ResponseBodyError, ErrorText: req.ErrorText,
+		ResponseBodyCapture: req.ResponseBodyCapture, RequestBodyCapture: req.RequestBodyCapture, NetworkState: req.NetworkState,
 		CaptureSource: req.CaptureSource, TabID: req.TabID, Timestamp: req.Timestamp,
 		Domain: req.Domain, Path: req.Path,
 		Headers: requestHeaders, Body: req.Body,

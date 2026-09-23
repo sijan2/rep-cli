@@ -1,49 +1,90 @@
 # rep — HTTP traffic analyzer (agent prompt)
 
-rep drives a real Arc/Chrome profile and analyzes captured HTTP traffic from
-rep+. Use it instead of a separate headless browser, copied cookies, or the
-extension UI.
+rep drives Arc/Chrome through rep+, or a task's isolated full Chromium profile
+using `rep browser headless start` and `--browser headless`. Both paths share
+capture, browser control, and Jev selection. See `rep describe headless`.
+
+## Workspace and task ownership
+
+Choose a workspace and a unique task before reading or capturing data. Pass
+`--workspace NAME --task NAME` on every call, or set REP_WORKSPACE/REP_TASK in
+this agent process's environment. Do not assume an export in a previous tool
+shell persists. `rep scope -j` must show the intended identity.
+
+A project can bind its workspace with `rep workspace init NAME`; a task still
+needs explicit selection. Never change a shared global current-workspace value.
+Use one task per independent concurrent agent. Resume a task only intentionally.
+`--global` is an explicit opt-in to legacy shared history, not an empty-task fallback.
+Primary domains are task-local display filters, not task ownership.
 
 ## Workflow
 
-1. `rep browser status --browser arc -j` — confirm the real-profile bridge.
-   After changing unpacked extension source, use `rep browser reload-extension`.
-2. `rep browse <url> --browser arc --keep-tab -j` — navigate once and retain the owned tab.
-3. `rep summary` — confirm the new live session.
-4. `rep primary <domain>` — scope your target (enables `--primary` filter).
-5. `rep list --primary --interesting` — triage (errors + mutations).
-6. `rep list --primary --api` — all API calls.
-7. `rep body <id>` — inspect a response. Large bodies spill to
-   `/tmp/rep-body-*.{ json,html,js,... }`; read the spill file directly.
-8. `rep browser action <js> --tab <id> --settle 1500ms` — execute page logic and capture delayed browser callbacks plus their traffic.
-9. `rep download <request-id> <path>` — stream a captured final GET to an atomic file without printing secrets or bytes.
-10. `rep browser download <request-id> <path>` — retry a captured GET through the real browser when curl is rejected; no ArcCore port is needed.
-11. `rep browser fetch <url>` — replay inside the browser with HttpOnly cookies.
-12. `rep auth --save -d <domain>` — extract tokens to a 0600 env file
-   (the agent never sees raw values).
+1. `rep scope -j` — verify workspace/task and whether it has a capture.
+2. `rep browser status --browser arc -j` — confirm the shared browser bridge.
+3. `rep summary --max-bytes 4096` — inspect only this task's latest capture.
+4. If the requested site has not been captured, use the authorized browser task
+   to observe it. `no_capture` is not evidence that the site is unavailable.
+   Unrelated eBay traffic says nothing about whether another form can be opened.
+5. `rep browse <authorized-url> --browser arc --keep-tab -j` — create or retain
+   a task-owned tab. Capture results identify workspace/task and saved archive.
+6. Read the bounded summary, then `rep body <full-request-id> --saved <hash> --info`.
+   Check body_capture.state; incomplete is different from empty. Use --head with
+   --offset, --pointer for JSON, or --format sse/ndjson for application records.
+   `rep body <id> --saved <hash> --require-complete --save -j` returns a private
+   artifact without flooding context. See `rep describe body` for pagination.
+7. `rep context --since <latest-cursor> --max-bytes 4096` — receive changed or
+   previously omitted groups. Keep the newest cursor; check complete/omitted.
+8. Use `rep summary --saved <saved-hash-id>` for an earlier capture. Do not union
+   archives or notes merely because they exist. Retrieve relevant notes explicitly.
 
-Use `rep browser attach/cdp/eval/detach` for low-latency DOM, Input, Runtime,
-and Page control. Use `rep arc cdp` for browser-level Browser/Target commands.
-Use `rep browser create about:blank` when a task-owned real-profile tab is
-needed without navigation capture or browser-process CDP.
-Use `rep browser fetch @<mode-0600-url-file> --headers-only` to capture a large
-signed GET without buffering its body in the renderer, then pass the returned
-request ID to `rep browser download`.
-Reuse the owned tab with `rep browse <url> --tab <id> --referrer <url>` instead
-of creating one tab per route.
+Captures automatically archive inside the task. First-capture metadata shows at
+most 16 request descriptors, with omissions disclosed. Complete data remains
+available by archive/request ID. Snapshots and context are observations, not
+proof that a later page action succeeded; verify the actual requested outcome.
+
+Use explicit tab IDs and task-owned tabs. Scope does not isolate cookies, login
+state, or browser control. Avoid changing another task's tab or account state.
+Use separate browser profiles when account/login isolation is required. Do not
+start all-tab ambient watching for an isolated task. Reload the extension only
+when captures are idle; Rep refuses to interrupt active or queued captures.
+
+An isolated headless task supplies that separate profile. Reuse the running
+browser and owned tabs instead of starting a new process per command. Keep
+renderer evaluation results small; captured response bytes travel through the
+verified archive/artifact path. Jev chooses observed semantic candidates; it
+does not repair missing network evidence. Never silently refetch a request to
+pretend an incomplete observation was complete.
+
+Use `rep browser create about:blank` for a task-owned tab without navigation
+capture, and `rep browser cdp/eval` for focused inspection. See `rep describe
+browser` for the mechanical browser contract and `rep describe scope` for data
+ownership. An old native host rejects scoped captures before browser operations;
+finish active captures before reloading to activate a newly installed host.
+
+For complex pages, use `rep browser select '<specific control or passage>' --tab <id> --raw-json`
+to locate an observed accessibility node by meaning. Use `--kind text` for
+passages. This command is read-only, handles duplicate labels with local
+identities, reports incomplete frame/candidate coverage, and checks freshness
+before returning. Matching unchanged observations can reuse a short-lived
+cached decision. Inspect `status`, `needs_review`, `selected`, and `coverage`;
+do not turn `stale`, `no_match`, or uncertain results into a forced action.
+Jev selects from current options; the calling agent supplies text, plans, and
+outcome verification. `rep describe jev` contains the selection contract.
+Use `rep browser interact plan.json --tab ID --apply --raw-json` for typed
+interactions with declared outcomes; `rep describe interact` documents the plan.
+The old `jev select/act` spellings remain compatible.
 
 ## Output contracts
 
-- Plain text by default; all commands respect `NO_COLOR` and TTY.
-- `-j` / `--output json` is parseable.
+- `summary` and `context` always emit compact, byte-bounded JSON. Other commands use their documented output modes.
+- `--raw-json` selects plain JSON on its own; `-j` / `--output json` retain their existing envelope behavior.
 - `--envelope` wraps JSON in `{ source, command, filters, truncation, data, suggest }`
   so empty/truncated/errored results always include a concrete next command.
 
 ## ID format
 
-Canonical request IDs are `h_xxxxxxxxxxxxxxxx`. Every command that takes
-an ID accepts **any ≥4-character prefix** or the display label
-(`xxxx_METHOD_STATUS`). Copy from any `rep list` line.
+Canonical request IDs are `h_xxxxxxxxxxxxxxxx`. Legacy commands may accept short prefixes or the display label
+(`xxxx_METHOD_STATUS`). Prefer full request IDs and saved hash IDs to avoid ambiguity.
 
 ## Empty results
 
@@ -58,15 +99,15 @@ suggest:
 ```
 Parse `suggest:` lines for concrete next commands.
 
-## Secrets
+## Data minimization
 
-- `rep setup --json` emits previews + an env_file path. Source the file;
-  reference values by `env_name`.
-- `rep auth --vars` prints shell-export glue (variable names only, no values).
-- Avoid `rep auth --export` and `rep setup --include-secrets` in agent
-  contexts — both surface raw values.
-- Do not print raw `live.json` or `rep curl` for signed URLs. Use bounded
-  metadata plus `rep download`, which keeps the URL and headers off stdout.
+- Start with bounded summary metadata and retrieve individual responses by ID.
+- Do not print raw live.json, headers, signed URLs, or credentials into context.
+- Task-local body artifacts are private files. Read only the needed portion.
+- Names in URL paths can still contain personal information; route normalization
+  is a compression heuristic, not exhaustive redaction.
+- Scoped credential-export/mobile commands are unsupported; do not switch to
+  global history merely to make an isolated task's empty result disappear.
 
 ## When NOT to use rep
 

@@ -11,7 +11,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/output"
-	"github.com/repplus/rep-cli/internal/store"
+	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/spf13/cobra"
 )
 
@@ -57,22 +57,16 @@ var (
 var browserCmd = &cobra.Command{
 	Use:   "browser",
 	Short: "Control a connected Arc/Chrome session through rep+",
-	Long: `Control a real signed-in Chromium browser without focusing its UI.
+	Long: `Run verified workflows through the connected browser profile.
 
-The rep+ background worker owns a persistent native bridge. Navigation and
-fetch commands use chrome.debugger inside the browser, capture request and
-response data, and atomically publish the result to live.json.
+  rep browser create <url>
+  rep browser select "Save button" --tab ID
+  rep browser interact flow.json --tab ID --apply
+  rep browser open <url> --keep-tab
 
-Examples:
-  rep browser status --browser arc
-  rep browser reload-extension --browser arc
-  rep browser tabs --browser arc
-  rep browser create about:blank --browser arc
-  rep browser open github.com --browser arc
-  rep browser fetch https://github.com/settings/profile --browser arc
-  rep browser fetch https://api.example.com/me -X POST -H 'content-type: application/json' --data '{}'
-  rep browser download <request-id> /absolute/path/artifact.bin
-  rep browse google.com --save --note google-home`,
+Use --raw-json for plain JSON; Arc is the default. Capture, raw protocol controls,
+and browser management have separate groups. Advanced tuning flags remain
+available through 'rep describe browser' and 'rep describe interact'.`,
 }
 
 var browserStatusCmd = &cobra.Command{
@@ -266,6 +260,10 @@ func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) e
 	if err != nil {
 		return err
 	}
+	handoff, err := prepareBrowserCapture(ctx, client)
+	if err != nil {
+		return emitBrowserCallErrorWithPrivacy("browser open", err, flags.RedactOutput)
+	}
 	params := map[string]interface{}{
 		"url": rawURL, "active": flags.Active, "keep_tab": flags.KeepTab,
 		"timeout_ms": flags.Timeout.Milliseconds(), "idle_ms": flags.Idle.Milliseconds(),
@@ -281,16 +279,8 @@ func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) e
 	if err := client.Call(ctx, "browser.open", params, &result); err != nil {
 		return emitBrowserCallErrorWithPrivacy("browser open", err, flags.RedactOutput)
 	}
-	if err := enrichBrowserCaptureResult(result); err != nil {
+	if err := finishBrowserCapture(ctx, client, result, handoff, flags.Note, flags.Save); err != nil {
 		return emitBrowserCaptureReadError("browser open", err, flags.RedactOutput)
-	}
-	if flags.Save {
-		session, saveErr := archiveBrowserCapture(flags.Note)
-		if saveErr != nil {
-			return emitBrowserCaptureSaveError("browser open", saveErr, flags.RedactOutput)
-		}
-		result["saved_session_id"] = session.ID
-		result["saved_hash_id"] = session.HashID
 	}
 	if flags.RedactOutput {
 		redactSensitiveBrowserResult(result, "open")
@@ -343,6 +333,10 @@ func runBrowserFetch(cmd *cobra.Command, rawURL string, flags browserFetchFlags)
 	if err != nil {
 		return err
 	}
+	handoff, err := prepareBrowserCapture(ctx, client)
+	if err != nil {
+		return emitBrowserCallErrorWithPrivacy("browser fetch", err, flags.RedactOutput)
+	}
 	params := map[string]interface{}{
 		"url": rawURL, "method": strings.ToUpper(flags.Method), "headers": headers,
 		"body": body, "credentials": credentials, "cache": cacheMode, "keep_tab": flags.KeepTab,
@@ -356,15 +350,8 @@ func runBrowserFetch(cmd *cobra.Command, rawURL string, flags browserFetchFlags)
 	if err := client.Call(ctx, "browser.fetch", params, &result); err != nil {
 		return emitBrowserCallErrorWithPrivacy("browser fetch", err, flags.RedactOutput)
 	}
-	if err := enrichBrowserCaptureResult(result); err != nil {
+	if err := finishBrowserCapture(ctx, client, result, handoff, flags.Note, flags.Save); err != nil {
 		return emitBrowserCaptureReadError("browser fetch", err, flags.RedactOutput)
-	}
-	if flags.Save {
-		session, saveErr := archiveBrowserCapture(flags.Note)
-		if saveErr != nil {
-			return emitBrowserCaptureSaveError("browser fetch", saveErr, flags.RedactOutput)
-		}
-		result["saved_session_id"] = session.ID
 	}
 	if flags.RedactOutput {
 		redactSensitiveBrowserResult(result, "fetch")
@@ -386,6 +373,13 @@ func runBrowserFetch(cmd *cobra.Command, rawURL string, flags browserFetchFlags)
 }
 
 func runBrowserWatch(cmd *cobra.Command, action string) error {
+	selected, err := scope.Current()
+	if err != nil {
+		return err
+	}
+	if selected.Scoped {
+		return emitBrowserArgumentError("browser watch "+action, fmt.Errorf("ambient capture covers all tabs and is unavailable in a task scope; use explicit tab captures"))
+	}
 	ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 	defer cancel()
 	client, err := selectBrowserBridge(ctx, browserSelector, "browser watch "+action)
@@ -405,7 +399,10 @@ func runBrowserWatch(cmd *cobra.Command, action string) error {
 }
 
 func selectBrowserBridge(ctx context.Context, selector, command string) (*bridge.Client, error) {
-	client, err := bridge.Select(ctx, selector)
+	client, err := connectBrowser(ctx, selector)
+	if err != nil && strings.EqualFold(strings.TrimSpace(selector), "headless") {
+		return nil, output.EmitAgentError(os.Stdout, output.NewAgentError("headless_unavailable", command, err.Error(), "rep browser headless start"), getOutputMode() == "json")
+	}
 	if err == nil {
 		return client, nil
 	}
@@ -463,18 +460,28 @@ func redactSensitiveBrowserResult(result map[string]interface{}, operation strin
 	}
 	for _, key := range []string{
 		"tab_id", "requests", "domains", "response_bodies", "captured_body_bytes",
-		"failed_requests", "ignored_cancellations", "pending_requests", "duration_ms", "settle_ms",
+		"failed_requests", "ignored_cancellations", "pending_requests", "pending_network_requests", "incomplete_bodies", "duration_ms", "settle_ms",
+		"captured_requests_total", "captured_requests_omitted",
 	} {
 		if value, ok := browserSafeNumber(result[key]); ok {
 			safe[key] = value
 		}
 	}
-	for _, key := range []string{"tab_closed", "timed_out"} {
+	if states, ok := result["body_capture_states"].(map[string]int); ok {
+		counts := map[string]int{}
+		for state, count := range states {
+			if count >= 0 && browserBodyState(state) == state {
+				counts[state] = count
+			}
+		}
+		safe["body_capture_states"] = counts
+	}
+	for _, key := range []string{"tab_closed", "timed_out", "capture_snapshot_verified", "captured_requests_complete"} {
 		if value, ok := result[key].(bool); ok {
 			safe[key] = value
 		}
 	}
-	for _, key := range []string{"session_id", "saved_session_id", "saved_hash_id"} {
+	for _, key := range []string{"session_id", "saved_session_id", "saved_hash_id", "workspace", "task"} {
 		if value, ok := browserSafeIdentifier(result[key]); ok {
 			safe[key] = value
 		}
@@ -552,6 +559,8 @@ func browserSafeCapturedRequests(requests []browserCapturedRequest) []browserCap
 			Status:                  request.Status,
 			BodyBytes:               request.BodyBytes,
 			BodyTruncated:           request.BodyTruncated,
+			BodyState:               browserBodyState(request.BodyState),
+			NetworkState:            browserNetworkState(request.NetworkState),
 			IntentionalCancellation: browserIntentionalCancellationKind(request.IntentionalCancellation),
 		})
 	}
@@ -560,7 +569,14 @@ func browserSafeCapturedRequests(requests []browserCapturedRequest) []browserCap
 
 func browserSafeTerminalOutcome(outcome *browserTerminalOutcome) (*browserTerminalOutcome, bool) {
 	if outcome == nil || (outcome.Kind != "redirect_chain" && outcome.Kind != "download_handoff") ||
-		outcome.TerminalStatus < 0 || outcome.RedirectHops < 0 || outcome.LaterFormFailures < 0 {
+		outcome.TerminalStatus < 0 || outcome.RedirectHops < 0 || outcome.LaterFormFailures < 0 ||
+		outcome.RequestIDsTotal < 0 || outcome.RequestIDsOmitted < 0 || outcome.LaterFormFailureIDsTotal < 0 || outcome.LaterFormFailureIDsOmitted < 0 {
+		return nil, false
+	}
+	if (outcome.RequestIDsTotal != 0 || outcome.RequestIDsOmitted != 0) && outcome.RequestIDsTotal != len(outcome.RequestIDs)+outcome.RequestIDsOmitted {
+		return nil, false
+	}
+	if (outcome.LaterFormFailureIDsTotal != 0 || outcome.LaterFormFailureIDsOmitted != 0) && outcome.LaterFormFailureIDsTotal != len(outcome.LaterFormFailureIDs)+outcome.LaterFormFailureIDsOmitted {
 		return nil, false
 	}
 	sourceID, sourceOK := browserSafeRequestID(outcome.SourceRequestID)
@@ -577,17 +593,21 @@ func browserSafeTerminalOutcome(outcome *browserTerminalOutcome) (*browserTermin
 		return nil, false
 	}
 	return &browserTerminalOutcome{
-		Kind:                     outcome.Kind,
-		Completed:                outcome.Completed,
-		TerminalResponseReceived: outcome.TerminalResponseReceived,
-		DownloadHandoffStarted:   outcome.DownloadHandoffStarted,
-		SourceRequestID:          sourceID,
-		TerminalRequestID:        terminalID,
-		TerminalStatus:           outcome.TerminalStatus,
-		RedirectHops:             outcome.RedirectHops,
-		RequestIDs:               requestIDs,
-		LaterFormFailures:        outcome.LaterFormFailures,
-		LaterFormFailureIDs:      failureIDs,
+		Kind:                       outcome.Kind,
+		Completed:                  outcome.Completed,
+		TerminalResponseReceived:   outcome.TerminalResponseReceived,
+		DownloadHandoffStarted:     outcome.DownloadHandoffStarted,
+		SourceRequestID:            sourceID,
+		TerminalRequestID:          terminalID,
+		TerminalStatus:             outcome.TerminalStatus,
+		RedirectHops:               outcome.RedirectHops,
+		RequestIDs:                 requestIDs,
+		RequestIDsTotal:            outcome.RequestIDsTotal,
+		RequestIDsOmitted:          outcome.RequestIDsOmitted,
+		LaterFormFailures:          outcome.LaterFormFailures,
+		LaterFormFailureIDs:        failureIDs,
+		LaterFormFailureIDsTotal:   outcome.LaterFormFailureIDsTotal,
+		LaterFormFailureIDsOmitted: outcome.LaterFormFailureIDsOmitted,
 	}, true
 }
 
@@ -707,32 +727,6 @@ func browserURLArgumentIsSensitive(value string) bool {
 	return strings.HasPrefix(strings.TrimSpace(value), "@")
 }
 
-func archiveBrowserCapture(note string) (*store.Session, error) {
-	livePath, err := store.GetLiveFilePath()
-	if err != nil {
-		return nil, err
-	}
-	export, err := loadLiveExport(livePath)
-	if err != nil {
-		return nil, err
-	}
-	if len(export.Requests) == 0 {
-		return nil, fmt.Errorf("browser capture produced no requests")
-	}
-	persistent, err := store.Get()
-	if err != nil {
-		return nil, err
-	}
-	session, err := persistent.AddSession(store.GenerateSessionID(note), note, export.Requests)
-	if err != nil {
-		return nil, err
-	}
-	if err := persistent.Save(); err != nil {
-		return nil, err
-	}
-	return session, nil
-}
-
 func nonEmpty(values ...string) string {
 	for _, value := range values {
 		if value != "" {
@@ -765,7 +759,7 @@ func errorsAs(err error, target interface{}) bool {
 
 func bindOpenFlags(command *cobra.Command, flags *browserOpenFlags, includeBrowser bool) {
 	if includeBrowser {
-		command.Flags().StringVar(&flags.Browser, "browser", "arc", "Browser bridge to use: arc, chrome, or any")
+		command.Flags().StringVar(&flags.Browser, "browser", "arc", "Browser bridge to use: arc, chrome, headless, or any")
 	}
 	command.Flags().IntVar(&flags.TabID, "tab", -1, "Reuse a specific tab ID instead of creating a temporary tab")
 	command.Flags().StringVar(&flags.Referrer, "referrer", "", "Optional HTTP(S) referrer for Page.navigate")
@@ -773,9 +767,10 @@ func bindOpenFlags(command *cobra.Command, flags *browserOpenFlags, includeBrows
 	command.Flags().BoolVar(&flags.KeepTab, "keep-tab", false, "Keep a newly created tab after capture")
 	command.Flags().DurationVar(&flags.Timeout, "timeout", 30*time.Second, "Maximum navigation/capture duration")
 	command.Flags().DurationVar(&flags.Idle, "idle", 800*time.Millisecond, "Required network-idle interval")
-	command.Flags().IntVar(&flags.MaxBodyBytes, "max-body", 384*1024, "Maximum captured response-body bytes per request")
-	command.Flags().BoolVar(&flags.Save, "save", false, "Archive the capture after completion")
-	command.Flags().StringVar(&flags.Note, "note", "", "Archive note (with --save)")
+	command.Flags().IntVar(&flags.MaxBodyBytes, "max-body", 8*1024*1024, "Maximum captured response-body bytes per request")
+	command.Flags().BoolVar(&flags.Save, "save", false, "Legacy global mode: archive capture (task captures already archive automatically)")
+	command.Flags().StringVar(&flags.Note, "note", "", "Archive note")
+	advancedFlags(command, "referrer", "idle", "save")
 }
 
 func init() {
@@ -783,7 +778,7 @@ func init() {
 	rootCmd.AddCommand(browseCmd)
 	browserCmd.AddCommand(browserStatusCmd, browserTabsCmd, browserOpenCmd, browserFetchCmd, browserCloseCmd, browserWatchCmd)
 	browserWatchCmd.AddCommand(browserWatchStartCmd, browserWatchStopCmd, browserWatchStatusCmd)
-	browserCmd.PersistentFlags().StringVar(&browserSelector, "browser", "arc", "Browser bridge to use: arc, chrome, or any")
+	browserCmd.PersistentFlags().StringVar(&browserSelector, "browser", "arc", "Browser bridge to use: arc, chrome, headless, or any")
 	bindOpenFlags(browserOpenCmd, &openFlags, false)
 	bindOpenFlags(browseCmd, &browseFlags, true)
 
@@ -796,9 +791,10 @@ func init() {
 	browserFetchCmd.Flags().BoolVar(&fetchFlags.HeadersOnly, "headers-only", false, "Cancel the response body after headers while retaining the captured request")
 	browserFetchCmd.Flags().BoolVar(&fetchFlags.KeepTab, "keep-tab", false, "Keep a temporary origin tab")
 	browserFetchCmd.Flags().DurationVar(&fetchFlags.Timeout, "timeout", 30*time.Second, "Maximum fetch/capture duration")
-	browserFetchCmd.Flags().IntVar(&fetchFlags.MaxBodyBytes, "max-body", 384*1024, "Maximum captured/returned response-body bytes")
-	browserFetchCmd.Flags().BoolVar(&fetchFlags.Save, "save", false, "Archive the capture after completion")
-	browserFetchCmd.Flags().StringVar(&fetchFlags.Note, "note", "", "Archive note (with --save)")
+	browserFetchCmd.Flags().IntVar(&fetchFlags.MaxBodyBytes, "max-body", 8*1024*1024, "Maximum captured/returned response-body bytes")
+	browserFetchCmd.Flags().BoolVar(&fetchFlags.Save, "save", false, "Legacy global mode: archive capture (task captures already archive automatically)")
+	browserFetchCmd.Flags().StringVar(&fetchFlags.Note, "note", "", "Archive note")
+	advancedFlags(browserFetchCmd, "credentials", "cache", "save")
 }
 
 var _ = json.RawMessage{}

@@ -2,25 +2,42 @@
 
 ## Purpose
 
-Control and observe a real Arc/Chrome profile through rep+, Native Messaging,
-and `chrome.debugger`. No separate headless browser or cookie export is used.
+Control and observe Arc/Chrome through rep+, Native Messaging, and
+`chrome.debugger`. `rep browser headless start` launches a separate task-owned
+Chromium profile using this same bridge; see `rep describe headless`.
 
 ## Core workflow
 
 ```text
-rep browser status --browser arc -j
-rep browser reload-extension --browser arc
-rep browser create about:blank --browser arc -j
-rep browse <https-url> --browser arc --keep-tab -j
-rep browser probe --browser arc --tab <id> -j
-rep browser fetch <same-origin-url> --browser arc -j
-rep browser action <javascript-or-@file> --browser arc --tab <id> -j \
-  | jq '{terminal_outcome,captured_requests}'
-rep browser watch start --browser arc -j
-rep browser watch stop --browser arc -j
+rep browser status --raw-json
+rep browser create <https-url> --raw-json
+rep browser select "Save button" --tab ID --raw-json
+rep browser interact flow.json --tab ID --apply --raw-json
+rep browser open <https-url> --keep-tab --raw-json
+rep browser fetch <same-origin-url> --raw-json
+rep browser action <javascript-or-@file> --tab ID --raw-json
 rep body <captured-request-id>
-rep browser download <captured-get-id> <output-path> --expect-magic zip -j
 ```
+
+Pass a workspace/task or set REP_WORKSPACE/REP_TASK in the calling process.
+Arc is the default; use --browser only to choose another profile/transport.
+`--raw-json` selects plain JSON by itself. `browser select` is read-only;
+`browser interact` executes explicit typed plans (see `rep describe interact`).
+Task captures always archive, so `--save` is unnecessary in scoped workflows.
+The old `rep browse`, `rep jev select/act`, `--goal`, and `--plan` forms remain
+compatible. Normal help emphasizes common options; advanced flags below remain
+accepted with their existing behavior.
+
+| Advanced flags | Commands / purpose |
+|---|---|
+| `--await`, `--by-value`, `--user-gesture`, `--repl` | eval/action renderer semantics; defaults true, true, false, false |
+| `--target` | Alternative debugger target ID instead of --tab |
+| `--keep-attached` | eval/CDP persistent attachment; release with detach |
+| `--idle`, `--settle` | Capture settling; action defaults 300 ms / 1500 ms |
+| `--max-result` | action evaluation result cap; default 64 KiB |
+| `--referrer`, `--idle` | open navigation referrer and network-idle interval |
+| `--credentials`, `--cache` | fetch credentials/cache behavior |
+| `--save` | Legacy global capture archival; automatic for task captures |
 
 ## Low-level workflow
 
@@ -54,6 +71,20 @@ stable capture `id`, HTTP `method`, response `status`, captured response
 `body_truncated`/`intentional_cancellation` markers. It intentionally omits
 URLs, queries, headers, and body content, so a caller can select an ID directly
 without dumping `rep list` or exposing signed links and credentials.
+
+Descriptors also include `body_state` and `network_state`; `body_capture_states`
+and `incomplete_bodies` summarize capture quality. Body capture uses passive CDP
+streaming with a buffered fallback. The default decoded-body budget is 8 MiB per
+request, configurable by `--max-body` through 256 MiB; larger or unfinished
+responses retain a prefix with explicit partial evidence. Compressed wire sizes
+are not used to decide that decoded bodies are empty. Use `rep body ID --info`
+and `--saved SAVED_HASH_ID` to diagnose and retrieve the exact response.
+
+Large request records cross Native Messaging as sequenced, hashed fragments.
+New captures require the updated host protocol. Transport loss, missing records,
+or snapshot persistence failures fail explicitly instead of reporting success.
+Fetch RPC output is only a bounded preview; `full_body_in_capture` and the request
+ID point to the captured bytes. Keep action evaluation metadata small too.
 
 Completed framework-redirect and HTTP-redirect graphs are summarized in a safe
 `terminal_outcome` containing only request IDs, hop count, terminal status, and
@@ -107,4 +138,4 @@ renderer's normal cache mode; use `--cache` only when needed.
 - `tab_busy`: wait for the active capture or use another tab.
 - `origin_mismatch`: omit `--tab` so `browser fetch` creates a matching-origin
   temporary tab.
-- stale extension code: run `rep arc reload-extension -j`.
+- stale extension code: run `rep browser reload-extension -j`.

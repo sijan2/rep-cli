@@ -24,11 +24,12 @@ import (
 )
 
 const (
-	LiveFileName          = "live.json"
-	MaxLiveRequests       = 10000
-	maxNativeMessageBytes = 32 * 1024 * 1024
-	maxSocketMessageBytes = 8 * 1024 * 1024
-	flushDelay            = 200 * time.Millisecond
+	LiveFileName           = "live.json"
+	MaxLiveRequests        = 10000
+	maxNativeMessageBytes  = 32 * 1024 * 1024
+	maxNativeResponseBytes = 1024 * 1024
+	maxSocketMessageBytes  = 8 * 1024 * 1024
+	flushDelay             = 200 * time.Millisecond
 )
 
 type RPCError struct {
@@ -57,48 +58,19 @@ type Message struct {
 	UserAgent        string          `json:"user_agent,omitempty"`
 	CaptureMode      string          `json:"capture_mode,omitempty"`
 	TimedOut         bool            `json:"timed_out,omitempty"`
+	ExpectedRequests *int            `json:"expected_requests,omitempty"`
+	CaptureWarnings  []string        `json:"capture_warnings,omitempty"`
+	TransferID       string          `json:"transfer_id,omitempty"`
+	Sequence         int             `json:"sequence,omitempty"`
+	Chunks           int             `json:"chunks,omitempty"`
+	TotalBytes       int64           `json:"total_bytes,omitempty"`
+	SHA256           string          `json:"sha256,omitempty"`
+	Data             string          `json:"data,omitempty"`
 }
 
-type Request struct {
-	ID                      string          `json:"id"`
-	OriginalID              string          `json:"original_id,omitempty"`
-	Method                  string          `json:"method"`
-	URL                     string          `json:"url"`
-	PageURL                 string          `json:"page_url,omitempty"`
-	ResourceType            string          `json:"resource_type,omitempty"`
-	Initiator               string          `json:"initiator,omitempty"`
-	Headers                 store.HeaderMap `json:"headers,omitempty"`
-	Body                    string          `json:"body,omitempty"`
-	Response                *Response       `json:"response,omitempty"`
-	ResponseEncoding        string          `json:"response_encoding,omitempty"`
-	ResponseBodyTruncated   bool            `json:"response_body_truncated,omitempty"`
-	ResponseBodyError       string          `json:"response_body_error,omitempty"`
-	ErrorText               string          `json:"error_text,omitempty"`
-	Canceled                bool            `json:"canceled,omitempty"`
-	IntentionalCancellation string          `json:"intentional_cancellation,omitempty"`
-	CaptureSource           string          `json:"capture_source,omitempty"`
-	TabID                   int             `json:"tab_id,omitempty"`
-	Timestamp               int64           `json:"timestamp"`
-	StartOrdinal            int64           `json:"start_ordinal,omitempty"`
-	ResponseOrdinal         int64           `json:"response_ordinal,omitempty"`
-	CompletionOrdinal       int64           `json:"completion_ordinal,omitempty"`
-}
-
-type Response struct {
-	Status  int             `json:"status"`
-	Headers store.HeaderMap `json:"headers,omitempty"`
-	Body    string          `json:"body,omitempty"`
-}
-
-type BrowserSession struct {
-	Browser     string `json:"browser,omitempty"`
-	URL         string `json:"url,omitempty"`
-	TabID       int    `json:"tab_id,omitempty"`
-	CaptureMode string `json:"capture_mode,omitempty"`
-	StartedAt   string `json:"started_at,omitempty"`
-	FinishedAt  string `json:"finished_at,omitempty"`
-	TimedOut    bool   `json:"timed_out,omitempty"`
-}
+type Request = store.Request
+type Response = store.Response
+type BrowserSession = store.BrowserSession
 
 type LiveData struct {
 	Version    string          `json:"version"`
@@ -162,6 +134,11 @@ func main() {
 		logError("create data directory", err)
 		return
 	}
+	if err := initializeCaptureSnapshots(); err != nil {
+		logError("initialize capture snapshots", err)
+		return
+	}
+	defer closeCaptureSnapshots()
 	liveData = loadLiveData()
 	if liveData.Browser != nil && liveData.Browser.FinishedAt != "" {
 		browserCaptureSealed = true
@@ -194,10 +171,21 @@ func main() {
 			routeRPCResponse(message)
 			continue
 		}
+		if dispatchJev(ctx, message, writeMessage) {
+			continue
+		}
 		response, flushNow := handleMessage(message)
+		if message.Action == "session_end" && response["success"] == true {
+			if err := sealCaptureSnapshot(); err != nil {
+				logError("seal capture snapshot", err)
+				rememberCaptureFailure(message.SessionID, err.Error())
+				response["success"], response["error"] = false, err.Error()
+			}
+		}
 		if flushNow {
 			if err := saveLiveData(); err != nil {
 				logError("flush live data", err)
+				response["success"], response["error"] = false, "write live capture failed"
 			}
 		}
 		if response != nil {
@@ -208,6 +196,9 @@ func main() {
 		}
 	}
 	cancel()
+	liveMu.Lock()
+	cleanupRequestTransfersLocked()
+	liveMu.Unlock()
 	if err := saveLiveData(); err != nil {
 		logError("final live-data flush", err)
 	}
@@ -277,13 +268,10 @@ func loadLiveData() *LiveData {
 
 func saveLiveData() error {
 	liveMu.Lock()
+	defer liveMu.Unlock()
 	liveData.ExportedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	content, err := json.MarshalIndent(liveData, "", "  ")
-	liveMu.Unlock()
-	if err != nil {
-		return err
-	}
-	return atomicWriteFile(dataPath, content, 0600)
+	_, _, err := writeLiveDataFile(dataPath, liveData, 0)
+	return err
 }
 
 func atomicWriteFile(path string, content []byte, mode os.FileMode) error {
@@ -367,7 +355,44 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 	flushNow := false
 	changed := false
 	response := map[string]interface{}{"success": true, "action": message.Action}
+	if browserCaptureActive {
+		switch message.Action {
+		case "sync", "clear", "ambient_begin", "ambient_resume", "ambient_end", "session_begin":
+			liveMu.Unlock()
+			return map[string]interface{}{"success": false, "action": message.Action, "error": "capture is active; finish it before resetting capture state"}, false
+		}
+	}
+	if message.Action == "session_end" && message.SessionID == "" {
+		liveMu.Unlock()
+		return map[string]interface{}{"success": false, "action": message.Action, "error": "capture session id is required"}, false
+	}
+	if (message.Action == "add" || message.Action == "add_many") && message.SessionID == "" && (browserCaptureActive || browserCaptureSealed) {
+		liveMu.Unlock()
+		return map[string]interface{}{"success": true, "action": message.Action, "ignored": true}, false
+	}
+	// Session-tagged updates can never attach to a different or sealed capture.
+	if (message.Action == "request_chunk" || message.Action == "request_end") && message.SessionID == "" {
+		liveMu.Unlock()
+		return map[string]interface{}{"success": false, "action": message.Action, "error": "capture session id is required for request transfers"}, false
+	}
+	if (message.Action == "add" || message.Action == "add_many" || message.Action == "session_end" || message.Action == "request_chunk" || message.Action == "request_end") && message.SessionID != "" && (message.SessionID != liveData.SessionID || !browserCaptureActive) {
+		liveMu.Unlock()
+		return map[string]interface{}{"success": false, "action": message.Action, "error": "capture session mismatch or already sealed"}, false
+	}
 	switch message.Action {
+	case "request_chunk", "request_end":
+		var err error
+		if message.Action == "request_chunk" {
+			err = acceptRequestChunkLocked(message)
+		} else {
+			err = finishRequestTransferLocked(message)
+			changed = err == nil
+		}
+		if err != nil {
+			failCaptureLocked(err.Error())
+			cleanupRequestTransfersLocked()
+			response["success"], response["error"] = false, err.Error()
+		}
 	case "add":
 		if message.Request == nil {
 			response = map[string]interface{}{"success": false, "error": "missing request", "action": "add"}
@@ -402,6 +427,7 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		changed = true
 		flushNow = true
 	case "session_begin":
+		cleanupRequestTransfersLocked()
 		liveData.Requests = []Request{}
 		if message.SessionID == "" {
 			message.SessionID = generateSessionID()
@@ -427,6 +453,19 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 			liveData.Browser.URL = message.URL
 		}
 		liveData.Browser.TimedOut = message.TimedOut
+		liveData.Browser.ExpectedRequests = message.ExpectedRequests
+		liveData.Browser.CaptureWarnings = append([]string(nil), message.CaptureWarnings...)
+		liveData.Browser.ReceivedRequests = len(liveData.Requests)
+		if len(requestTransfers) > 0 {
+			failCaptureLocked("capture ended with incomplete request transfers")
+		}
+		if message.ExpectedRequests != nil && (*message.ExpectedRequests < 0 || *message.ExpectedRequests != len(liveData.Requests)) {
+			failCaptureLocked(fmt.Sprintf("capture request count mismatch: expected %d, received %d", *message.ExpectedRequests, len(liveData.Requests)))
+		}
+		cleanupRequestTransfersLocked()
+		if liveData.Browser.CaptureError != "" {
+			response["success"], response["error"] = false, liveData.Browser.CaptureError
+		}
 		liveData.Browser.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 		browserCaptureActive = false
 		browserCaptureSealed = true
@@ -520,6 +559,7 @@ func upsertRequestLocked(incoming Request) {
 }
 
 func mergeRequest(old, incoming Request) Request {
+	incomingBodyExplicit := incoming.ResponseBodyCapture != nil
 	if incoming.ID == "" {
 		incoming.ID = old.ID
 	}
@@ -529,8 +569,24 @@ func mergeRequest(old, incoming Request) Request {
 	if incoming.Headers == nil {
 		incoming.Headers = old.Headers
 	}
-	if incoming.Body == "" {
+	if incoming.Body == "" && (incoming.RequestBodyCapture == nil || incoming.RequestBodyCapture.State != "complete") {
 		incoming.Body = old.Body
+	}
+	if incoming.RequestBodyCapture == nil {
+		incoming.RequestBodyCapture = old.RequestBodyCapture
+	}
+	if incoming.ResponseBodyCapture == nil {
+		incoming.ResponseBodyCapture = old.ResponseBodyCapture
+		if incoming.ResponseEncoding == "" {
+			incoming.ResponseEncoding = old.ResponseEncoding
+		}
+		incoming.ResponseBodyTruncated = incoming.ResponseBodyTruncated || old.ResponseBodyTruncated
+		if incoming.ResponseBodyError == "" {
+			incoming.ResponseBodyError = old.ResponseBodyError
+		}
+	}
+	if incoming.NetworkState == "" {
+		incoming.NetworkState = old.NetworkState
 	}
 	if incoming.Response == nil {
 		incoming.Response = old.Response
@@ -538,7 +594,7 @@ func mergeRequest(old, incoming Request) Request {
 		if incoming.Response.Headers == nil {
 			incoming.Response.Headers = old.Response.Headers
 		}
-		if incoming.Response.Body == "" {
+		if incoming.Response.Body == "" && (!incomingBodyExplicit || incoming.ResponseBodyCapture.State != "complete") {
 			incoming.Response.Body = old.Response.Body
 		}
 	}
@@ -558,8 +614,19 @@ func mergeRequest(old, incoming Request) Request {
 }
 
 func trimRequestsLocked() {
-	if len(liveData.Requests) > MaxLiveRequests {
-		liveData.Requests = append([]Request(nil), liveData.Requests[len(liveData.Requests)-MaxLiveRequests:]...)
+	if len(liveData.Requests) > activeCaptureLimits.requests {
+		dropped := len(liveData.Requests) - activeCaptureLimits.requests
+		if browserCaptureActive {
+			failCaptureLocked(fmt.Sprintf("capture exceeds REP_CAPTURE_MAX_REQUESTS (%d); capture is incomplete", activeCaptureLimits.requests))
+			liveData.Browser.DroppedRequests += dropped
+			liveData.Requests = liveData.Requests[:activeCaptureLimits.requests]
+		} else {
+			liveData.Requests = append([]Request(nil), liveData.Requests[dropped:]...)
+			if liveData.Browser == nil {
+				liveData.Browser = &BrowserSession{}
+			}
+			liveData.Browser.DroppedRequests += dropped
+		}
 	}
 }
 
@@ -587,7 +654,7 @@ func writeMessage(message interface{}) error {
 	if err != nil {
 		return err
 	}
-	if len(content) > maxNativeMessageBytes {
+	if len(content) > maxNativeResponseBytes {
 		return fmt.Errorf("native response is too large: %d bytes", len(content))
 	}
 	stdoutMu.Lock()
@@ -683,6 +750,10 @@ func (server *bridgeServer) handleConnection(conn net.Conn) {
 	}
 	if request.ID == "" || request.Method == "" {
 		_ = json.NewEncoder(conn).Encode(RPCResponse{ID: request.ID, Error: &RPCError{Code: "invalid_request", Message: "id and method are required"}})
+		return
+	}
+	if response, handled := handleCaptureRPC(request); handled {
+		_ = json.NewEncoder(conn).Encode(response)
 		return
 	}
 	timeout := 35 * time.Second

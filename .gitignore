@@ -1,3 +1,6 @@
 .gocache/
 rep
 rep-host
+.env
+.env.*
+!.env.example
