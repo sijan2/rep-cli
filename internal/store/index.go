@@ -8,18 +8,18 @@ import (
 // RequestIndex provides O(1) lookups for requests by ID or SemanticID
 type RequestIndex struct {
 	mu            sync.RWMutex
-	byID          map[string]*Request     // Original ID -> Request
-	bySemantic    map[SemanticID]*Request // SemanticID -> Request
-	byShortID     map[string]*Request     // Short ID prefix -> Request (for convenience)
-	requestSlice  []*Request              // Original order for iteration
+	byID          map[string]*Request
+	bySemantic    map[SemanticID]map[string]struct{}
+	semanticForID map[string]SemanticID
+	requestSlice  []*Request // Original order for iteration
 }
 
 // NewRequestIndex creates a new request index
 func NewRequestIndex() *RequestIndex {
 	return &RequestIndex{
-		byID:       make(map[string]*Request),
-		bySemantic: make(map[SemanticID]*Request),
-		byShortID:  make(map[string]*Request),
+		byID:          make(map[string]*Request),
+		bySemantic:    make(map[SemanticID]map[string]struct{}),
+		semanticForID: make(map[string]SemanticID),
 	}
 }
 
@@ -34,6 +34,9 @@ func BuildIndex(requests []Request) *RequestIndex {
 
 // Add adds a request to the index
 func (idx *RequestIndex) Add(req *Request) {
+	if req == nil || req.ID == "" {
+		return
+	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
@@ -42,94 +45,98 @@ func (idx *RequestIndex) Add(req *Request) {
 		ComputeRequestFields(req)
 	}
 
-	idx.byID[req.ID] = req
-	idx.bySemantic[req.SemanticID] = req
-	idx.requestSlice = append(idx.requestSlice, req)
-
-	// Add short ID lookup (first 6 chars)
-	shortID := req.ID
-	if len(shortID) > 6 {
-		shortID = shortID[:6]
-	}
-	shortID = strings.TrimPrefix(shortID, "h_")
-	idx.byShortID[shortID] = req
-}
-
-// GetByID returns a request by its original ID (O(1))
-func (idx *RequestIndex) GetByID(id string) *Request {
-	idx.mu.RLock()
-	defer idx.mu.RUnlock()
-
-	// Try exact match
-	if req := idx.byID[id]; req != nil {
-		return req
-	}
-
-	// Try without h_ prefix
-	id = strings.TrimPrefix(id, "h_")
-
-	// Try short ID
-	if req := idx.byShortID[id]; req != nil {
-		return req
-	}
-
-	// Try prefix match on short ID
-	if len(id) >= 4 {
-		for shortID, req := range idx.byShortID {
-			if strings.HasPrefix(shortID, id) || strings.HasPrefix(id, shortID) {
-				return req
-			}
+	if previous, exists := idx.semanticForID[req.ID]; exists {
+		delete(idx.bySemantic[previous], req.ID)
+		if len(idx.bySemantic[previous]) == 0 {
+			delete(idx.bySemantic, previous)
 		}
 	}
+	idx.byID[req.ID] = req
+	if idx.bySemantic[req.SemanticID] == nil {
+		idx.bySemantic[req.SemanticID] = make(map[string]struct{})
+	}
+	idx.bySemantic[req.SemanticID][req.ID] = struct{}{}
+	idx.semanticForID[req.ID] = req.SemanticID
+	idx.requestSlice = append(idx.requestSlice, req)
+}
 
-	return nil
+// GetByID resolves an exact ID first, then a unique forward prefix of the full
+// stored ID. Prefix ambiguity never selects an arbitrary request.
+func (idx *RequestIndex) GetByID(id string) *Request {
+	return idx.GetByAny(id)
 }
 
 // GetBySemantic returns a request by its semantic ID (O(1))
 func (idx *RequestIndex) GetBySemantic(sid SemanticID) *Request {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	return idx.bySemantic[sid]
+	return idx.semanticLocked(sid)
 }
 
-// GetByAny tries to find a request by any ID format
-// Accepts: original ID, semantic ID, or short hash
+// GetExact accepts an original ID (with or without h_) or a unique exact
+// semantic alias. It never performs prefix matching.
+func (idx *RequestIndex) GetExact(id string) *Request {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.exactLocked(id)
+}
+
+func (idx *RequestIndex) exactLocked(id string) *Request {
+	if id == "" {
+		return nil
+	}
+	if req := idx.byID[id]; req != nil {
+		return req
+	}
+	if strings.HasPrefix(id, "h_") {
+		if req := idx.byID[strings.TrimPrefix(id, "h_")]; req != nil {
+			return req
+		}
+	} else if req := idx.byID["h_"+id]; req != nil {
+		return req
+	}
+	return idx.semanticLocked(SemanticID(id))
+}
+
+func (idx *RequestIndex) semanticLocked(id SemanticID) *Request {
+	ids := idx.bySemantic[id]
+	if len(ids) != 1 {
+		return nil
+	}
+	for requestID := range ids {
+		return idx.byID[requestID]
+	}
+	return nil
+}
+
+// GetByAny accepts an exact original or semantic ID, or a unique forward prefix
+// of at least four characters after the optional h_ prefix. Unknown semantic
+// labels do not degrade into hash-only matches.
 func (idx *RequestIndex) GetByAny(id string) *Request {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	// Try as original ID
-	if req := idx.byID[id]; req != nil {
+	if req := idx.exactLocked(id); req != nil {
 		return req
 	}
-
-	// Try as semantic ID
-	if req := idx.bySemantic[SemanticID(id)]; req != nil {
-		return req
+	if _, exists := idx.bySemantic[SemanticID(id)]; exists {
+		// An ambiguous semantic alias must not become a prefix of another ID.
+		return nil
 	}
-
-	// Try as short ID
 	id = strings.TrimPrefix(id, "h_")
-	if req := idx.byShortID[id]; req != nil {
-		return req
+	if len(id) < 4 {
+		return nil
 	}
-
-	// Try to extract hash from semantic ID format (hash_METHOD_status)
-	parts := strings.Split(id, "_")
-	if len(parts) >= 1 {
-		if req := idx.byShortID[parts[0]]; req != nil {
-			return req
+	var match *Request
+	for storedID, request := range idx.byID {
+		if strings.HasPrefix(strings.TrimPrefix(storedID, "h_"), id) {
+			if match != nil && match.ID != storedID {
+				return nil
+			}
+			match = request
 		}
 	}
-
-	// Fuzzy match on short ID
-	for shortID, req := range idx.byShortID {
-		if strings.HasPrefix(shortID, id) || strings.HasPrefix(id, shortID) {
-			return req
-		}
-	}
-
-	return nil
+	return match
 }
 
 // Count returns the number of indexed requests
@@ -210,7 +217,7 @@ func (idx *RequestIndex) Clear() {
 	defer idx.mu.Unlock()
 
 	idx.byID = make(map[string]*Request)
-	idx.bySemantic = make(map[SemanticID]*Request)
-	idx.byShortID = make(map[string]*Request)
+	idx.bySemantic = make(map[SemanticID]map[string]struct{})
+	idx.semanticForID = make(map[string]SemanticID)
 	idx.requestSlice = nil
 }

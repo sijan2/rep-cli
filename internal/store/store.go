@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/repplus/rep-cli/internal/scope"
 )
 
 const (
@@ -20,38 +21,38 @@ const (
 	LiveFileName  = "live.json" // Native host export file name
 )
 
-// GetStorePath returns the path to the store directory following XDG spec
-// Uses ~/.local/share/rep-cli/
+// GetStorePath resolves the invocation's namespace. Scoped stores never inherit
+// settings, notes, archives, or live data from the legacy global store.
 func GetStorePath() (string, error) {
-	// Check XDG_DATA_HOME first
-	if xdgData := os.Getenv("XDG_DATA_HOME"); xdgData != "" {
-		return filepath.Join(xdgData, "rep-cli"), nil
-	}
-	// Default to ~/.local/share/rep-cli
-	home, err := os.UserHomeDir()
+	selected, err := scope.Current()
 	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(home, ".local", "share", "rep-cli"), nil
+	return selected.DataDir, nil
 }
 
 var (
-	instance *Store
-	once     sync.Once
-	mu       sync.RWMutex
+	instance     *Store
+	instancePath string
+	instanceErr  error
+	instanceMu   sync.Mutex
+	mu           sync.RWMutex
 )
 
 // GetLiveFilePath returns the path where live data is exported.
 // REPLIVE_PATH overrides the default XDG/rep-cli location.
 func GetLiveFilePath() (string, error) {
-	if override := os.Getenv("REPLIVE_PATH"); override != "" {
-		return expandHomePath(override)
-	}
-	storePath, err := GetStorePath()
+	selected, err := scope.Current()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(storePath, LiveFileName), nil
+	if override := os.Getenv("REPLIVE_PATH"); override != "" {
+		if selected.Scoped {
+			return "", fmt.Errorf("REPLIVE_PATH cannot override a scoped capture; unset REPLIVE_PATH or explicitly use --global")
+		}
+		return expandHomePath(override)
+	}
+	return selected.LivePath, nil
 }
 
 func expandHomePath(path string) (string, error) {
@@ -83,7 +84,7 @@ func EnsureStoreDir() error {
 	if err != nil {
 		return err
 	}
-	return os.MkdirAll(storePath, 0755)
+	return os.MkdirAll(storePath, 0700)
 }
 
 // NewStore creates a new store
@@ -97,14 +98,17 @@ func NewStore() *Store {
 
 // Get returns the singleton store instance
 func Get() (*Store, error) {
-	var loadErr error
-	once.Do(func() {
-		instance, loadErr = Load()
-	})
-	if loadErr != nil {
-		return nil, loadErr
+	path, err := GetStoreFilePath()
+	if err != nil {
+		return nil, err
 	}
-	return instance, nil
+	instanceMu.Lock()
+	defer instanceMu.Unlock()
+	if instancePath != path {
+		instance, instanceErr = Load()
+		instancePath = path
+	}
+	return instance, instanceErr
 }
 
 // NewTempStore creates a temporary store from a slice of requests.
@@ -129,15 +133,13 @@ func Load() (*Store, error) {
 	store := NewStore()
 
 	data, err := os.ReadFile(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return store, nil
-		}
+	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to read store: %w", err)
 	}
-
-	if err := sonic.Unmarshal(data, store); err != nil {
-		return nil, fmt.Errorf("failed to parse store: %w", err)
+	if err == nil {
+		if err := sonic.Unmarshal(data, store); err != nil {
+			return nil, fmt.Errorf("failed to parse store: %w", err)
+		}
 	}
 
 	// Ensure maps are initialized
@@ -242,11 +244,38 @@ func (s *Store) Save() error {
 		return fmt.Errorf("failed to marshal store: %w", err)
 	}
 
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := atomicStoreWrite(filePath, data); err != nil {
 		return fmt.Errorf("failed to write store: %w", err)
 	}
 
 	return nil
+}
+
+// Atomic replacement prevents readers from observing truncated metadata. It
+// does not turn independent read-modify-write processes into a transaction;
+// concurrent agents should each use a distinct task namespace.
+func atomicStoreWrite(path string, data []byte) error {
+	file, err := os.CreateTemp(filepath.Dir(path), ".store-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if err := file.Chmod(0600); err != nil {
+		file.Close()
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), path)
 }
 
 // Clear removes all sessions from the store
@@ -297,7 +326,7 @@ func GenerateSessionID(note string) string {
 }
 
 // AddSession saves a new session to the store
-func (s *Store) AddSession(id string, note string, requests []Request) (*Session, error) {
+func (s *Store) AddSession(id string, note string, requests []Request, provenance ...*Export) (*Session, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -311,6 +340,11 @@ func (s *Store) AddSession(id string, note string, requests []Request) (*Session
 		Timestamp: time.Now().UnixMilli(),
 		Note:      note,
 		Requests:  requests,
+	}
+	if len(provenance) > 0 && provenance[0] != nil {
+		session.CaptureSessionID = provenance[0].SessionID
+		session.BrowserSession = provenance[0].BrowserSession
+		session.CaptureDigest = provenance[0].CaptureDigest
 	}
 	session.HashID = GenerateHashID("s", session.ID, strconv.FormatInt(session.Timestamp, 10))
 

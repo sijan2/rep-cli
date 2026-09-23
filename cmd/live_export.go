@@ -7,20 +7,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/repplus/rep-cli/internal/store"
 )
 
 func loadLiveExport(livePath string) (store.Export, error) {
 	var export store.Export
-	data, err := os.ReadFile(livePath)
+	file, err := os.Open(livePath)
 	if err != nil {
 		return export, err
 	}
-	if err := sonic.Unmarshal(data, &export); err != nil {
-		return export, err
-	}
-	return export, nil
+	defer file.Close()
+	return store.DecodeExport(file)
 }
 
 func maxRequestTimestamp(requests []store.Request) int64 {

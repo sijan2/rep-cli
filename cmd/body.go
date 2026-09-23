@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bytedance/sonic"
 	"github.com/pterm/pterm"
 	"github.com/repplus/rep-cli/internal/output"
+	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/repplus/rep-cli/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -17,59 +17,48 @@ var (
 	bodyRequest bool
 	bodyHead    int
 	bodySave    bool
+	bodySaved   string
+	bodyView    bodyViewFlags
 )
 
 var bodyCmd = &cobra.Command{
 	Use:   "body <request-id>",
 	Short: "Get response body for a request",
-	Long: `Retrieve response body for analysis.
+	Long: `Inspect captured response bytes with explicit completeness and bounded JSON.
 
 Flags for large responses:
-  --head N    Show only first N bytes
-  --save      Save to temp file, output path only
+  --info      Check capture state, decoded byte count, and digest
+  --head N    Read N bytes, optionally from --offset
+  --save      Save decoded bytes privately; -j returns artifact metadata
+  --saved ID  Read only one archive (full hash, unique ID/prefix, or latest)
+  --pointer P Select a JSON value; --format sse/ndjson selects record pages
 
 Examples:
-  rep body 6f2d0c                    Full body
+  rep body 6f2d0c --info             Diagnose capture completeness
   rep body 6f2d0c --head 5000        First 5KB
   rep body 6f2d0c --save             Save to file
+  rep body 6f2d0c --pointer /data    Select a JSON subtree
+  rep body 6f2d0c --format sse       Read complete application events
   rep body 6f2d0c --request          Request body instead`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		requestID := args[0]
 
-		var req *store.Request
-
-		// Try live.json first
-		livePath, err := store.GetLiveFilePath()
-		if err == nil {
-			if export, err := loadLiveExport(livePath); err == nil {
-				idx := store.BuildIndex(export.Requests)
-				req = idx.GetByAny(requestID)
-			}
+		req, err := findBodyWebRequest(requestID, bodySaved)
+		if err != nil {
+			return output.EmitAgentError(cmd.OutOrStdout(), output.NewAgentError(output.ErrCodeStoreRead, "body", err.Error(), "rep scope", "rep sessions"), getOutputMode() == "json")
 		}
 
-		// Try android.json
-		if req == nil {
+		// Legacy Android lookup is limited to a canonical ID and explicit global
+		// access. It never overrides a selected archive or an isolated web task.
+		selected, _ := scope.Current()
+		if req == nil && bodySaved == "" && !selected.Scoped {
 			if androidData, err := store.LoadAndroidData(); err == nil {
 				for _, pkg := range androidData.Packages {
 					for i := range pkg.Requests {
 						ar := &pkg.Requests[i]
-						store.ComputeRequestFields(&store.Request{ID: ar.ID, Method: ar.Method, URL: ar.URL})
-						tempReq := store.Request{ID: ar.ID, Method: ar.Method, URL: ar.URL}
-						store.ComputeRequestFields(&tempReq)
-
-						if ar.ID == requestID || string(tempReq.SemanticID) == requestID {
-							req = &store.Request{
-								ID:      ar.ID,
-								Method:  ar.Method,
-								URL:     ar.URL,
-								Headers: ar.Headers,
-								Body:    ar.GetReqBody(),
-								Response: &store.Response{
-									Status: ar.Status,
-									Body:   ar.GetResBody(),
-								},
-							}
+						if ar.ID == requestID {
+							req = &store.Request{ID: ar.ID, Method: ar.Method, URL: ar.URL, Headers: ar.Headers, Body: ar.GetReqBody(), Response: &store.Response{Status: ar.Status, Body: ar.GetResBody()}}
 							store.ComputeRequestFields(req)
 							break
 						}
@@ -78,18 +67,6 @@ Examples:
 						break
 					}
 				}
-			}
-		}
-
-		// Fall back to saved sessions
-		if req == nil {
-			s, err := store.Get()
-			if err != nil {
-				return fmt.Errorf("failed to load store: %w", err)
-			}
-			req = s.GetRequestFromSessions(requestID)
-			if req == nil {
-				req = findRequestByAnyID(s, requestID)
 			}
 		}
 
@@ -104,84 +81,65 @@ Examples:
 			return output.EmitAgentError(os.Stdout, ae, getOutputMode() == "json")
 		}
 
-		// Get body content
-		var body string
-		var contentType string
-		if bodyRequest {
-			body = req.Body
-			contentType = store.HeaderFirst(req.Headers, "content-type")
-		} else if req.Response != nil {
-			body = req.Response.Body
-			contentType = store.HeaderFirst(req.Response.Headers, "content-type")
+		if err := renderCapturedBody(cmd, req); err != nil {
+			return output.EmitAgentError(cmd.OutOrStdout(), output.NewAgentError("body_unavailable", "body", err.Error(), "rep body "+requestID+" --info", "rep describe body"), true)
 		}
-
-		// --save: Write to temp file, return path
-		if bodySave {
-			ext := ".txt"
-			if strings.Contains(contentType, "json") {
-				ext = ".json"
-			} else if strings.Contains(contentType, "html") {
-				ext = ".html"
-			} else if strings.Contains(contentType, "javascript") {
-				ext = ".js"
-			}
-			tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("rep_%s%s", req.ID, ext))
-			if err := os.WriteFile(tmpFile, []byte(body), 0644); err != nil {
-				return fmt.Errorf("failed to save: %w", err)
-			}
-			fmt.Println(tmpFile)
-			return nil
-		}
-
-		// --head: Truncate
-		if bodyHead > 0 && len(body) > bodyHead {
-			body = body[:bodyHead]
-			fmt.Println(body)
-			fmt.Fprintf(os.Stderr, "\n[truncated, %d more bytes]\n", len(req.Response.Body)-bodyHead)
-			return nil
-		}
-
-		// Overflow-to-disk: when a body exceeds the threshold and the caller
-		// did NOT set --head or --save, write the full body to /tmp and
-		// return a preview + path. Agents can read the file directly.
-		var overflowInfo output.TruncationInfo
-		if !bodySave && bodyHead == 0 && len(body) > output.OverflowThreshold {
-			preview, info, err := output.SpillBodyToDisk(body, req.ID, contentType)
-			if err == nil && info.Reason == "overflow-to-disk" {
-				body = preview
-				overflowInfo = info
-			}
-		}
-
-		if getOutputMode() == "json" {
-			out := map[string]interface{}{
-				"id":     req.ID,
-				"method": req.Method,
-				"url":    req.URL,
-			}
-			if bodyRequest {
-				out["body"] = body
-			} else if req.Response != nil {
-				out["status"] = req.Response.Status
-				out["body"] = body
-			}
-			if overflowInfo.Reason != "" {
-				out["truncation"] = overflowInfo
-			}
-			data, _ := sonic.MarshalIndent(out, "", "  ")
-			fmt.Println(string(data))
-		} else {
-			if bodyRequest {
-				printRequestBodyWith(req, body)
-			} else {
-				printResponseBodyWith(req, body)
-			}
-			// SpillBodyToDisk already appended a trailing "REP_SPILL=<path>"
-			// line to the body preview; no additional wrapper here.
-		}
-
 		return nil
 	},
+}
+
+// saveBodyArtifact uses a unique file in the task namespace, so equal request
+// IDs from independent agents (or repeated saves) cannot replace one another.
+func saveBodyArtifact(requestID, body, extension string) (string, error) {
+	switch extension {
+	case ".txt", ".json", ".html", ".js", ".bin":
+	default:
+		return "", fmt.Errorf("unsupported body artifact extension")
+	}
+	selected, err := scope.Current()
+	if err != nil {
+		return "", err
+	}
+	if !selected.Scoped {
+		if strings.ContainsAny(requestID, `/\`) {
+			return "", fmt.Errorf("request ID cannot be used as an artifact filename")
+		}
+		path := filepath.Join(os.TempDir(), fmt.Sprintf("rep_%s%s", requestID, extension))
+		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+			return "", err
+		}
+		return path, nil
+	}
+	dir := filepath.Join(selected.DataDir, "body-exports")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("body export directory must be a regular directory")
+	}
+	if err := os.Chmod(dir, 0700); err != nil {
+		return "", err
+	}
+	file, err := os.CreateTemp(dir, "body-*"+extension)
+	if err != nil {
+		return "", err
+	}
+	complete := false
+	defer func() {
+		file.Close()
+		if !complete {
+			os.Remove(file.Name())
+		}
+	}()
+	if _, err := file.WriteString(body); err != nil {
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		return "", err
+	}
+	complete = true
+	return file.Name(), nil
 }
 
 // printRequestBodyWith prints the header/meta for a request body and then
@@ -225,18 +183,75 @@ func printResponseBodyWith(req *store.Request, body string) {
 }
 
 func findRequestByAnyID(s *store.Store, requestID string) *store.Request {
+	var requests []store.Request
 	for _, session := range s.Sessions {
-		idx := store.BuildIndex(session.Requests)
-		if req := idx.GetByAny(requestID); req != nil {
-			return req
+		requests = append(requests, session.Requests...)
+	}
+	return store.BuildIndex(requests).GetByAny(requestID)
+}
+
+// A canonical live ID explicitly identifies the current capture. Otherwise
+// exact archived IDs win over live prefixes, and aliases/prefixes must be
+// unique across all candidate requests. --saved pins one immutable source.
+func findBodyWebRequest(requestID, saved string) (*store.Request, error) {
+	if saved != "" {
+		persistent, err := store.Load()
+		if err != nil {
+			return nil, fmt.Errorf("cannot read this task's archives")
+		}
+		var session *store.Session
+		if saved == "latest" || saved == "last" {
+			session = persistent.GetLatestSession()
+		} else {
+			session, err = selectSummaryArchive(persistent.Sessions, saved)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if session == nil {
+			return nil, fmt.Errorf("saved session not found in this task")
+		}
+		return store.BuildIndex(session.Requests).GetByAny(requestID), nil
+	}
+	livePath, err := store.GetLiveFilePath()
+	if err != nil {
+		return nil, err
+	}
+	export, err := loadLiveExport(livePath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("this task's live capture is unreadable; use --saved to select an archive explicitly")
+	}
+	for index := len(export.Requests) - 1; index >= 0; index-- {
+		if export.Requests[index].ID == requestID {
+			store.ComputeRequestFields(&export.Requests[index])
+			return &export.Requests[index], nil
 		}
 	}
-	return nil
+	persistent, err := store.Load()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read this task's archives")
+	}
+	var requests []store.Request
+	for _, session := range persistent.Sessions {
+		requests = append(requests, session.Requests...)
+	}
+	requests = append(requests, export.Requests...)
+	return store.BuildIndex(requests).GetByAny(requestID), nil
 }
 
 func init() {
 	rootCmd.AddCommand(bodyCmd)
 	bodyCmd.Flags().BoolVarP(&bodyRequest, "request", "r", false, "Get request body instead")
 	bodyCmd.Flags().IntVar(&bodyHead, "head", 0, "Show only first N bytes")
-	bodyCmd.Flags().BoolVar(&bodySave, "save", false, "Save to temp file, output path")
+	bodyCmd.Flags().BoolVar(&bodySave, "save", false, "Save a private body artifact in this task, output path")
+	bodyCmd.Flags().StringVar(&bodySaved, "saved", "", "Read only one archive (full hash, unique ID/prefix, or latest)")
+	bodyCmd.Flags().BoolVar(&bodyView.Info, "info", false, "Show capture completeness and body metadata without content")
+	bodyCmd.Flags().BoolVar(&bodyView.RequireComplete, "require-complete", false, "Fail unless the body was captured completely")
+	bodyCmd.Flags().IntVar(&bodyView.Offset, "offset", 0, "Byte offset within the selected decoded body")
+	bodyCmd.Flags().IntVar(&bodyView.MaxBytes, "max-bytes", 8192, "Maximum inline JSON bytes including newline")
+	bodyCmd.Flags().StringVar(&bodyView.Format, "format", "raw", "Body projection: raw, auto, json, ndjson, sse")
+	bodyCmd.Flags().StringVar(&bodyView.Pointer, "pointer", "", "RFC 6901 JSON pointer to select one value")
+	bodyCmd.Flags().StringVar(&bodyView.Find, "find", "", "Find literal text with byte offsets and bounded context")
+	bodyCmd.Flags().IntVar(&bodyView.RecordOffset, "record-offset", 0, "Starting NDJSON/SSE record or search-match index")
+	bodyCmd.Flags().IntVar(&bodyView.Records, "records", 20, "Maximum NDJSON/SSE records or search matches")
 }

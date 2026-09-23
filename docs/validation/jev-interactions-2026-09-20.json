@@ -1,0 +1,125 @@
+{
+  "verified": true,
+  "time": "2026-09-20T20:37:24.141Z",
+  "checks": [
+    {
+      "name": "ready",
+      "status": "verified",
+      "steps": 1,
+      "duration_ms": 70,
+      "bridge_calls": 4
+    },
+    {
+      "name": "preview",
+      "status": "preview",
+      "steps": 2,
+      "duration_ms": 54,
+      "bridge_calls": 4
+    },
+    {
+      "name": "scoped-fill-and-check",
+      "status": "verified",
+      "steps": 2,
+      "duration_ms": 195,
+      "bridge_calls": 6
+    },
+    {
+      "name": "input-adapters",
+      "status": "verified",
+      "steps": 9,
+      "duration_ms": 125,
+      "bridge_calls": 12
+    },
+    {
+      "name": "ambiguous",
+      "status": "failed",
+      "steps": 1,
+      "duration_ms": 28,
+      "bridge_calls": 4
+    },
+    {
+      "name": "disabled",
+      "status": "failed",
+      "steps": 1,
+      "duration_ms": 26,
+      "bridge_calls": 4
+    },
+    {
+      "name": "readonly",
+      "status": "failed",
+      "steps": 1,
+      "duration_ms": 35,
+      "bridge_calls": 4
+    },
+    {
+      "name": "preserve-existing",
+      "status": "failed",
+      "steps": 1,
+      "duration_ms": 30,
+      "bridge_calls": 4
+    },
+    {
+      "name": "missing-option",
+      "status": "failed",
+      "steps": 1,
+      "duration_ms": 30,
+      "bridge_calls": 4
+    },
+    {
+      "name": "stale-success",
+      "status": "failed",
+      "steps": 1,
+      "duration_ms": 35,
+      "bridge_calls": 4
+    },
+    {
+      "name": "framework-rejects-input",
+      "status": "unconfirmed",
+      "steps": 1,
+      "duration_ms": 30,
+      "bridge_calls": 4
+    },
+    {
+      "name": "submission-timeout-no-replay",
+      "status": "unconfirmed",
+      "steps": 1,
+      "duration_ms": 259,
+      "bridge_calls": 5
+    },
+    {
+      "name": "delayed-save-and-resume",
+      "status": "verified",
+      "steps": 2,
+      "duration_ms": 233,
+      "bridge_calls": 6
+    },
+    {
+      "name": "trusted-keyboard",
+      "status": "verified",
+      "steps": 1,
+      "duration_ms": 114,
+      "bridge_calls": 14
+    },
+    {
+      "name": "semantic-target",
+      "status": "verified",
+      "steps": 1,
+      "duration_ms": 540,
+      "bridge_calls": 11
+    },
+    {
+      "name": "spa-and-full-navigation",
+      "status": "verified",
+      "steps": 3,
+      "duration_ms": 214,
+      "bridge_calls": 8
+    },
+    {
+      "name": "wrong-page-guard",
+      "status": "failed",
+      "steps": 1,
+      "duration_ms": 34,
+      "bridge_calls": 4
+    }
+  ]
+}

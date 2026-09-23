@@ -13,8 +13,8 @@ func TestSessionCaptureIsIsolatedFromAmbientWebRequestTraffic(t *testing.T) {
 	resetHostState()
 	handleMessage(&Message{Action: "session_begin", SessionID: "navigate-test", URL: "https://github.com", CaptureMode: "navigate"})
 	handleMessage(&Message{Action: "add", Request: &Request{ID: "ambient-during", Method: "POST", URL: "https://chatgpt.com/telemetry", CaptureSource: "webrequest"}})
-	handleMessage(&Message{Action: "add", Request: &Request{ID: "target", Method: "GET", URL: "https://github.com", CaptureSource: "cdp"}})
-	handleMessage(&Message{Action: "session_end", URL: "https://github.com"})
+	handleMessage(&Message{Action: "add", SessionID: "navigate-test", Request: &Request{ID: "target", Method: "GET", URL: "https://github.com", CaptureSource: "cdp"}})
+	handleMessage(&Message{Action: "session_end", SessionID: "navigate-test", URL: "https://github.com"})
 	handleMessage(&Message{Action: "add", Request: &Request{ID: "ambient-after", Method: "POST", URL: "https://mail.google.com/sync", CaptureSource: "webrequest"}})
 
 	if len(liveData.Requests) != 1 || liveData.Requests[0].ID != "target" {

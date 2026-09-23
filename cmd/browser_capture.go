@@ -23,6 +23,8 @@ type browserCapturedRequest struct {
 	Status                  int    `json:"status"`
 	BodyBytes               int    `json:"body_bytes"`
 	BodyTruncated           bool   `json:"body_truncated,omitempty"`
+	BodyState               string `json:"body_state"`
+	NetworkState            string `json:"network_state,omitempty"`
 	IntentionalCancellation string `json:"intentional_cancellation,omitempty"`
 }
 
@@ -31,17 +33,21 @@ type browserCapturedRequest struct {
 // request bodies, response bodies, and redirect locations remain sealed in
 // live.json.
 type browserTerminalOutcome struct {
-	Kind                     string   `json:"kind"`
-	Completed                bool     `json:"completed"`
-	TerminalResponseReceived bool     `json:"terminal_response_received"`
-	DownloadHandoffStarted   bool     `json:"download_handoff_started,omitempty"`
-	SourceRequestID          string   `json:"source_request_id"`
-	TerminalRequestID        string   `json:"terminal_request_id"`
-	TerminalStatus           int      `json:"terminal_status"`
-	RedirectHops             int      `json:"redirect_hops"`
-	RequestIDs               []string `json:"request_ids"`
-	LaterFormFailures        int      `json:"later_form_failures,omitempty"`
-	LaterFormFailureIDs      []string `json:"later_form_failure_ids,omitempty"`
+	Kind                       string   `json:"kind"`
+	Completed                  bool     `json:"completed"`
+	TerminalResponseReceived   bool     `json:"terminal_response_received"`
+	DownloadHandoffStarted     bool     `json:"download_handoff_started,omitempty"`
+	SourceRequestID            string   `json:"source_request_id"`
+	TerminalRequestID          string   `json:"terminal_request_id"`
+	TerminalStatus             int      `json:"terminal_status"`
+	RedirectHops               int      `json:"redirect_hops"`
+	RequestIDs                 []string `json:"request_ids"`
+	RequestIDsTotal            int      `json:"request_ids_total,omitempty"`
+	RequestIDsOmitted          int      `json:"request_ids_omitted,omitempty"`
+	LaterFormFailures          int      `json:"later_form_failures,omitempty"`
+	LaterFormFailureIDs        []string `json:"later_form_failure_ids,omitempty"`
+	LaterFormFailureIDsTotal   int      `json:"later_form_failure_ids_total,omitempty"`
+	LaterFormFailureIDsOmitted int      `json:"later_form_failure_ids_omitted,omitempty"`
 }
 
 type browserActionEnvelope struct {
@@ -64,24 +70,32 @@ func enrichBrowserCaptureResult(result map[string]interface{}) error {
 	if err != nil {
 		return fmt.Errorf("read browser capture: %w", err)
 	}
-	var snapshot browserCaptureSnapshot
+	var snapshot store.Export
 	if err := sonic.Unmarshal(data, &snapshot); err != nil {
 		return fmt.Errorf("decode browser capture: %w", err)
 	}
+	return enrichBrowserCaptureSnapshot(result, snapshot)
+}
 
-	resultSession, _ := result["session_id"].(string)
-	if resultSession != "" && snapshot.SessionID != "" && resultSession != snapshot.SessionID {
-		return fmt.Errorf("browser capture session mismatch")
+func enrichBrowserCaptureSnapshot(result map[string]interface{}, snapshot store.Export) error {
+	if err := validateBrowserCaptureResult(result, snapshot, false); err != nil {
+		return err
 	}
-	if expected, ok := browserResultRequestCount(result["requests"]); ok && expected != len(snapshot.Requests) {
-		return fmt.Errorf("browser capture request count mismatch: result=%d live=%d", expected, len(snapshot.Requests))
-	}
-
 	descriptors := browserCapturedRequestDescriptors(snapshot.Requests)
 	if len(descriptors) != len(snapshot.Requests) {
 		return fmt.Errorf("browser capture contains a request without a stable id")
 	}
 	result["captured_requests"] = descriptors
+	states := map[string]int{}
+	incomplete := 0
+	for _, descriptor := range descriptors {
+		states[descriptor.BodyState]++
+		if descriptor.BodyState != "complete" && descriptor.BodyState != "not_applicable" {
+			incomplete++
+		}
+	}
+	result["body_capture_states"] = states
+	result["incomplete_bodies"] = incomplete
 	if outcome := browserTerminalRedirectOutcome(snapshot.Requests); outcome != nil {
 		result["terminal_outcome"] = outcome
 	}
@@ -107,9 +121,37 @@ func browserCapturedRequestDescriptors(requests []store.Request) []browserCaptur
 			descriptor.Status = request.Response.Status
 			descriptor.BodyBytes = len(request.Response.Body)
 		}
+		descriptor.BodyState = "unknown"
+		descriptor.NetworkState = browserNetworkState(request.NetworkState)
+		if request.ResponseBodyCapture != nil {
+			descriptor.BodyState = browserBodyState(request.ResponseBodyCapture.State)
+			descriptor.BodyBytes = int(request.ResponseBodyCapture.CapturedBytes)
+		} else if request.ResponseBodyTruncated {
+			descriptor.BodyState = "partial"
+		} else if request.ResponseBodyError != "" {
+			descriptor.BodyState = "unavailable"
+		}
 		descriptors = append(descriptors, descriptor)
 	}
 	return descriptors
+}
+
+func browserBodyState(value string) string {
+	switch value {
+	case "complete", "partial", "unavailable", "pending", "not_applicable":
+		return value
+	default:
+		return "unknown"
+	}
+}
+
+func browserNetworkState(value string) string {
+	switch value {
+	case "complete", "pending", "failed", "redirected":
+		return value
+	default:
+		return ""
+	}
 }
 
 func browserTerminalRedirectOutcome(requests []store.Request) *browserTerminalOutcome {
@@ -416,7 +458,11 @@ func printBrowserCapturedRequests(result map[string]interface{}) {
 		fmt.Println("captured_requests: none")
 		return
 	}
-	fmt.Println("captured_requests:")
+	if omitted, ok := browserResultRequestCount(result["captured_requests_omitted"]); ok && omitted > 0 {
+		fmt.Printf("captured_requests: first %d of %d (%d omitted; full capture saved)\n", len(values), len(values)+omitted, omitted)
+	} else {
+		fmt.Println("captured_requests:")
+	}
 	for _, request := range values {
 		fmt.Printf("  %s\t%s\t%d\t%dB\n", request.ID, request.Method, request.Status, request.BodyBytes)
 	}

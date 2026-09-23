@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "browser": "full Chromium headless",
+  "cold_start_seconds": 0.837,
+  "reuse_seconds": 0.033,
+  "navigation_capture_seconds": 0.599,
+  "gzip_wire_bytes": 2162,
+  "complete_bodies": {
+    "gzip": {"bytes": 2109569, "capture_seconds": 0.811},
+    "ndjson": {"bytes": 52890, "capture_seconds": 0.587},
+    "sse-ended": {"bytes": 83, "capture_seconds": 0.477},
+    "binary": {"bytes": 2304000, "capture_seconds": 1.02}
+  },
+  "unfinished_sse": {"state": "partial", "bytes": 266, "capture_seconds": 2.248},
+  "earlier_archive_verified": true,
+  "jev": null
+}

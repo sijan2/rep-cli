@@ -5,28 +5,31 @@ import "strings"
 // Request represents a captured HTTP request from the extension
 // Matches the exact export format from rep+ extension
 type Request struct {
-	ID                      string    `json:"id"`
-	OriginalID              string    `json:"original_id,omitempty"`
-	Method                  string    `json:"method"`
-	URL                     string    `json:"url"`
-	PageURL                 string    `json:"page_url,omitempty"`
-	ResourceType            string    `json:"resource_type,omitempty"`
-	Initiator               string    `json:"initiator,omitempty"`
-	Headers                 HeaderMap `json:"headers,omitempty"`
-	Body                    string    `json:"body,omitempty"`
-	Response                *Response `json:"response,omitempty"`
-	ResponseEncoding        string    `json:"response_encoding,omitempty"`
-	ResponseBodyTruncated   bool      `json:"response_body_truncated,omitempty"`
-	ResponseBodyError       string    `json:"response_body_error,omitempty"`
-	ErrorText               string    `json:"error_text,omitempty"`
-	Canceled                bool      `json:"canceled,omitempty"`
-	IntentionalCancellation string    `json:"intentional_cancellation,omitempty"`
-	CaptureSource           string    `json:"capture_source,omitempty"`
-	TabID                   int       `json:"tab_id,omitempty"`
-	Timestamp               int64     `json:"timestamp"`
-	StartOrdinal            int64     `json:"start_ordinal,omitempty"`
-	ResponseOrdinal         int64     `json:"response_ordinal,omitempty"`
-	CompletionOrdinal       int64     `json:"completion_ordinal,omitempty"`
+	ID                      string       `json:"id"`
+	OriginalID              string       `json:"original_id,omitempty"`
+	Method                  string       `json:"method"`
+	URL                     string       `json:"url"`
+	PageURL                 string       `json:"page_url,omitempty"`
+	ResourceType            string       `json:"resource_type,omitempty"`
+	Initiator               string       `json:"initiator,omitempty"`
+	Headers                 HeaderMap    `json:"headers,omitempty"`
+	Body                    string       `json:"body,omitempty"`
+	Response                *Response    `json:"response,omitempty"`
+	ResponseEncoding        string       `json:"response_encoding,omitempty"`
+	ResponseBodyTruncated   bool         `json:"response_body_truncated,omitempty"`
+	ResponseBodyError       string       `json:"response_body_error,omitempty"`
+	ResponseBodyCapture     *BodyCapture `json:"response_body_capture,omitempty"`
+	RequestBodyCapture      *BodyCapture `json:"request_body_capture,omitempty"`
+	NetworkState            string       `json:"network_state,omitempty"`
+	ErrorText               string       `json:"error_text,omitempty"`
+	Canceled                bool         `json:"canceled,omitempty"`
+	IntentionalCancellation string       `json:"intentional_cancellation,omitempty"`
+	CaptureSource           string       `json:"capture_source,omitempty"`
+	TabID                   int          `json:"tab_id,omitempty"`
+	Timestamp               int64        `json:"timestamp"`
+	StartOrdinal            int64        `json:"start_ordinal,omitempty"`
+	ResponseOrdinal         int64        `json:"response_ordinal,omitempty"`
+	CompletionOrdinal       int64        `json:"completion_ordinal,omitempty"`
 	// Computed fields (not from export)
 	Domain     string     `json:"-"`
 	Path       string     `json:"-"`
@@ -165,20 +168,58 @@ type Response struct {
 	Body    string    `json:"body,omitempty"`
 }
 
+// BodyCapture describes evidence retained from an observation. Complete with
+// captured_bytes=0 is a verified empty body; a missing descriptor is legacy data
+// whose completeness is unknown. Byte counts describe decoded payload bytes,
+// not Content-Length (which may measure a compressed wire representation).
+type BodyCapture struct {
+	State         string `json:"state"`
+	Reason        string `json:"reason,omitempty"`
+	Source        string `json:"source,omitempty"`
+	CapturedBytes int64  `json:"captured_bytes"`
+	ObservedBytes *int64 `json:"observed_bytes,omitempty"`
+	ExpectedBytes *int64 `json:"expected_bytes,omitempty"`
+	Encoding      string `json:"encoding,omitempty"`
+	SHA256        string `json:"sha256,omitempty"`
+	Chunks        int    `json:"chunks,omitempty"`
+}
+
 // Export represents the JSON export format from rep+ extension
 type Export struct {
-	Version    string    `json:"version"`
-	ExportedAt string    `json:"exported_at"`
-	Requests   []Request `json:"requests"`
+	Version        string          `json:"version"`
+	ExportedAt     string          `json:"exported_at"`
+	Requests       []Request       `json:"requests"`
+	SessionID      string          `json:"session_id,omitempty"`
+	BrowserSession *BrowserSession `json:"browser_session,omitempty"`
+	CaptureDigest  string          `json:"capture_digest,omitempty"`
+}
+
+// BrowserSession records the provenance of one completed browser capture.
+type BrowserSession struct {
+	Browser          string   `json:"browser,omitempty"`
+	URL              string   `json:"url,omitempty"`
+	TabID            int      `json:"tab_id,omitempty"`
+	CaptureMode      string   `json:"capture_mode,omitempty"`
+	StartedAt        string   `json:"started_at,omitempty"`
+	FinishedAt       string   `json:"finished_at,omitempty"`
+	TimedOut         bool     `json:"timed_out,omitempty"`
+	ExpectedRequests *int     `json:"expected_requests,omitempty"`
+	ReceivedRequests int      `json:"received_requests,omitempty"`
+	DroppedRequests  int      `json:"dropped_requests,omitempty"`
+	CaptureError     string   `json:"capture_error,omitempty"`
+	CaptureWarnings  []string `json:"capture_warnings,omitempty"`
 }
 
 // Session represents a saved capture session
 type Session struct {
-	ID        string    `json:"id"` // Format: "YYYYMMDD-HHMMSS" or "YYYYMMDD-HHMMSS-note"
-	HashID    string    `json:"hash_id,omitempty"`
-	Timestamp int64     `json:"timestamp"` // Unix millis when saved
-	Note      string    `json:"note,omitempty"`
-	Requests  []Request `json:"requests"`
+	ID               string          `json:"id"` // Format: "YYYYMMDD-HHMMSS" or "YYYYMMDD-HHMMSS-note"
+	HashID           string          `json:"hash_id,omitempty"`
+	Timestamp        int64           `json:"timestamp"` // Unix millis when saved
+	Note             string          `json:"note,omitempty"`
+	Requests         []Request       `json:"requests"`
+	CaptureSessionID string          `json:"capture_session_id,omitempty"`
+	BrowserSession   *BrowserSession `json:"browser_session,omitempty"`
+	CaptureDigest    string          `json:"capture_digest,omitempty"`
 }
 
 // MutedPath represents a path pattern to mute (fine-grained noise filtering)
