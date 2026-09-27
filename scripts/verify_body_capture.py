@@ -142,6 +142,8 @@ def main():
                 return value, elapsed, result.stdout
 
             try:
+                cli("scope")
+                cli("summary", "--max-bytes", "4096")
                 state, cold, _ = cli("browser", "headless", "start", "--extension", extension, "--host", str(Path(host).resolve()))
                 started = True
                 bridge_dir = Path(state["bridge_dir"])

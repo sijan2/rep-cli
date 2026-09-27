@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -25,14 +26,23 @@ const maxNodes = 100000
 type Browser = browserrpc.Caller
 
 type Candidate struct {
-	ID               string         `json:"id"`
-	Role             string         `json:"role"`
-	Name             string         `json:"name"`
-	Context          string         `json:"context,omitempty"`
-	States           map[string]any `json:"states,omitempty"`
-	TextTruncated    bool           `json:"text_truncated,omitempty"`
-	FrameID          string         `json:"frame_id"`
-	BackendDOMNodeID int64          `json:"backend_dom_node_id"`
+	ID                 string            `json:"id"`
+	Role               string            `json:"role"`
+	Name               string            `json:"name"`
+	Context            string            `json:"context,omitempty"`
+	States             map[string]any    `json:"states,omitempty"`
+	TextTruncated      bool              `json:"text_truncated,omitempty"`
+	FrameID            string            `json:"frame_id"`
+	BackendDOMNodeID   int64             `json:"backend_dom_node_id"`
+	SessionID          string            `json:"session_id,omitempty"`
+	DocumentGeneration string            `json:"document_generation,omitempty"`
+	FrameURL           string            `json:"frame_url,omitempty"`
+	ContextRelations   []ContextRelation `json:"context_relations,omitempty"`
+}
+
+type ContextRelation struct {
+	Role string `json:"role"`
+	Name string `json:"name"`
 }
 
 type FrameIssue struct {
@@ -52,9 +62,11 @@ type Coverage struct {
 }
 
 type Snapshot struct {
-	Candidates  []Candidate
-	Fingerprint string
-	Coverage    Coverage
+	Schema      int         `json:"schema"`
+	Generation  string      `json:"generation"`
+	Candidates  []Candidate `json:"candidates"`
+	Fingerprint string      `json:"fingerprint"`
+	Coverage    Coverage    `json:"coverage"`
 }
 
 type frameTree struct {
@@ -70,13 +82,14 @@ type axValue struct {
 	Value any `json:"value"`
 }
 type axNode struct {
-	NodeID           string  `json:"nodeId"`
-	ParentID         string  `json:"parentId"`
-	BackendDOMNodeID int64   `json:"backendDOMNodeId"`
-	FrameID          string  `json:"frameId"`
-	Ignored          bool    `json:"ignored"`
-	Role             axValue `json:"role"`
-	Name             axValue `json:"name"`
+	NodeID           string   `json:"nodeId"`
+	ParentID         string   `json:"parentId"`
+	ChildIDs         []string `json:"childIds"`
+	BackendDOMNodeID int64    `json:"backendDOMNodeId"`
+	FrameID          string   `json:"frameId"`
+	Ignored          bool     `json:"ignored"`
+	Role             axValue  `json:"role"`
+	Name             axValue  `json:"name"`
 	Properties       []struct {
 		Name  string  `json:"name"`
 		Value axValue `json:"value"`
@@ -94,6 +107,33 @@ func (node axNode) blocked() bool {
 		}
 	}
 	return false
+}
+
+// documentRoot identifies a frame's document node. Its accessible name is the
+// page title, shared by every candidate in the frame, so it never distinguishes
+// one candidate from another.
+func (node axNode) documentRoot() bool {
+	role := strings.ToLower(node.role())
+	return role == "rootwebarea" || role == "webarea"
+}
+
+func (node axNode) headingLevel() int {
+	for _, property := range node.Properties {
+		if property.Name != "level" {
+			continue
+		}
+		switch value := property.Value.Value.(type) {
+		case float64:
+			if value >= 1 && value <= 6 && value == float64(int(value)) {
+				return int(value)
+			}
+		case string:
+			if level, err := strconv.Atoi(value); err == nil && level >= 1 && level <= 6 {
+				return level
+			}
+		}
+	}
+	return 2 // the ARIA default for a heading without a level
 }
 
 func (node axNode) editableBoundary() bool {
@@ -146,6 +186,11 @@ func wordSet(value string) map[string]bool {
 // Capture uses only Page.getFrameTree and Accessibility.getFullAXTree. Node
 // values, HTML, source attributes, URLs, and form values are never candidates.
 func Capture(ctx context.Context, browser Browser, tabID int, kind, origin string) (Snapshot, error) {
+	return captureOptions(ctx, browser, Options{TabID: tabID, Kind: kind, Origin: origin})
+}
+
+func captureOptions(ctx context.Context, browser Browser, options Options) (Snapshot, error) {
+	tabID, kind, origin := options.TabID, options.Kind, options.Origin
 	if browser == nil || tabID < 0 {
 		return Snapshot{}, errors.New("a browser and nonnegative tab id are required")
 	}
@@ -178,10 +223,26 @@ func Capture(ctx context.Context, browser Browser, tabID int, kind, origin strin
 	if err := flatten(tree.FrameTree, 0); err != nil {
 		return Snapshot{}, err
 	}
-	result := Snapshot{Candidates: []Candidate{}}
+	if options.FrameID != "" || options.FrameURL != "" {
+		selected := []frameTree{}
+		for _, frame := range frames {
+			if (options.FrameID == "" || options.FrameID == frame.Frame.ID) && (options.FrameURL == "" || options.FrameURL == frame.Frame.URL) {
+				selected = append(selected, frame)
+			}
+		}
+		if len(selected) == 0 {
+			return Snapshot{}, errors.New("requested frame is unavailable")
+		}
+		if len(selected) > 1 {
+			return Snapshot{}, errors.New("requested frame URL is ambiguous; specify its frame id")
+		}
+		frames = selected
+	}
+	result := Snapshot{Schema: 1, Generation: frameIdentity(tree.FrameTree), Candidates: []Candidate{}}
+	rootFrameID := tree.FrameTree.Frame.ID
 	hash := sha256.New()
 	encoder := json.NewEncoder(hash)
-	_ = encoder.Encode([]any{"jev-dom-snapshot-v1", tabID, kind, origin})
+	_ = encoder.Encode([]any{"jev-dom-snapshot-v3", tabID, kind, origin, options.FrameID, options.FrameURL, options.ScopeBackendDOMNodeID})
 	seen := map[string]bool{}
 	for index, frame := range frames {
 		// URLs contribute only a digest to the local fingerprint, never output.
@@ -215,10 +276,49 @@ func Capture(ctx context.Context, browser Browser, tabID int, kind, origin strin
 		result.Coverage.FramesRead++
 		_ = encoder.Encode("available")
 		byID := make(map[string]axNode, len(tree.Nodes))
+		children := make(map[string][]axNode, len(tree.Nodes))
 		for _, node := range tree.Nodes {
 			byID[node.NodeID] = node
+			children[node.ParentID] = append(children[node.ParentID], node)
+		}
+		headings := sectionHeadings(tree.Nodes, byID, children)
+		topFrame := frame.Frame.ID == rootFrameID
+		var eligible map[string]bool
+		if options.ScopeBackendDOMNodeID > 0 {
+			var scopeRoot string
+			for _, node := range tree.Nodes {
+				if node.BackendDOMNodeID == options.ScopeBackendDOMNodeID {
+					if scopeRoot != "" && scopeRoot != node.NodeID {
+						return Snapshot{}, errors.New("subtree root is ambiguous")
+					}
+					scopeRoot = node.NodeID
+				}
+			}
+			if scopeRoot == "" {
+				return Snapshot{}, errors.New("subtree root is unavailable")
+			}
+			eligible = map[string]bool{}
+			var walkScope func(string, int) error
+			walkScope = func(id string, depth int) error {
+				if depth > 64 || eligible[id] {
+					return errors.New("subtree scope is cyclic or exceeds depth bounds")
+				}
+				eligible[id] = true
+				for _, child := range children[id] {
+					if err := walkScope(child.NodeID, depth+1); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			if err := walkScope(scopeRoot, 0); err != nil {
+				return Snapshot{}, err
+			}
 		}
 		for _, node := range tree.Nodes {
+			if eligible != nil && !eligible[node.NodeID] {
+				continue
+			}
 			role := strings.ToLower(node.role())
 			allowed := (kind == "controls" || kind == "all") && controls[role] || (kind == "text" || kind == "all") && texts[role]
 			if node.Ignored || node.BackendDOMNodeID <= 0 || !allowed || strings.TrimSpace(node.name()) == "" || (!controls[role] && node.editableBoundary()) {
@@ -247,7 +347,7 @@ func Capture(ctx context.Context, browser Browser, tabID int, kind, origin strin
 					blocked, parentID = true, ""
 					break
 				}
-				if contextName == "" && !parent.Ignored && parent.name() != "" && parent.name() != node.name() {
+				if contextName == "" && !parent.Ignored && parent.name() != "" && parent.name() != node.name() && !(topFrame && parent.documentRoot()) {
 					contextName = parent.name()
 				}
 				parentID = parent.ParentID
@@ -266,15 +366,25 @@ func Capture(ctx context.Context, browser Browser, tabID int, kind, origin strin
 			seen[id] = true
 			// Hash all candidate names before redaction/text truncation, so changes
 			// outside a model-visible prefix still invalidate a reused handle.
-			_ = encoder.Encode([]any{id, role, node.name(), contextName, node.states()})
+			relations, relationOmitted := relationContext(node, byID, children)
+			relations = withSectionHeading(relations, headings[node.NodeID], node.name(), contextName)
+			result.Coverage.OmittedNodes += relationOmitted
+			_ = encoder.Encode([]any{id, role, node.name(), contextName, node.states(), relations})
 			fullName, fullContext := scrub(node.name(), len(node.name())*4+128), scrub(contextName, len(contextName)*4+128)
-			truncated := len(fullName) > 180 || len(fullContext) > 120
+			truncated := len(fullName) > 180 || len(fullContext) > 120 || len(relations) > 8
+			relations = relations[:min(len(relations), 8)]
+			for index := range relations {
+				full := scrub(relations[index].Name, len(relations[index].Name)*4+128)
+				truncated = truncated || len(full) > 240
+				relations[index].Name = scrub(full, 240)
+			}
 			if truncated {
 				result.Coverage.TextTruncated++
 			}
 			result.Candidates = append(result.Candidates, Candidate{ID: id, Role: scrub(role, 48),
 				Name: scrub(fullName, 180), Context: scrub(fullContext, 120), States: node.states(), TextTruncated: truncated,
-				FrameID: frame.Frame.ID, BackendDOMNodeID: node.BackendDOMNodeID})
+				FrameID: frame.Frame.ID, BackendDOMNodeID: node.BackendDOMNodeID,
+				DocumentGeneration: frame.Frame.LoaderID, FrameURL: frame.Frame.URL, ContextRelations: relations})
 		}
 	}
 	var verified struct {

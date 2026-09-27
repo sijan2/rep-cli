@@ -39,33 +39,38 @@ type RPCError struct {
 }
 
 type Message struct {
-	Type             string          `json:"type,omitempty"`
-	Action           string          `json:"action,omitempty"`
-	ID               string          `json:"id,omitempty"`
-	Method           string          `json:"method,omitempty"`
-	Params           json.RawMessage `json:"params,omitempty"`
-	Result           json.RawMessage `json:"result,omitempty"`
-	Error            *RPCError       `json:"error,omitempty"`
-	Requests         []Request       `json:"requests,omitempty"`
-	Request          *Request        `json:"request,omitempty"`
-	SessionID        string          `json:"session_id,omitempty"`
-	URL              string          `json:"url,omitempty"`
-	TabID            int             `json:"tab_id,omitempty"`
-	Browser          string          `json:"browser,omitempty"`
-	BrowserLabel     string          `json:"browser_label,omitempty"`
-	ExtensionID      string          `json:"extension_id,omitempty"`
-	ExtensionVersion string          `json:"extension_version,omitempty"`
-	UserAgent        string          `json:"user_agent,omitempty"`
-	CaptureMode      string          `json:"capture_mode,omitempty"`
-	TimedOut         bool            `json:"timed_out,omitempty"`
-	ExpectedRequests *int            `json:"expected_requests,omitempty"`
-	CaptureWarnings  []string        `json:"capture_warnings,omitempty"`
-	TransferID       string          `json:"transfer_id,omitempty"`
-	Sequence         int             `json:"sequence,omitempty"`
-	Chunks           int             `json:"chunks,omitempty"`
-	TotalBytes       int64           `json:"total_bytes,omitempty"`
-	SHA256           string          `json:"sha256,omitempty"`
-	Data             string          `json:"data,omitempty"`
+	Type             string           `json:"type,omitempty"`
+	Action           string           `json:"action,omitempty"`
+	ID               string           `json:"id,omitempty"`
+	Method           string           `json:"method,omitempty"`
+	Params           json.RawMessage  `json:"params,omitempty"`
+	Result           json.RawMessage  `json:"result,omitempty"`
+	Error            *RPCError        `json:"error,omitempty"`
+	Requests         []Request        `json:"requests,omitempty"`
+	Request          *Request         `json:"request,omitempty"`
+	SessionID        string           `json:"session_id,omitempty"`
+	URL              string           `json:"url,omitempty"`
+	TabID            int              `json:"tab_id,omitempty"`
+	Browser          string           `json:"browser,omitempty"`
+	BrowserLabel     string           `json:"browser_label,omitempty"`
+	ExtensionID      string           `json:"extension_id,omitempty"`
+	ExtensionVersion string           `json:"extension_version,omitempty"`
+	UserAgent        string           `json:"user_agent,omitempty"`
+	CaptureMode      string           `json:"capture_mode,omitempty"`
+	TimedOut         bool             `json:"timed_out,omitempty"`
+	ExpectedRequests *int             `json:"expected_requests,omitempty"`
+	CaptureWarnings  []string         `json:"capture_warnings,omitempty"`
+	TransferID       string           `json:"transfer_id,omitempty"`
+	Sequence         int              `json:"sequence,omitempty"`
+	Chunks           int              `json:"chunks,omitempty"`
+	TotalBytes       int64            `json:"total_bytes,omitempty"`
+	SHA256           string           `json:"sha256,omitempty"`
+	Data             string           `json:"data,omitempty"`
+	Incremental      bool             `json:"incremental,omitempty"`
+	CaptureSequence  *uint64          `json:"capture_sequence,omitempty"`
+	CaptureStats     map[string]int64 `json:"capture_stats,omitempty"`
+	CaptureLimits    map[string]int64 `json:"capture_limits,omitempty"`
+	CaptureError     string           `json:"capture_error,omitempty"`
 }
 
 type Request = store.Request
@@ -73,11 +78,13 @@ type Response = store.Response
 type BrowserSession = store.BrowserSession
 
 type LiveData struct {
-	Version    string          `json:"version"`
-	ExportedAt string          `json:"exported_at"`
-	SessionID  string          `json:"session_id,omitempty"`
-	Browser    *BrowserSession `json:"browser_session,omitempty"`
-	Requests   []Request       `json:"requests"`
+	Version             string          `json:"version"`
+	ExportedAt          string          `json:"exported_at"`
+	SessionID           string          `json:"session_id,omitempty"`
+	Browser             *BrowserSession `json:"browser_session,omitempty"`
+	Requests            []Request       `json:"requests"`
+	spool               *captureRecordSpool
+	nextCaptureSequence uint64
 }
 
 type RPCRequest struct {
@@ -185,10 +192,15 @@ func main() {
 		if flushNow {
 			if err := saveLiveData(); err != nil {
 				logError("flush live data", err)
-				response["success"], response["error"] = false, "write live capture failed"
+				if message.Action == "session_abort" {
+					response["persistence_error"] = "write failed capture view failed"
+				} else {
+					response["success"], response["error"] = false, "write live capture failed"
+				}
 			}
 		}
 		if response != nil {
+			response = captureAcknowledgement(message, response)
 			if err := writeMessage(response); err != nil {
 				logError("write native response", err)
 				break
@@ -202,6 +214,9 @@ func main() {
 	if err := saveLiveData(); err != nil {
 		logError("final live-data flush", err)
 	}
+	liveMu.Lock()
+	liveData.spool.close()
+	liveMu.Unlock()
 }
 
 func generateSessionID() string {
@@ -269,6 +284,11 @@ func loadLiveData() *LiveData {
 func saveLiveData() error {
 	liveMu.Lock()
 	defer liveMu.Unlock()
+	// Incremental records already reside in the private spool. Rewriting all
+	// accumulated bodies every 200 ms is quadratic I/O and not a sealed view.
+	if browserCaptureActive && liveData.spool != nil {
+		return nil
+	}
 	liveData.ExportedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	_, _, err := writeLiveDataFile(dataPath, liveData, 0)
 	return err
@@ -348,13 +368,20 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		liveMu.Lock()
 		count := len(liveData.Requests)
 		liveMu.Unlock()
-		return map[string]interface{}{"success": true, "action": "hello", "path": dataPath, "count": count}, false
+		return map[string]interface{}{"success": true, "action": "hello", "path": dataPath, "count": count, "capture_ack": true, "incremental_capture": true}, false
 	}
 
 	liveMu.Lock()
 	flushNow := false
 	changed := false
 	response := map[string]interface{}{"success": true, "action": message.Action}
+	if err := validateCaptureSequenceLocked(message); err != nil {
+		if browserCaptureActive && message.SessionID == liveData.SessionID {
+			failCaptureLocked(err.Error())
+		}
+		liveMu.Unlock()
+		return map[string]interface{}{"success": false, "action": message.Action, "error": err.Error()}, false
+	}
 	if browserCaptureActive {
 		switch message.Action {
 		case "sync", "clear", "ambient_begin", "ambient_resume", "ambient_end", "session_begin":
@@ -375,11 +402,32 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		liveMu.Unlock()
 		return map[string]interface{}{"success": false, "action": message.Action, "error": "capture session id is required for request transfers"}, false
 	}
-	if (message.Action == "add" || message.Action == "add_many" || message.Action == "session_end" || message.Action == "request_chunk" || message.Action == "request_end") && message.SessionID != "" && (message.SessionID != liveData.SessionID || !browserCaptureActive) {
+	if (message.Action == "add" || message.Action == "add_many" || message.Action == "session_end" || message.Action == "session_abort" || message.Action == "request_chunk" || message.Action == "request_end") && message.SessionID != "" && (message.SessionID != liveData.SessionID || (!browserCaptureActive && message.Action != "session_abort")) {
 		liveMu.Unlock()
 		return map[string]interface{}{"success": false, "action": message.Action, "error": "capture session mismatch or already sealed"}, false
 	}
 	switch message.Action {
+	case "session_abort":
+		if message.SessionID == "" {
+			response["success"], response["error"] = false, "capture session id is required"
+			break
+		}
+		if !browserCaptureActive {
+			// A lost end ACK may leave the collector unsure whether sealing
+			// succeeded. Release transport ownership without changing evidence.
+			response["already_ended"] = true
+			break
+		}
+		reason := message.CaptureError
+		if reason == "" {
+			reason = "collector aborted capture before sealing"
+		}
+		failCaptureLocked(reason)
+		cleanupRequestTransfersLocked()
+		liveData.Browser.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		browserCaptureActive, browserCaptureSealed = false, true
+		response["aborted"] = true
+		flushNow = true
 	case "request_chunk", "request_end":
 		var err error
 		if message.Action == "request_chunk" {
@@ -412,6 +460,8 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 			}
 		}
 	case "sync":
+		liveData.spool.close()
+		liveData.spool = nil
 		liveData.Requests = append([]Request(nil), message.Requests...)
 		trimRequestsLocked()
 		browserCaptureActive = false
@@ -419,6 +469,8 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		changed = true
 		flushNow = true
 	case "clear":
+		liveData.spool.close()
+		liveData.spool = nil
 		liveData.Requests = []Request{}
 		liveData.SessionID = generateSessionID()
 		liveData.Browser = nil
@@ -428,6 +480,8 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		flushNow = true
 	case "session_begin":
 		cleanupRequestTransfersLocked()
+		liveData.spool.close()
+		liveData.spool = nil
 		liveData.Requests = []Request{}
 		if message.SessionID == "" {
 			message.SessionID = generateSessionID()
@@ -440,6 +494,20 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		liveData.Browser = &BrowserSession{
 			Browser: browserName, URL: message.URL, TabID: message.TabID,
 			CaptureMode: message.CaptureMode, StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		liveData.nextCaptureSequence = 1
+		if message.Incremental {
+			if message.CaptureSequence == nil {
+				response["success"], response["error"] = false, "incremental capture requires acknowledged transport"
+				break
+			}
+			var err error
+			liveData.spool, err = newCaptureRecordSpool()
+			if err != nil {
+				response["success"], response["error"] = false, err.Error()
+				break
+			}
+			liveData.Browser.CaptureLimits = message.CaptureLimits
 		}
 		browserCaptureActive = true
 		browserCaptureSealed = false
@@ -455,6 +523,7 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		liveData.Browser.TimedOut = message.TimedOut
 		liveData.Browser.ExpectedRequests = message.ExpectedRequests
 		liveData.Browser.CaptureWarnings = append([]string(nil), message.CaptureWarnings...)
+		liveData.Browser.CaptureStats = message.CaptureStats
 		liveData.Browser.ReceivedRequests = len(liveData.Requests)
 		if len(requestTransfers) > 0 {
 			failCaptureLocked("capture ended with incomplete request transfers")
@@ -472,6 +541,8 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		changed = true
 		flushNow = true
 	case "ambient_begin":
+		liveData.spool.close()
+		liveData.spool = nil
 		liveData.Requests = []Request{}
 		if message.SessionID == "" {
 			message.SessionID = "ambient-" + generateSessionID()
@@ -487,6 +558,8 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		flushNow = true
 	case "ambient_resume":
 		if liveData.Browser == nil || liveData.Browser.CaptureMode != "ambient" || liveData.Browser.FinishedAt != "" {
+			liveData.spool.close()
+			liveData.spool = nil
 			liveData.Requests = []Request{}
 			if message.SessionID == "" {
 				message.SessionID = "ambient-" + generateSessionID()
@@ -518,6 +591,12 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		response = map[string]interface{}{"success": false, "error": "unknown action", "action": message.Action}
 	}
 	response["count"] = len(liveData.Requests)
+	if message.Action != "session_abort" && liveData.Browser != nil && liveData.Browser.CaptureError != "" && message.SessionID == liveData.SessionID {
+		response["success"], response["error"] = false, liveData.Browser.CaptureError
+	}
+	if liveData.spool != nil && browserCaptureActive {
+		changed = false
+	}
 	liveMu.Unlock()
 	if changed && !flushNow {
 		signalDirty()
@@ -530,6 +609,12 @@ func shouldIgnoreRequestLocked(request Request) bool {
 }
 
 func upsertRequestLocked(incoming Request) {
+	if liveData.spool != nil {
+		if err := upsertSpooledRequestLocked(incoming); err != nil {
+			failCaptureLocked(err.Error())
+		}
+		return
+	}
 	if incoming.ID != "" {
 		for i := len(liveData.Requests) - 1; i >= 0; i-- {
 			if liveData.Requests[i].ID == incoming.ID {
@@ -559,6 +644,33 @@ func upsertRequestLocked(incoming Request) {
 }
 
 func mergeRequest(old, incoming Request) Request {
+	if incoming.RecordKind == "" {
+		incoming.RecordKind = old.RecordKind
+	}
+	if incoming.Stream == nil {
+		incoming.Stream = old.Stream
+	}
+	if incoming.FrameID == "" {
+		incoming.FrameID = old.FrameID
+	}
+	if incoming.LoaderID == "" {
+		incoming.LoaderID = old.LoaderID
+	}
+	if incoming.SourceSessionID == "" {
+		incoming.SourceSessionID = old.SourceSessionID
+	}
+	if incoming.MonotonicTimestamp == 0 {
+		incoming.MonotonicTimestamp = old.MonotonicTimestamp
+	}
+	if incoming.ResponseMonotonicTimestamp == 0 {
+		incoming.ResponseMonotonicTimestamp = old.ResponseMonotonicTimestamp
+	}
+	if incoming.CompletionMonotonicTimestamp == 0 {
+		incoming.CompletionMonotonicTimestamp = old.CompletionMonotonicTimestamp
+	}
+	if incoming.InitiatorDetails == nil {
+		incoming.InitiatorDetails = old.InitiatorDetails
+	}
 	incomingBodyExplicit := incoming.ResponseBodyCapture != nil
 	if incoming.ID == "" {
 		incoming.ID = old.ID
@@ -591,6 +703,45 @@ func mergeRequest(old, incoming Request) Request {
 	if incoming.Response == nil {
 		incoming.Response = old.Response
 	} else if old.Response != nil {
+		if incoming.Response.Protocol == "" {
+			incoming.Response.Protocol = old.Response.Protocol
+		}
+		if incoming.Response.RemoteIPAddress == "" {
+			incoming.Response.RemoteIPAddress = old.Response.RemoteIPAddress
+		}
+		if incoming.Response.RemotePort == 0 {
+			incoming.Response.RemotePort = old.Response.RemotePort
+		}
+		if incoming.Response.ConnectionID == 0 {
+			incoming.Response.ConnectionID = old.Response.ConnectionID
+		}
+		if incoming.Response.ConnectionReused == nil {
+			incoming.Response.ConnectionReused = old.Response.ConnectionReused
+		}
+		if incoming.Response.FromDiskCache == nil {
+			incoming.Response.FromDiskCache = old.Response.FromDiskCache
+		}
+		if incoming.Response.FromServiceWorker == nil {
+			incoming.Response.FromServiceWorker = old.Response.FromServiceWorker
+		}
+		if incoming.Response.FromPrefetchCache == nil {
+			incoming.Response.FromPrefetchCache = old.Response.FromPrefetchCache
+		}
+		if incoming.Response.Timing == nil {
+			incoming.Response.Timing = old.Response.Timing
+		}
+		if incoming.Response.SecurityDetails == nil {
+			incoming.Response.SecurityDetails = old.Response.SecurityDetails
+		}
+		if incoming.Response.SecurityState == "" {
+			incoming.Response.SecurityState = old.Response.SecurityState
+		}
+		if incoming.Response.EncodedDataLength == 0 {
+			incoming.Response.EncodedDataLength = old.Response.EncodedDataLength
+		}
+		if incoming.Response.MonotonicTimestamp == 0 {
+			incoming.Response.MonotonicTimestamp = old.Response.MonotonicTimestamp
+		}
 		if incoming.Response.Headers == nil {
 			incoming.Response.Headers = old.Response.Headers
 		}
@@ -682,13 +833,25 @@ func routeRPCResponse(message *Message) {
 	}
 }
 
+// LastSeen only orders bridge discovery, so it is refreshed at most this often.
+const registryRefreshInterval = 2 * time.Second
+
 type bridgeServer struct {
-	listener     net.Listener
-	socketPath   string
-	registryPath string
-	registryMu   sync.Mutex
-	registry     Registry
-	closeOnce    sync.Once
+	listener      net.Listener
+	ctx           context.Context
+	cancel        context.CancelFunc
+	decisions     *decisionRuntime
+	socketPath    string
+	registryPath  string
+	registryMu    sync.Mutex
+	registry      Registry
+	registrySaved time.Time
+	registryDirty chan struct{}
+	// registryWriteMu orders file writes against Close so a late write can
+	// never recreate the registry of a host that is shutting down.
+	registryWriteMu sync.Mutex
+	registryClosed  bool
+	closeOnce       sync.Once
 }
 
 func startBridgeServer() (*bridgeServer, error) {
@@ -714,17 +877,22 @@ func startBridgeServer() (*bridgeServer, error) {
 	browser, label := detectBrowserFromParents()
 	hostBrowser = browser
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	ctx, cancel := context.WithCancel(context.Background())
 	server := &bridgeServer{
 		listener: listener, socketPath: socketPath, registryPath: registryPath,
+		ctx: ctx, cancel: cancel, registrySaved: time.Now(), registryDirty: make(chan struct{}, 1),
 		registry: Registry{
 			PID: pid, ParentPID: os.Getppid(), Browser: browser, BrowserLabel: label,
 			Socket: socketPath, StartedAt: now, LastSeen: now,
 		},
 	}
+	server.decisions = newDecisionRuntime(ctx, nativeBrowserCaller{send: writeMessage})
 	if err := server.writeRegistry(); err != nil {
+		cancel()
 		listener.Close()
 		return nil, err
 	}
+	go server.persistRegistry()
 	go server.serve()
 	return server, nil
 }
@@ -763,43 +931,39 @@ func (server *bridgeServer) handleConnection(conn net.Conn) {
 			timeout = 2 * time.Minute
 		}
 	}
-	channel := make(chan RPCResponse, 1)
-	pending.Lock()
-	if _, exists := pending.calls[request.ID]; exists {
-		pending.Unlock()
-		_ = json.NewEncoder(conn).Encode(RPCResponse{ID: request.ID, Error: &RPCError{Code: "duplicate_id", Message: "RPC id is already pending"}})
+	parent := server.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	// One request per socket. Peer disconnect cancels its waiter immediately;
+	// another coalesced caller may still need the provider evaluation.
+	go func() {
+		_, _ = io.Copy(io.Discard, conn)
+		cancel()
+	}()
+	if server.decisions != nil {
+		if response, handled := server.decisions.handle(ctx, request); handled {
+			_ = json.NewEncoder(conn).Encode(response)
+			return
+		}
+	} else if strings.HasPrefix(request.Method, "jev.") {
+		_ = json.NewEncoder(conn).Encode(decisionResponse(request.ID, nil, errors.New("host decision runtime unavailable")))
 		return
 	}
-	pending.calls[request.ID] = channel
-	pending.Unlock()
-
-	command := map[string]interface{}{"action": "rpc", "id": request.ID, "method": request.Method}
-	if len(request.Params) > 0 {
-		command["params"] = json.RawMessage(request.Params)
-	}
-	if err := writeMessage(command); err != nil {
-		pending.Lock()
-		delete(pending.calls, request.ID)
-		pending.Unlock()
-		_ = json.NewEncoder(conn).Encode(RPCResponse{ID: request.ID, Error: &RPCError{Code: "native_write_failed", Message: err.Error()}})
-		return
-	}
-
-	var response RPCResponse
-	select {
-	case response = <-channel:
-	case <-time.After(timeout):
-		pending.Lock()
-		delete(pending.calls, request.ID)
-		pending.Unlock()
-		response = RPCResponse{ID: request.ID, Error: &RPCError{Code: "rpc_timeout", Message: fmt.Sprintf("%s timed out after %s", request.Method, timeout)}}
-	}
+	response := forwardBrowserRPC(ctx, request, writeMessage)
 	_ = json.NewEncoder(conn).Encode(response)
 }
 
+// Touch runs on the native read loop for every browser message, including each
+// RPC result, so it only updates memory. A synchronous fsync here previously
+// delayed every browser round trip by several milliseconds. Identity changes
+// persist promptly; LastSeen persists at most every registryRefreshInterval.
 func (server *bridgeServer) Touch(message *Message) {
+	now := time.Now()
+	persist := false
 	server.registryMu.Lock()
-	server.registry.LastSeen = time.Now().UTC().Format(time.RFC3339Nano)
 	if message != nil && message.Action == "hello" {
 		if message.Browser != "" {
 			server.registry.Browser = strings.ToLower(message.Browser)
@@ -810,26 +974,86 @@ func (server *bridgeServer) Touch(message *Message) {
 		server.registry.ExtensionID = message.ExtensionID
 		server.registry.ExtensionVer = message.ExtensionVersion
 		server.registry.UserAgent = message.UserAgent
+		persist = true
+	}
+	if persist || now.Sub(server.registrySaved) >= registryRefreshInterval {
+		server.registry.LastSeen = now.UTC().Format(time.RFC3339Nano)
+		server.registrySaved = now
+		persist = true
 	}
 	server.registryMu.Unlock()
-	_ = server.writeRegistry()
+	if persist && server.registryDirty != nil {
+		select {
+		case server.registryDirty <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// persistRegistry coalesces registry updates off the native read loop.
+func (server *bridgeServer) persistRegistry() {
+	for {
+		select {
+		case <-server.ctx.Done():
+			return
+		case <-server.registryDirty:
+			if err := server.writeRegistry(); err != nil {
+				logError("write bridge registry", err)
+			}
+		}
+	}
 }
 
 func (server *bridgeServer) writeRegistry() error {
+	server.registryWriteMu.Lock()
+	defer server.registryWriteMu.Unlock()
+	if server.registryClosed {
+		return nil
+	}
 	server.registryMu.Lock()
 	content, err := json.MarshalIndent(server.registry, "", "  ")
 	server.registryMu.Unlock()
 	if err != nil {
 		return err
 	}
-	return atomicWriteFile(server.registryPath, content, 0600)
+	return writeRegistryFile(server.registryPath, content)
+}
+
+// Registry files are discovery hints recreated by every host start and removed
+// on exit. An atomic rename prevents torn reads; durability across power loss
+// is unnecessary, so unlike live captures they are not fsynced.
+func writeRegistryFile(path string, content []byte) error {
+	temp, err := os.CreateTemp(filepath.Dir(path), ".rep-bridge-*.tmp")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	defer os.Remove(tempPath)
+	if err := temp.Chmod(0600); err != nil {
+		temp.Close()
+		return err
+	}
+	if _, err := temp.Write(content); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, path)
 }
 
 func (server *bridgeServer) Close() {
 	server.closeOnce.Do(func() {
+		if server.cancel != nil {
+			server.cancel()
+		}
 		_ = server.listener.Close()
+		server.registryWriteMu.Lock()
+		server.registryClosed = true
 		_ = os.Remove(server.socketPath)
 		_ = os.Remove(server.registryPath)
+		server.registryWriteMu.Unlock()
 	})
 }
 

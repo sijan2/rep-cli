@@ -16,34 +16,38 @@ import (
 )
 
 type browserOpenFlags struct {
-	Browser      string
-	TabID        int
-	Referrer     string
-	Active       bool
-	KeepTab      bool
-	Timeout      time.Duration
-	Idle         time.Duration
-	MaxBodyBytes int
-	Save         bool
-	Note         string
-	RedactOutput bool
+	Browser          string
+	TabID            int
+	Referrer         string
+	Active           bool
+	KeepTab          bool
+	Timeout          time.Duration
+	Idle             time.Duration
+	MaxBodyBytes     int
+	Save             bool
+	Note             string
+	RedactOutput     bool
+	ProtocolPayloads bool
+	WebRTCMedia      bool
 }
 
 type browserFetchFlags struct {
-	Browser      string
-	TabID        int
-	Method       string
-	Headers      []string
-	Body         string
-	Credentials  string
-	Cache        string
-	HeadersOnly  bool
-	KeepTab      bool
-	Timeout      time.Duration
-	MaxBodyBytes int
-	Save         bool
-	Note         string
-	RedactOutput bool
+	Browser          string
+	TabID            int
+	Method           string
+	Headers          []string
+	Body             string
+	Credentials      string
+	Cache            string
+	HeadersOnly      bool
+	KeepTab          bool
+	Timeout          time.Duration
+	MaxBodyBytes     int
+	Save             bool
+	Note             string
+	RedactOutput     bool
+	ProtocolPayloads bool
+	WebRTCMedia      bool
 }
 
 var (
@@ -200,10 +204,15 @@ var browserCloseCmd = &cobra.Command{
 	Use:   "close <tab-id>",
 	Short: "Close a browser tab by ID",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (returnErr error) {
 		if _, err := fmt.Sscanf(args[0], "%d", &closeTabID); err != nil || closeTabID < 0 {
 			return output.EmitAgentError(os.Stdout, output.NewAgentError(output.ErrCodeInvalidArgument, "browser close", "tab-id must be a non-negative integer", "rep browser tabs"), getOutputMode() == "json")
 		}
+		record, err := beginBrowserEvidence("browser.close", map[string]any{"intent": "close the owned tab"}, browserSelector, closeTabID)
+		if err != nil {
+			return emitBrowserCallError("browser close", err)
+		}
+		defer record.finishOnReturn(&returnErr)
 		ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 		defer cancel()
 		client, err := selectBrowserBridge(ctx, browserSelector, "browser close")
@@ -211,9 +220,14 @@ var browserCloseCmd = &cobra.Command{
 			return err
 		}
 		var result map[string]interface{}
+		record.dispatch()
 		if err := client.Call(ctx, "browser.close", map[string]interface{}{"tab_id": closeTabID}, &result); err != nil {
 			return emitBrowserCallError("browser close", err)
 		}
+		if err := record.finish(result, "completed", "unverified", "", nil); err != nil {
+			return emitBrowserCallError("browser close", err)
+		}
+		attachOperationEvidence(result, record)
 		return emitBrowserResult(result, func() { fmt.Printf("closed tab %d\n", closeTabID) })
 	},
 }
@@ -250,10 +264,15 @@ var browserWatchStatusCmd = &cobra.Command{
 	},
 }
 
-func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) error {
+func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) (returnErr error) {
 	if flags.Timeout <= 0 {
 		flags.Timeout = 30 * time.Second
 	}
+	record, err := beginBrowserEvidence("browser.open", map[string]any{"intent": "navigate and capture network evidence", "timeout_ms": flags.Timeout.Milliseconds()}, flags.Browser, flags.TabID)
+	if err != nil {
+		return emitBrowserCallErrorWithPrivacy("browser open", err, flags.RedactOutput)
+	}
+	defer record.finishOnReturn(&returnErr)
 	ctx, cancel := context.WithTimeout(cmd.Context(), flags.Timeout+10*time.Second)
 	defer cancel()
 	client, err := selectBrowserBridge(ctx, flags.Browser, "browser open")
@@ -268,6 +287,8 @@ func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) e
 		"url": rawURL, "active": flags.Active, "keep_tab": flags.KeepTab,
 		"timeout_ms": flags.Timeout.Milliseconds(), "idle_ms": flags.Idle.Milliseconds(),
 		"max_body_bytes": flags.MaxBodyBytes, "redact_output": flags.RedactOutput,
+		"protocol_payloads": flags.ProtocolPayloads,
+		"webrtc_media":      flags.WebRTCMedia,
 	}
 	if strings.TrimSpace(flags.Referrer) != "" {
 		params["referrer"] = flags.Referrer
@@ -275,16 +296,26 @@ func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) e
 	if flags.TabID >= 0 {
 		params["tab_id"] = flags.TabID
 	}
+	handoff.applyLimits(params)
+	if err := requireBrowserCollectors(ctx, client, flags.ProtocolPayloads, flags.WebRTCMedia); err != nil {
+		return emitBrowserCallErrorWithPrivacy("browser open", err, flags.RedactOutput)
+	}
 	var result map[string]interface{}
+	record.dispatch()
 	if err := client.Call(ctx, "browser.open", params, &result); err != nil {
 		return emitBrowserCallErrorWithPrivacy("browser open", err, flags.RedactOutput)
 	}
 	if err := finishBrowserCapture(ctx, client, result, handoff, flags.Note, flags.Save); err != nil {
 		return emitBrowserCaptureReadError("browser open", err, flags.RedactOutput)
 	}
+	record.capture(result)
+	if err := record.finish(captureEvidenceSummary(result), "completed", "unverified", "", nil); err != nil {
+		return emitBrowserCallErrorWithPrivacy("browser open", err, flags.RedactOutput)
+	}
 	if flags.RedactOutput {
 		redactSensitiveBrowserResult(result, "open")
 	}
+	attachOperationEvidence(result, record)
 	return emitBrowserResult(result, func() {
 		fmt.Printf("session: %v\n", result["session_id"])
 		if flags.RedactOutput {
@@ -302,7 +333,7 @@ func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) e
 	})
 }
 
-func runBrowserFetch(cmd *cobra.Command, rawURL string, flags browserFetchFlags) error {
+func runBrowserFetch(cmd *cobra.Command, rawURL string, flags browserFetchFlags) (returnErr error) {
 	if flags.Timeout <= 0 {
 		flags.Timeout = 30 * time.Second
 	}
@@ -327,6 +358,11 @@ func runBrowserFetch(cmd *cobra.Command, rawURL string, flags browserFetchFlags)
 	if !validCacheModes[cacheMode] {
 		return output.EmitAgentError(os.Stdout, output.NewAgentError(output.ErrCodeInvalidArgument, "browser fetch", "--cache must be default, no-store, reload, no-cache, force-cache, or only-if-cached"), getOutputMode() == "json")
 	}
+	record, err := beginBrowserEvidence("browser.fetch", map[string]any{"intent": "fetch and capture network evidence", "method": strings.ToUpper(flags.Method), "timeout_ms": flags.Timeout.Milliseconds()}, flags.Browser, flags.TabID)
+	if err != nil {
+		return emitBrowserCallErrorWithPrivacy("browser fetch", err, flags.RedactOutput)
+	}
+	defer record.finishOnReturn(&returnErr)
 	ctx, cancel := context.WithTimeout(cmd.Context(), flags.Timeout+10*time.Second)
 	defer cancel()
 	client, err := selectBrowserBridge(ctx, flags.Browser, "browser fetch")
@@ -341,21 +377,33 @@ func runBrowserFetch(cmd *cobra.Command, rawURL string, flags browserFetchFlags)
 		"url": rawURL, "method": strings.ToUpper(flags.Method), "headers": headers,
 		"body": body, "credentials": credentials, "cache": cacheMode, "keep_tab": flags.KeepTab,
 		"headers_only": flags.HeadersOnly, "timeout_ms": flags.Timeout.Milliseconds(), "max_body_bytes": flags.MaxBodyBytes,
-		"redact_output": flags.RedactOutput,
+		"redact_output":     flags.RedactOutput,
+		"protocol_payloads": flags.ProtocolPayloads,
+		"webrtc_media":      flags.WebRTCMedia,
 	}
 	if flags.TabID >= 0 {
 		params["tab_id"] = flags.TabID
 	}
+	handoff.applyLimits(params)
+	if err := requireBrowserCollectors(ctx, client, flags.ProtocolPayloads, flags.WebRTCMedia); err != nil {
+		return emitBrowserCallErrorWithPrivacy("browser fetch", err, flags.RedactOutput)
+	}
 	var result map[string]interface{}
+	record.dispatch()
 	if err := client.Call(ctx, "browser.fetch", params, &result); err != nil {
 		return emitBrowserCallErrorWithPrivacy("browser fetch", err, flags.RedactOutput)
 	}
 	if err := finishBrowserCapture(ctx, client, result, handoff, flags.Note, flags.Save); err != nil {
 		return emitBrowserCaptureReadError("browser fetch", err, flags.RedactOutput)
 	}
+	record.capture(result)
+	if err := record.finish(captureEvidenceSummary(result), "completed", "unverified", "", nil); err != nil {
+		return emitBrowserCallErrorWithPrivacy("browser fetch", err, flags.RedactOutput)
+	}
 	if flags.RedactOutput {
 		redactSensitiveBrowserResult(result, "fetch")
 	}
+	attachOperationEvidence(result, record)
 	return emitBrowserResult(result, func() {
 		response, _ := result["response"].(map[string]interface{})
 		fmt.Printf("session: %v\n", result["session_id"])
@@ -462,19 +510,25 @@ func redactSensitiveBrowserResult(result map[string]interface{}, operation strin
 		"tab_id", "requests", "domains", "response_bodies", "captured_body_bytes",
 		"failed_requests", "ignored_cancellations", "pending_requests", "pending_network_requests", "incomplete_bodies", "duration_ms", "settle_ms",
 		"captured_requests_total", "captured_requests_omitted",
+		"capture_warnings_total", "capture_warnings_omitted",
 	} {
 		if value, ok := browserSafeNumber(result[key]); ok {
 			safe[key] = value
 		}
 	}
-	if states, ok := result["body_capture_states"].(map[string]int); ok {
-		counts := map[string]int{}
-		for state, count := range states {
-			if count >= 0 && browserBodyState(state) == state {
-				counts[state] = count
+	for _, stateKey := range []string{"body_capture_states", "stream_capture_states"} {
+		if states, ok := result[stateKey].(map[string]int); ok {
+			counts := map[string]int{}
+			for state, count := range states {
+				if count >= 0 && browserBodyState(state) == state {
+					counts[state] = count
+				}
 			}
+			safe[stateKey] = counts
 		}
-		safe["body_capture_states"] = counts
+	}
+	if stats, ok := result["capture_stats"].(map[string]int64); ok {
+		safe["capture_stats"] = stats
 	}
 	for _, key := range []string{"tab_closed", "timed_out", "capture_snapshot_verified", "captured_requests_complete"} {
 		if value, ok := result[key].(bool); ok {
@@ -765,6 +819,8 @@ func bindOpenFlags(command *cobra.Command, flags *browserOpenFlags, includeBrows
 	command.Flags().StringVar(&flags.Referrer, "referrer", "", "Optional HTTP(S) referrer for Page.navigate")
 	command.Flags().BoolVar(&flags.Active, "active", false, "Activate the navigation tab")
 	command.Flags().BoolVar(&flags.KeepTab, "keep-tab", false, "Keep a newly created tab after capture")
+	command.Flags().BoolVar(&flags.ProtocolPayloads, "protocol-payloads", false, "Instrument page WebTransport and WebRTC data-channel APIs during capture")
+	command.Flags().BoolVar(&flags.WebRTCMedia, "webrtc-media", false, "Record clones of observed WebRTC audio/video tracks with native browser codecs")
 	command.Flags().DurationVar(&flags.Timeout, "timeout", 30*time.Second, "Maximum navigation/capture duration")
 	command.Flags().DurationVar(&flags.Idle, "idle", 800*time.Millisecond, "Required network-idle interval")
 	command.Flags().IntVar(&flags.MaxBodyBytes, "max-body", 8*1024*1024, "Maximum captured response-body bytes per request")
@@ -790,6 +846,8 @@ func init() {
 	browserFetchCmd.Flags().StringVar(&fetchFlags.Cache, "cache", "default", "Fetch cache mode (default preserves normal browser behavior)")
 	browserFetchCmd.Flags().BoolVar(&fetchFlags.HeadersOnly, "headers-only", false, "Cancel the response body after headers while retaining the captured request")
 	browserFetchCmd.Flags().BoolVar(&fetchFlags.KeepTab, "keep-tab", false, "Keep a temporary origin tab")
+	browserFetchCmd.Flags().BoolVar(&fetchFlags.ProtocolPayloads, "protocol-payloads", false, "Instrument page WebTransport and WebRTC data-channel APIs during capture")
+	browserFetchCmd.Flags().BoolVar(&fetchFlags.WebRTCMedia, "webrtc-media", false, "Record clones of observed WebRTC audio/video tracks with native browser codecs")
 	browserFetchCmd.Flags().DurationVar(&fetchFlags.Timeout, "timeout", 30*time.Second, "Maximum fetch/capture duration")
 	browserFetchCmd.Flags().IntVar(&fetchFlags.MaxBodyBytes, "max-body", 8*1024*1024, "Maximum captured/returned response-body bytes")
 	browserFetchCmd.Flags().BoolVar(&fetchFlags.Save, "save", false, "Legacy global mode: archive capture (task captures already archive automatically)")

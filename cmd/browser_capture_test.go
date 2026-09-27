@@ -50,6 +50,27 @@ func TestBrowserCapturedRequestDescriptorsAreStableAndSecretFree(t *testing.T) {
 	}
 }
 
+func TestBrowserCapturedStreamDescriptorsExposeCoverageWithoutPageMetadata(t *testing.T) {
+	request := store.Request{ID: "h_stream", RecordKind: "webrtc", URL: "https://private.test/token", Stream: &store.StreamCapture{
+		Protocol: "webrtc", Source: "page_api", State: "closed", Metadata: json.RawMessage(`{"label":"private-label"}`),
+		Events:  []store.StreamEvent{{Payload: "private-payload"}},
+		Capture: store.StreamCoverage{State: "partial", Reason: "private-reason", CapturedEvents: 1, CapturedBytes: 15, DroppedEvents: 2},
+	}}
+	got := browserCapturedRequestDescriptors([]store.Request{request})
+	if len(got) != 1 || got[0].RecordKind != "webrtc" || got[0].Stream == nil || got[0].Stream.CaptureState != "partial" || got[0].Stream.DroppedEvents != 2 {
+		t.Fatalf("missing stream evidence handle: %#v", got)
+	}
+	encoded, _ := json.Marshal(got)
+	if strings.Contains(string(encoded), "private") {
+		t.Fatalf("stream preview leaked page evidence: %s", encoded)
+	}
+	request.Stream.Source, request.Stream.State = "private-source", "private-state"
+	encoded, _ = json.Marshal(browserCapturedRequestDescriptors([]store.Request{request}))
+	if strings.Contains(string(encoded), "private") {
+		t.Fatalf("stream vocabulary was not bounded: %s", encoded)
+	}
+}
+
 func TestEnrichBrowserCaptureResultReportsCompletedDownloadBeforeLaterFormFailure(t *testing.T) {
 	livePath := filepath.Join(t.TempDir(), "live.json")
 	t.Setenv("REPLIVE_PATH", livePath)

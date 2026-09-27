@@ -2,6 +2,7 @@ package output
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -120,34 +121,54 @@ func SpillBodyToDisk(body, requestID, contentType string) (string, TruncationInf
 }
 
 type RequestOutput struct {
-	ID                    string             `json:"id"`
-	OriginalID            string             `json:"original_id,omitempty"`
-	Method                string             `json:"method"`
-	URL                   string             `json:"url"`
-	PageURL               string             `json:"page_url,omitempty"`
-	ResourceType          string             `json:"resource_type,omitempty"`
-	Initiator             string             `json:"initiator,omitempty"`
-	ResponseEncoding      string             `json:"response_encoding,omitempty"`
-	ResponseBodyTruncated bool               `json:"response_body_truncated,omitempty"`
-	ResponseBodyError     string             `json:"response_body_error,omitempty"`
-	ResponseBodyCapture   *store.BodyCapture `json:"response_body_capture,omitempty"`
-	RequestBodyCapture    *store.BodyCapture `json:"request_body_capture,omitempty"`
-	NetworkState          string             `json:"network_state,omitempty"`
-	ErrorText             string             `json:"error_text,omitempty"`
-	CaptureSource         string             `json:"capture_source,omitempty"`
-	TabID                 int                `json:"tab_id,omitempty"`
-	Timestamp             int64              `json:"timestamp,omitempty"`
-	Domain                string             `json:"domain"`
-	Path                  string             `json:"path"`
-	Headers               store.HeaderMap    `json:"headers,omitempty"`
-	Body                  string             `json:"body,omitempty"`
-	Response              *ResponseOutput    `json:"response,omitempty"`
+	RecordKind                   string             `json:"record_kind,omitempty"`
+	Stream                       *StreamOutput      `json:"stream,omitempty"`
+	FrameID                      string             `json:"frame_id,omitempty"`
+	LoaderID                     string             `json:"loader_id,omitempty"`
+	SourceSessionID              string             `json:"source_session_id,omitempty"`
+	MonotonicTimestamp           float64            `json:"monotonic_timestamp,omitempty"`
+	ResponseMonotonicTimestamp   float64            `json:"response_monotonic_timestamp,omitempty"`
+	CompletionMonotonicTimestamp float64            `json:"completion_monotonic_timestamp,omitempty"`
+	InitiatorDetails             json.RawMessage    `json:"initiator_details,omitempty"`
+	ID                           string             `json:"id"`
+	OriginalID                   string             `json:"original_id,omitempty"`
+	Method                       string             `json:"method"`
+	URL                          string             `json:"url"`
+	PageURL                      string             `json:"page_url,omitempty"`
+	ResourceType                 string             `json:"resource_type,omitempty"`
+	Initiator                    string             `json:"initiator,omitempty"`
+	ResponseEncoding             string             `json:"response_encoding,omitempty"`
+	ResponseBodyTruncated        bool               `json:"response_body_truncated,omitempty"`
+	ResponseBodyError            string             `json:"response_body_error,omitempty"`
+	ResponseBodyCapture          *store.BodyCapture `json:"response_body_capture,omitempty"`
+	RequestBodyCapture           *store.BodyCapture `json:"request_body_capture,omitempty"`
+	NetworkState                 string             `json:"network_state,omitempty"`
+	ErrorText                    string             `json:"error_text,omitempty"`
+	CaptureSource                string             `json:"capture_source,omitempty"`
+	TabID                        int                `json:"tab_id,omitempty"`
+	Timestamp                    int64              `json:"timestamp,omitempty"`
+	Domain                       string             `json:"domain"`
+	Path                         string             `json:"path"`
+	Headers                      store.HeaderMap    `json:"headers,omitempty"`
+	Body                         string             `json:"body,omitempty"`
+	Response                     *ResponseOutput    `json:"response,omitempty"`
 }
 
-type ResponseOutput struct {
-	Status  int             `json:"status"`
-	Headers store.HeaderMap `json:"headers,omitempty"`
-	Body    string          `json:"body,omitempty"`
+type ResponseOutput store.Response
+
+type StreamOutput struct {
+	Version          int                  `json:"version"`
+	Protocol         string               `json:"protocol"`
+	ConnectionID     string               `json:"connection_id"`
+	State            string               `json:"state"`
+	Source           string               `json:"source,omitempty"`
+	Clock            string               `json:"clock,omitempty"`
+	PayloadSemantics string               `json:"payload_semantics,omitempty"`
+	Metadata         json.RawMessage      `json:"metadata,omitempty"`
+	MetadataOmitted  bool                 `json:"metadata_omitted,omitempty"`
+	Capture          store.StreamCoverage `json:"capture"`
+	Events           []store.StreamEvent  `json:"events,omitempty"`
+	EventsOmitted    bool                 `json:"events_omitted,omitempty"`
 }
 
 func FormatRequest(req *store.Request, mode store.OutputMode) RequestOutput {
@@ -156,6 +177,9 @@ func FormatRequest(req *store.Request, mode store.OutputMode) RequestOutput {
 		requestHeaders = filterMetaHeaders(req.Headers, false)
 	}
 	out := RequestOutput{
+		RecordKind: req.RecordKind, FrameID: req.FrameID, LoaderID: req.LoaderID, SourceSessionID: req.SourceSessionID,
+		MonotonicTimestamp: req.MonotonicTimestamp, ResponseMonotonicTimestamp: req.ResponseMonotonicTimestamp,
+		CompletionMonotonicTimestamp: req.CompletionMonotonicTimestamp, InitiatorDetails: req.InitiatorDetails,
 		ID: req.ID, OriginalID: req.OriginalID, Method: req.Method, URL: req.URL,
 		PageURL: req.PageURL, ResourceType: req.ResourceType, Initiator: req.Initiator,
 		ResponseEncoding: req.ResponseEncoding, ResponseBodyTruncated: req.ResponseBodyTruncated,
@@ -165,6 +189,19 @@ func FormatRequest(req *store.Request, mode store.OutputMode) RequestOutput {
 		Domain: req.Domain, Path: req.Path,
 		Headers: requestHeaders, Body: req.Body,
 	}
+	if req.Stream != nil {
+		stream := req.Stream
+		out.Stream = &StreamOutput{Version: stream.Version, Protocol: stream.Protocol, ConnectionID: stream.ConnectionID, State: stream.State, Capture: stream.Capture,
+			Source: stream.Source, Clock: stream.Clock, PayloadSemantics: stream.PayloadSemantics}
+		if mode == store.OutputFull {
+			out.Stream.Metadata = stream.Metadata
+			out.Stream.Events = stream.Events
+			out.Stream.EventsOmitted = int64(len(stream.Events)) < stream.Capture.CapturedEvents
+		} else {
+			out.Stream.MetadataOmitted = len(stream.Metadata) > 0
+			out.Stream.EventsOmitted = len(stream.Events) > 0 || stream.Capture.CapturedEvents > 0
+		}
+	}
 	if mode == store.OutputMeta {
 		out.Body = ""
 	}
@@ -173,7 +210,9 @@ func FormatRequest(req *store.Request, mode store.OutputMode) RequestOutput {
 		if mode == store.OutputMeta {
 			responseHeaders = filterMetaHeaders(req.Response.Headers, true)
 		}
-		resp := &ResponseOutput{Status: req.Response.Status, Headers: responseHeaders}
+		responseMetadata := ResponseOutput(*req.Response)
+		resp := &responseMetadata
+		resp.Headers, resp.Body = responseHeaders, ""
 		switch mode {
 		case store.OutputMeta:
 		case store.OutputCompact:

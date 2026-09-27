@@ -204,6 +204,7 @@ func handleCaptureRPC(request RPCRequest) (RPCResponse, bool) {
 		captureSnapshots.Unlock()
 		response.Result, _ = json.Marshal(map[string]interface{}{
 			"schema": 1, "immutable_snapshots": true, "max_snapshot_bytes": activeCaptureLimits.snapshotBytes,
+			"capture_ack": true, "incremental_capture": true, "stream_records": 1,
 			"request_chunks": true, "request_chunk_bytes": requestChunkBytes,
 			"max_request_bytes": activeCaptureLimits.requestBytes, "max_requests": activeCaptureLimits.requests,
 			"total_snapshot_bytes": activeCaptureLimits.totalSnapshotBytes,

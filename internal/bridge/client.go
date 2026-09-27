@@ -189,6 +189,8 @@ func (c *Client) Call(ctx context.Context, method string, params interface{}, ou
 		return fmt.Errorf("connect %s bridge: %w", c.Registry.Browser, err)
 	}
 	defer conn.Close()
+	stopCancel := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopCancel()
 	_ = conn.SetDeadline(deadline)
 
 	request := RPCRequest{

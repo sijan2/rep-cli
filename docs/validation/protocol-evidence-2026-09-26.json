@@ -1,0 +1,194 @@
+{
+  "schema": 1,
+  "passed": true,
+  "fixtures": "loopback HTTP/WebSocket and submission form only",
+  "with_model": false,
+  "harness_sha256": "4decee26dfa6744ace4a5f5a170b87837f146e83c9e20d088a5df6976778f5bc",
+  "measurements": "Single fixture run; CLI completion timings do not establish sustained throughput, peak memory, or broad task accuracy.",
+  "task": "protocol-evidence-4dead0f015",
+  "cli_sha256": "8e80851c049f387d486772f147ff85a7ccde69a61eb77ec27adbfcb7f17f8610",
+  "host_sha256": "183b67666dd15407904aa4ad4e3ec2d7119e025f366f21943d56b3546b3ec8fa",
+  "extension_js_sha256": "88a81d112532457ddf5ee4f32fcb2e02f06b688007194ab8a26d62106816e500",
+  "browser_start_seconds": 1.331634458,
+  "run_id": "run_4bb0cde11897eb169e44fe1845319b1c",
+  "chromium": {
+    "Browser": "Chrome/153.0.8010.12",
+    "Protocol-Version": "1.3",
+    "V8-Version": "15.3.76.4"
+  },
+  "protocol": [
+    {
+      "mode": "closed",
+      "capture_seconds": 0.55833025,
+      "archive": "s_1ca56ecee2",
+      "capture_sha256": "40e23dc629e41c450a051bd763b216c6d828061d056ae80bff013b08fa7658f7",
+      "coverage": {
+        "state": "complete",
+        "captured_events": 8,
+        "observed_events": 8,
+        "captured_bytes": 42,
+        "observed_bytes": 42,
+        "dropped_events": 0
+      },
+      "event_count": 8,
+      "payloads": [
+        {
+          "sequence": 4,
+          "bytes": 16,
+          "sha256": "c6c2c8dcf31a75dd7dd569f27368a3801b41bee930aca2d9d48da080b4ae4560"
+        },
+        {
+          "sequence": 5,
+          "bytes": 5,
+          "sha256": "d423c7d662b356d3bcfb768944ff3b5f3f89b7086bb16e6a5afba362da09acb3"
+        },
+        {
+          "sequence": 6,
+          "bytes": 16,
+          "sha256": "fa338334dce552c0ab73b5126b76a15e661f56d8fa15ceb1a24b048323f0b46d"
+        },
+        {
+          "sequence": 7,
+          "bytes": 5,
+          "sha256": "cfc44f3b978951c4b0aa40f4a906e5c83ccd6c83609a47863d1407bef7732e19"
+        }
+      ],
+      "http_protocol": "http/1.1",
+      "http_body_sha256": "9e39d80996dae1496e77b98037b00c0fb34b5d32a7771ef509c5ca5438511ea2"
+    },
+    {
+      "mode": "open",
+      "capture_seconds": 0.508233208,
+      "archive": "s_7fabfcde00",
+      "capture_sha256": "02ccb51bf82c9b3d757566438e79c0b13125b3e02939d6d4a499d204fe1dcc19",
+      "coverage": {
+        "state": "partial",
+        "reason": "capture_ended",
+        "captured_events": 8,
+        "observed_events": 8,
+        "captured_bytes": 42,
+        "observed_bytes": 42,
+        "dropped_events": 0
+      },
+      "event_count": 8,
+      "payloads": [
+        {
+          "sequence": 4,
+          "bytes": 16,
+          "sha256": "c6c2c8dcf31a75dd7dd569f27368a3801b41bee930aca2d9d48da080b4ae4560"
+        },
+        {
+          "sequence": 5,
+          "bytes": 5,
+          "sha256": "d423c7d662b356d3bcfb768944ff3b5f3f89b7086bb16e6a5afba362da09acb3"
+        },
+        {
+          "sequence": 6,
+          "bytes": 16,
+          "sha256": "fa338334dce552c0ab73b5126b76a15e661f56d8fa15ceb1a24b048323f0b46d"
+        },
+        {
+          "sequence": 7,
+          "bytes": 5,
+          "sha256": "cfc44f3b978951c4b0aa40f4a906e5c83ccd6c83609a47863d1407bef7732e19"
+        }
+      ],
+      "http_protocol": "http/1.1",
+      "http_body_sha256": "f3892d3f6aea408b72003dc42a7819ffe2103dc7c6fc71f2cd1de785bbe3d51b"
+    }
+  ],
+  "stress": {
+    "messages": 2048,
+    "message_bytes": 1024,
+    "direction": "received",
+    "protocol": "WebSocket text messages over loopback HTTP/1.1",
+    "payload_bytes": 2097152,
+    "payload_sha256": "1733bb2b55d9af0920e0a57d4f194b658a82f0e9d17b37a4fd45915f2e68c2b9",
+    "coverage": {
+      "state": "complete",
+      "captured_events": 2052,
+      "observed_events": 2052,
+      "captured_bytes": 2097152,
+      "observed_bytes": 2097152,
+      "dropped_events": 0
+    },
+    "capture_seconds": 1.0664003749999997,
+    "server_send_loop_seconds": 0.13699362500000012,
+    "verification_seconds": 0.30872287499999995,
+    "metadata_pages": 5,
+    "metadata_page_seconds": 0.16309525100000055,
+    "sampled_exact_payloads": [
+      {
+        "sequence": 4,
+        "bytes": 1024,
+        "sha256": "ba2b9125d6ab67fcf6314f697a22cd9adc51378d048e783f41a04b57b15ceea6"
+      },
+      {
+        "sequence": 1028,
+        "bytes": 1024,
+        "sha256": "262468571584dd053c375b1ee1b3d378db0b4f44ea193c250c34d911420da13c"
+      },
+      {
+        "sequence": 2051,
+        "bytes": 1024,
+        "sha256": "c84fa7cb0a736d2dd9cfcbb7532d1f0ab0326b38247a8e1a4d3f01fd7fd25067"
+      }
+    ],
+    "serialized_record_bytes": 2427541,
+    "archive_growth_bytes": 2431523,
+    "archive": "s_1005a8d0ca",
+    "capture_sha256": "03af42538dfda04bea6756ac77935c35f65f3ac1b0cf6e70ba1232215fc15e40",
+    "owned_host_rss": {
+      "process": "owned native host only",
+      "pid": 81384,
+      "samples": 20,
+      "unavailable_samples": 0,
+      "sample_interval_seconds": 0.05,
+      "baseline_bytes": 16941056,
+      "peak_sampled_bytes": 30982144,
+      "delta_from_baseline_bytes": 14041088,
+      "limits": "RSS from ps in 50ms samples. This can miss peaks; it excludes Chromium, renderers, the CLI, and the fixture server. Sampling overhead is included in capture time."
+    },
+    "limits": "One 2MiB receive burst. Capture time includes navigation, 500ms idle, collection, transport, sealing, archive/evidence writes, and host RSS sampling. All archived payloads were checked; three payloads were also retrieved through CLI. This is not sustained throughput, wire-rate, aggregate browser memory, or observer-overhead measurement."
+  },
+  "forms": {
+    "exact_fill_seconds": 0.054784749999999605,
+    "submit_seconds": 0.114183959,
+    "stale_receipt_seconds": 0.0439939159999998,
+    "rejection_seconds": 0.5648429589999999,
+    "accepted_receipts": [
+      "receipt-1"
+    ],
+    "attempts": 2,
+    "accepted_status": "verified",
+    "rejected_status": "unconfirmed",
+    "stale_receipt_blocked": true,
+    "verification_sources": [
+      "declared DOM checks",
+      "independent loopback server counter and receipt"
+    ],
+    "limits": "No upload adapter, authenticated pagination, dropped-action-ACK injection, or third-party application is exercised."
+  },
+  "server_socket_observations": [
+    {
+      "mode": "closed",
+      "client_messages": 2,
+      "server_messages": 2
+    },
+    {
+      "mode": "open",
+      "client_messages": 2,
+      "server_messages": 2
+    },
+    {
+      "mode": "stress",
+      "client_messages": 0,
+      "server_messages": 2048,
+      "server_payload_bytes": 2097152,
+      "payload_sha256": "1733bb2b55d9af0920e0a57d4f194b658a82f0e9d17b37a4fd45915f2e68c2b9",
+      "send_loop_seconds": 0.13699362500000012,
+      "close_acknowledged": true
+    }
+  ],
+  "owned_browser_stopped": true
+}

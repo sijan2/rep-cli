@@ -12,9 +12,12 @@ import (
 
 const CacheTTL = 5 * time.Minute
 const maxCacheEntries = 128
-const cacheSchema = 2
+const cacheSchema = 5
 
-type Cache struct{ Directory string }
+type Cache struct {
+	Directory string
+	Namespace string
+}
 
 func NewCache(directory string) *Cache { return &Cache{Directory: directory} }
 
@@ -38,14 +41,22 @@ type cacheEntry struct {
 
 func cacheKey(fingerprint string, options Options) string {
 	// Only this digest is used as the filename. Goal text is never persisted.
-	data, _ := json.Marshal([]any{cacheSchema, fingerprint, options.Goal, options.Kind, options.Limit, options.Model})
+	data, _ := json.Marshal([]any{cacheSchema, fingerprint, options.Goal, options.Kind, options.Limit, options.Model, options.Strategy, options.ObservationMode, options.Origin, options.FrameID, options.FrameURL, options.ScopeBackendDOMNodeID})
 	return digest(string(data))
 }
 
 var cacheName = regexp.MustCompile(`^[0-9a-f]{64}\.json$`)
 
+func (cache *Cache) storageKey(key string) string {
+	if cache.Namespace == "" {
+		return key
+	}
+	value, _ := json.Marshal([]string{cache.Namespace, key})
+	return digest(string(value))
+}
+
 func (cache *Cache) load(key string, now time.Time) (evaluated, bool) {
-	path := filepath.Join(cache.Directory, key+".json")
+	path := filepath.Join(cache.Directory, cache.storageKey(key)+".json")
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 256*1024 {
 		return evaluated{}, false
@@ -89,13 +100,15 @@ func (cache *Cache) store(key string, decision evaluated, now time.Time) {
 	if f.Close() != nil {
 		return
 	}
-	if os.Rename(f.Name(), filepath.Join(cache.Directory, key+".json")) != nil {
+	if os.Rename(f.Name(), filepath.Join(cache.Directory, cache.storageKey(key)+".json")) != nil {
 		return
 	}
 	cache.prune(now)
 }
 
-func (cache *Cache) remove(key string) { _ = os.Remove(filepath.Join(cache.Directory, key+".json")) }
+func (cache *Cache) remove(key string) {
+	_ = os.Remove(filepath.Join(cache.Directory, cache.storageKey(key)+".json"))
+}
 
 func (cache *Cache) prune(now time.Time) {
 	entries, err := os.ReadDir(cache.Directory)

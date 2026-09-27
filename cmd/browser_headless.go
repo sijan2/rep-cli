@@ -48,8 +48,34 @@ func init() {
 	start.Flags().StringVar(&options.Extension, "extension", "", "Rep extension source directory (or REP_EXTENSION_PATH)")
 	start.Flags().StringVar(&options.Host, "host", "", "Native host executable (default rep-host next to rep)")
 	start.Flags().BoolVar(&options.Headed, "headed", false, "Open this task's isolated browser window for manual login; default is headless")
+	start.Flags().StringVar(&options.WindowSize, "window-size", "", "Browser window WIDTHxHEIGHT (default 1280x900, or REP_HEADLESS_WINDOW_SIZE); kept across restarts")
 	start.Flags().DurationVar(&timeout, "timeout", 20*time.Second, "Startup deadline")
 	parent.AddCommand(start)
+	restartOptions := headless.Options{}
+	restartTimeout := 25 * time.Second
+	restart := &cobra.Command{Use: "restart", Short: "Stop and start this task's headless browser, loading changed extension source", Args: cobra.NoArgs,
+		Long: "Stop this task's browser and start it again with its saved binary, extension, and host.\nChanged extension source is registered on start, so this is the headless update path\n(reload-extension cannot restart a command-line extension in headless mode).\nCookies and logins persist; tabs do not survive a restart.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir, err := headlessTaskDir()
+			if err != nil {
+				return emitHeadlessError(cmd, err)
+			}
+			if restartTimeout < time.Second || restartTimeout > time.Minute {
+				return emitHeadlessError(cmd, fmt.Errorf("timeout must be between 1s and 1m"))
+			}
+			ctx, cancel := context.WithTimeout(cmd.Context(), restartTimeout)
+			defer cancel()
+			status, err := headless.Restart(ctx, dir, restartOptions)
+			if err != nil {
+				return emitHeadlessError(cmd, err)
+			}
+			return emitBrowserResult(status, func() { printBrowserJSON(status) })
+		}}
+	restart.Flags().StringVar(&restartOptions.Host, "host", "", "Native host executable (default: the saved host)")
+	restart.Flags().BoolVar(&restartOptions.Headed, "headed", false, "Restart in a visible window for manual login")
+	restart.Flags().StringVar(&restartOptions.WindowSize, "window-size", "", "Browser window WIDTHxHEIGHT (default: the saved size)")
+	restart.Flags().DurationVar(&restartTimeout, "timeout", 25*time.Second, "Stop and startup deadline")
+	parent.AddCommand(restart)
 	for _, operation := range []string{"status", "stop"} {
 		operation := operation
 		parent.AddCommand(&cobra.Command{Use: operation, Short: operation + " this task's headless browser", Args: cobra.NoArgs,

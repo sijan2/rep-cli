@@ -36,7 +36,10 @@ func AppendSessionLog(session *Session) error {
 		return err
 	}
 
-	return appendJSONLStream(path, func(writer io.Writer) error { return encodeSessionEntry(writer, session) })
+	return appendJSONLStreamIndexed(path, func(writer io.Writer) error { return encodeSessionEntry(writer, session) },
+		func(file *os.File, before os.FileInfo, offset, length int64) {
+			updateArchiveIndexAfterAppend(path, file, before, offset, length, sessionLogEntry{Action: "session", Session: session})
+		})
 }
 
 func AppendSessionClear(ts time.Time) error {
@@ -48,7 +51,10 @@ func AppendSessionClear(ts time.Time) error {
 		Action:    "clear",
 		Timestamp: ts.UnixMilli(),
 	}
-	return appendJSONL(path, entry)
+	return appendJSONLStreamIndexed(path, func(writer io.Writer) error { return encodeArchiveClear(writer, entry) },
+		func(file *os.File, before os.FileInfo, offset, length int64) {
+			updateArchiveIndexAfterAppend(path, file, before, offset, length, entry)
+		})
 }
 
 func LoadSessionsLog() ([]Session, bool, error) {

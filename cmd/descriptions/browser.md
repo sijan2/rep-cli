@@ -6,6 +6,11 @@ Control and observe Arc/Chrome through rep+, Native Messaging, and
 `chrome.debugger`. `rep browser headless start` launches a separate task-owned
 Chromium profile using this same bridge; see `rep describe headless`.
 
+`rep browser native-capture URL` launches a separate, extension-free private
+Chromium session for explicitly enabled native TLS/QUIC key logging and original
+RTP/RTCP diagnostics. It owns and stops that browser. See `rep describe
+native-capture` for its filters, artifact boundaries and resource limits.
+
 ## Core workflow
 
 ```text
@@ -23,19 +28,26 @@ Pass a workspace/task or set REP_WORKSPACE/REP_TASK in the calling process.
 Arc is the default; use --browser only to choose another profile/transport.
 `--raw-json` selects plain JSON by itself. `browser select` is read-only;
 `browser interact` executes explicit typed plans (see `rep describe interact`).
+`browser observe` reads compact relational evidence without model calls.
+`browser select-batch` resolves independent goals together; `browser validate`
+refreshes scoped evidence. See `rep describe decisions` for scope, reuse, and
+frame-aware binding contracts.
 Task captures always archive, so `--save` is unnecessary in scoped workflows.
 The old `rep browse`, `rep jev select/act`, `--goal`, and `--plan` forms remain
 compatible. Normal help emphasizes common options; advanced flags below remain
-accepted with their existing behavior.
+accepted with their existing behavior, only by the commands listed. An unknown
+flag fails with `invalid_argument` and names the commands that accept it.
 
 | Advanced flags | Commands / purpose |
 |---|---|
 | `--await`, `--by-value`, `--user-gesture`, `--repl` | eval/action renderer semantics; defaults true, true, false, false |
 | `--target` | Alternative debugger target ID instead of --tab |
 | `--keep-attached` | eval/CDP persistent attachment; release with detach |
-| `--idle`, `--settle` | Capture settling; action defaults 300 ms / 1500 ms |
+| `--idle`, `--settle` | `browser action` only: capture settling, defaults 300 ms / 1500 ms |
 | `--max-result` | action evaluation result cap; default 64 KiB |
-| `--referrer`, `--idle` | open navigation referrer and network-idle interval |
+| `--protocol-payloads` | open/browse/fetch/action: instrument new WebTransport and WebRTC data-channel APIs |
+| `--webrtc-media` | open/browse/fetch/action: record clones of observed WebRTC audio/video tracks with native browser codecs |
+| `--referrer`, `--idle` | `browser open`/`browse`: navigation referrer and network-idle interval |
 | `--credentials`, `--cache` | fetch credentials/cache behavior |
 | `--save` | Legacy global capture archival; automatic for task captures |
 
@@ -63,6 +75,42 @@ small metadata and let the capture/download commands handle response bytes.
 evaluation resolves, then requires the normal `--idle` interval. This captures
 browser-managed callbacks such as Turnstile, `postMessage`, timers, and
 framework effects without making the page script sleep artificially.
+
+### WebTransport and WebRTC
+
+```sh
+rep --workspace PROJECT --task AGENT browser open https://localhost:8443 --protocol-payloads --keep-tab --raw-json
+rep --workspace PROJECT --task AGENT browser action @fixture.js --tab ID --protocol-payloads --raw-json
+rep --workspace PROJECT --task AGENT summary --saved HASH --max-bytes 4096
+rep --workspace PROJECT --task AGENT stream RECORD_ID --saved HASH --info
+rep --workspace PROJECT --task AGENT stream RECORD_ID --saved HASH --event SEQUENCE --head 0 --save
+```
+
+WebTransport CDP lifecycle records are captured without an extra flag. Payload
+capture is opt-in because it wraps JavaScript APIs in the selected page, its
+frames, and attached dedicated workers. `open` installs before navigation;
+`action` installs before evaluation. Connections created before installation,
+cached native methods, and uninstrumented shared/service workers remain gaps.
+An older extension is rejected before navigation or evaluation when the flag is
+requested. See [transport capture](../../docs/transport-capture.md).
+
+The observer records WebRTC data-channel messages and WebTransport datagrams
+and readable/writable chunks already used by the application. It keeps native
+stream identities and promises and never reads ahead. `pipeTo`, `pipeThrough`,
+teeing and async iteration have explicit bypass limitations. Capture end restores
+hooks and removes the observer; it does not close application transports.
+Inspect capture warnings and `stream.capture` before using the evidence.
+
+`stream.source: page_api` is page-controlled evidence. Complete means complete
+within `instrumented_api_calls`; it does not mean complete wire traffic. Native
+WebTransport lifecycle records remain independent from API records. Raw
+interface packets use `rep packets capture`. Audio/video can be recorded with
+the separate `--webrtc-media` flag, using native MediaRecorder on existing track
+clones. Its `webrtc_media` records declare `browser_media_recorder` source,
+`reencoded_media` semantics and `recorded_media_interval` scope. Media capture
+does not request devices and leaves original tracks running. Use `rep media ID
+--saved HASH --require-complete --save recording.webm` to assemble a recording.
+See [native capture](../../docs/native-capture.md) for bounds and provenance.
 
 Every successful `browse`, `browser open`, `browser fetch`, and `browser
 action` result includes `captured_requests`. Each descriptor has only the

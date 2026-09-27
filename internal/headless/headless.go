@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,12 +29,23 @@ type Options struct {
 	Extension string
 	Host      string
 	Headed    bool
+	// WindowSize is WIDTHxHEIGHT for the browser window; empty keeps the saved
+	// size or DefaultWindowSize.
+	WindowSize string
 }
+
+// Chromium's default headless window yields a ~756x413 viewport, below common
+// 768px breakpoints, so responsive sites served agents their mobile layout.
+// 1280x900 gives a 1280x757 desktop viewport in new headless mode.
+const DefaultWindowSize = "1280x900"
 
 type State struct {
 	Version      int    `json:"version"`
 	PID          int    `json:"pid"`
 	ProcessStamp string `json:"process_stamp,omitempty"`
+	// ProcessStart is the kernel start time in microseconds where the platform
+	// exposes it. It lets ownership checks skip ps; older states omit it.
+	ProcessStart int64  `json:"process_start_us,omitempty"`
 	Binary       string `json:"binary"`
 	Extension    string `json:"extension"`
 	ExtensionID  string `json:"extension_id"`
@@ -44,6 +56,10 @@ type State struct {
 	WebSocket    string `json:"websocket,omitempty"`
 	StartedAt    string `json:"started_at,omitempty"`
 	Headed       bool   `json:"headed"`
+	// ExtensionDigest identifies the extension source whose worker this
+	// profile registered at its last start.
+	ExtensionDigest string `json:"extension_digest,omitempty"`
+	WindowSize      string `json:"window_size,omitempty"`
 }
 
 type Status struct {
@@ -52,6 +68,9 @@ type Status struct {
 	Connected       bool   `json:"connected"`
 	IsolatedProfile bool   `json:"isolated_profile"`
 	Reason          string `json:"reason,omitempty"`
+	// ExtensionStale reports a running browser whose extension source changed
+	// after it started; restart it to load the current code.
+	ExtensionStale bool `json:"extension_stale,omitempty"`
 }
 
 func paths(dataDir string) (root, profile, bridgeDir string) {
@@ -148,7 +167,14 @@ func processStamp(pid int) string {
 }
 
 func ownedProcess(state State) bool {
-	if state.PID <= 0 || state.ProcessStamp == "" || processStamp(state.PID) != state.ProcessStamp {
+	if state.PID <= 0 || state.ProcessStamp == "" {
+		return false
+	}
+	if state.ProcessStart != 0 && processStartMicros(state.PID) == state.ProcessStart {
+		if command, ok := processCommand(state.PID); ok {
+			return ownedCommand(state, command)
+		}
+	} else if processStamp(state.PID) != state.ProcessStamp {
 		return false
 	}
 	output, err := exec.Command("/bin/ps", "-p", strconv.Itoa(state.PID), "-o", "command=").Output()
@@ -202,6 +228,9 @@ func GetStatus(ctx context.Context, dataDir string) (Status, error) {
 		return status, nil
 	}
 	status.Running = true
+	if digest, err := extensionDigest(state.Extension); err == nil && state.ExtensionDigest != "" && digest != state.ExtensionDigest {
+		status.ExtensionStale = true
+	}
 	if err := verifyEndpoint(ctx, state); err != nil {
 		status.Reason = err.Error()
 		return status, nil
@@ -276,6 +305,9 @@ func Start(ctx context.Context, dataDir string, options Options) (Status, error)
 	if options.Host == "" {
 		options.Host = prior.Host
 	}
+	if options.WindowSize == "" {
+		options.WindowSize = prior.WindowSize
+	}
 	options, extensionID, err := resolveOptions(options)
 	if err != nil {
 		return Status{}, err
@@ -294,12 +326,24 @@ func Start(ctx context.Context, dataDir string, options Options) (Status, error)
 		return Status{}, err
 	}
 	_ = os.Remove(filepath.Join(profile, "DevToolsActivePort"))
+	if err := discardSessionRestore(profile); err != nil {
+		return Status{}, err
+	}
+	digest, err := extensionDigest(options.Extension)
+	if err != nil {
+		return Status{}, fmt.Errorf("read Rep extension source: %w", err)
+	}
+	if digest != prior.ExtensionDigest {
+		if err := discardWorkerRegistrations(profile); err != nil {
+			return Status{}, err
+		}
+	}
 	logFile, err := os.OpenFile(filepath.Join(root, "browser.log"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if err != nil {
 		return Status{}, err
 	}
 	defer logFile.Close()
-	command := exec.Command(options.Binary, launchArguments(profile, options.Extension, options.Headed)...)
+	command := exec.Command(options.Binary, launchArguments(profile, options.Extension, options.Headed, options.WindowSize)...)
 	command.Env = browserEnvironment(bridgeDir, filepath.Join(root, "staging.json"))
 	command.Stdin = nil
 	command.Stdout, command.Stderr = logFile, logFile
@@ -307,15 +351,15 @@ func Start(ctx context.Context, dataDir string, options Options) (Status, error)
 	if err := command.Start(); err != nil {
 		return Status{}, fmt.Errorf("start headless browser: %w", err)
 	}
-	state := State{Version: 1, PID: command.Process.Pid, ProcessStamp: processStamp(command.Process.Pid), Binary: options.Binary,
+	state := State{Version: 1, PID: command.Process.Pid, ProcessStamp: processStamp(command.Process.Pid), ProcessStart: processStartMicros(command.Process.Pid), Binary: options.Binary,
 		Extension: options.Extension, ExtensionID: extensionID, Host: options.Host, Profile: profile, BridgeDir: bridgeDir,
-		StartedAt: time.Now().UTC().Format(time.RFC3339Nano), Headed: options.Headed}
+		StartedAt: time.Now().UTC().Format(time.RFC3339Nano), Headed: options.Headed, ExtensionDigest: digest, WindowSize: options.WindowSize}
 	complete := false
 	defer func() {
 		if !complete {
 			_ = command.Process.Kill()
 			_ = command.Wait()
-			state.PID, state.Port, state.WebSocket, state.ProcessStamp = 0, 0, "", ""
+			state.PID, state.Port, state.WebSocket, state.ProcessStamp, state.ProcessStart = 0, 0, "", "", 0
 			_ = writeState(dataDir, state)
 		}
 	}()
@@ -400,11 +444,101 @@ func Stop(ctx context.Context, dataDir string) (Status, error) {
 			}
 		}
 	}
-	state.PID, state.Port, state.WebSocket, state.ProcessStamp = 0, 0, "", ""
+	state.PID, state.Port, state.WebSocket, state.ProcessStamp, state.ProcessStart = 0, 0, "", "", 0
 	if err := writeState(dataDir, state); err != nil {
 		return Status{}, err
 	}
 	return Status{State: state, IsolatedProfile: true, Reason: "stopped"}, nil
+}
+
+// Chromium restores every previous tab when a profile starts, even after a
+// clean Browser.close. Restored tabs reload their pages with the task's cookies,
+// sending requests nobody asked for and accumulating across restarts. Tab IDs
+// never survive a restart, so only window/tab session state is discarded;
+// cookies, storage, and logins remain in the profile.
+func discardSessionRestore(profile string) error {
+	base := filepath.Join(profile, "Default")
+	for _, name := range []string{"Sessions", "Sessions_Encrypted", "Current Session", "Current Tabs", "Last Session", "Last Tabs"} {
+		if err := os.RemoveAll(filepath.Join(base, name)); err != nil {
+			return fmt.Errorf("discard previous browser session: %w", err)
+		}
+	}
+	return nil
+}
+
+// Chromium keeps a registered MV3 service-worker script until the extension's
+// manifest version changes, so a restarted profile would silently keep running
+// stale extension code after a source update (runtime.reload() does not help:
+// a command-line extension's worker does not restart in headless mode).
+// Removing the worker database makes Chromium register the current script.
+// Cookies, storage, and logins are elsewhere; site worker caches in this task
+// profile are rebuilt on demand. This runs only when the source changed.
+func discardWorkerRegistrations(profile string) error {
+	if err := os.RemoveAll(filepath.Join(profile, "Default", "Service Worker")); err != nil {
+		return fmt.Errorf("refresh extension service worker: %w", err)
+	}
+	return nil
+}
+
+const maxDigestFiles = 4096
+const maxDigestBytes = 64 << 20
+
+// extensionDigest covers every script the extension worker can load.
+func extensionDigest(dir string) (string, error) {
+	if dir == "" {
+		return "", errors.New("extension path is empty")
+	}
+	paths := []string{"manifest.json", "background.js"}
+	for _, sub := range []string{"js", "lib"} {
+		err := filepath.WalkDir(filepath.Join(dir, sub), func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					return nil
+				}
+				return err
+			}
+			if entry.IsDir() || !(strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".mjs") || strings.HasSuffix(path, ".json")) {
+				return nil
+			}
+			if len(paths) >= maxDigestFiles {
+				return errors.New("extension source has too many files")
+			}
+			rel, err := filepath.Rel(dir, path)
+			if err != nil {
+				return err
+			}
+			paths = append(paths, rel)
+			return nil
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	sort.Strings(paths)
+	hash := sha256.New()
+	total := 0
+	for _, rel := range paths {
+		data, err := os.ReadFile(filepath.Join(dir, rel))
+		if err != nil {
+			return "", err
+		}
+		if total += len(data); total > maxDigestBytes {
+			return "", errors.New("extension source exceeds the digest budget")
+		}
+		fmt.Fprintf(hash, "%s\x00%d\x00", filepath.ToSlash(rel), len(data))
+		hash.Write(data)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// Restart stops this task's browser and starts it again with the same saved
+// binary, extension, and host unless options override them. It loads changed
+// extension source; tabs do not survive a restart.
+func Restart(ctx context.Context, dataDir string, options Options) (Status, error) {
+	if _, err := Stop(ctx, dataDir); err != nil {
+		return Status{}, err
+	}
+	return Start(ctx, dataDir, options)
 }
 
 func validateRunningOptions(prior State, requested Options) error {
@@ -420,19 +554,31 @@ func validateRunningOptions(prior State, requested Options) error {
 	if requested.Host == "" {
 		requested.Host = prior.Host
 	}
+	if requested.WindowSize == "" {
+		requested.WindowSize = prior.WindowSize
+	}
 	resolved, _, err := resolveOptions(requested)
 	if err != nil {
 		return err
 	}
-	if resolved.Binary != prior.Binary || resolved.Extension != prior.Extension || resolved.Host != prior.Host {
+	if prior.WindowSize == "" {
+		// States from before window sizing ran at Chromium's default.
+		resolved.WindowSize = ""
+	}
+	if resolved.Binary != prior.Binary || resolved.Extension != prior.Extension || resolved.Host != prior.Host || resolved.WindowSize != prior.WindowSize {
 		return errors.New("stop this task's browser before changing its configuration")
 	}
 	return nil
 }
 
-func launchArguments(profile, extension string, headed bool) []string {
+func launchArguments(profile, extension string, headed bool, windowSize string) []string {
+	width, height, ok := parseWindowSize(windowSize)
+	if !ok {
+		width, height, _ = parseWindowSize(DefaultWindowSize)
+	}
 	args := []string{"--user-data-dir=" + profile, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0",
 		"--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--log-level=3",
+		fmt.Sprintf("--window-size=%d,%d", width, height),
 		"--load-extension=" + extension, "--disable-extensions-except=" + extension, "about:blank"}
 	if !headed {
 		args = append([]string{"--headless=new"}, args...)
@@ -453,7 +599,29 @@ func browserEnvironment(bridgeDir, livePath string) []string {
 	return append(env, "REP_BRIDGE_DIR="+bridgeDir, "REPLIVE_PATH="+livePath)
 }
 
+// parseWindowSize accepts WIDTHxHEIGHT within practical display bounds.
+func parseWindowSize(value string) (int, int, bool) {
+	left, right, found := strings.Cut(strings.ToLower(strings.TrimSpace(value)), "x")
+	width, widthErr := strconv.Atoi(left)
+	height, heightErr := strconv.Atoi(right)
+	if !found || widthErr != nil || heightErr != nil || width < 320 || width > 7680 || height < 240 || height > 4320 {
+		return 0, 0, false
+	}
+	return width, height, true
+}
+
 func resolveOptions(options Options) (Options, string, error) {
+	if options.WindowSize == "" {
+		options.WindowSize = os.Getenv("REP_HEADLESS_WINDOW_SIZE")
+	}
+	if options.WindowSize == "" {
+		options.WindowSize = DefaultWindowSize
+	}
+	if width, height, ok := parseWindowSize(options.WindowSize); ok {
+		options.WindowSize = fmt.Sprintf("%dx%d", width, height)
+	} else {
+		return options, "", fmt.Errorf("window size must be WIDTHxHEIGHT between 320x240 and 7680x4320")
+	}
 	if options.Binary == "" {
 		options.Binary = os.Getenv("REP_HEADLESS_BINARY")
 	}

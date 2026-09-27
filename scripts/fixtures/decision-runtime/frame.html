@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>Frame fixture</title>
+<style>body{font:16px system-ui;margin:12px}button{padding:8px}iframe{width:560px;height:170px;display:block;margin-top:12px}</style>
+<button id="action"></button><output id="status">Not clicked</output><div id="child"></div>
+<script>
+const kind=new URL(location.href).searchParams.get('kind');
+document.querySelector('#action').textContent=kind[0].toUpperCase()+kind.slice(1)+' action';
+document.querySelector('#action').onclick=()=>{document.querySelector('#status').textContent='Completed '+kind;top.postMessage({fixture:true,kind},'*');};
+if(kind==='remote')document.querySelector('#child').innerHTML='<iframe title="Nested fixture" src="__TOP__/frame.html?kind=deep"></iframe>';
+top.postMessage({fixture:true,kind,ready:true},'*');
+</script>

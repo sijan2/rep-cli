@@ -1,6 +1,7 @@
 # Workspace isolation and bounded agent context
 
-Implemented and verified 2026-09-20.
+Scope foundation verified 2026-09-20. Run evidence and indexed archive retrieval
+updated in the source architecture on 2026-09-26.
 
 ## Why an agent on another site saw eBay
 
@@ -93,6 +94,61 @@ host budgets negotiated by the CLI. Expired/oversized snapshots fail explicitly.
 Durable task archives are retained; they are not silently garbage-collected.
 See [body transport, parsing, and limits](body-capture.md).
 
+Completed HTTP and stream records now move incrementally into a private native
+spool with acknowledgements. The collector's default aggregate archived payload
+budget is 64 MiB, with 10,000 request/connection records, 10,000 stream events
+and a 16 MiB native-send backlog. Those bounds are separate from the sealed
+snapshot budgets above. Inspect capture warnings, dropped counts and body/stream
+coverage before treating an observation as complete.
+
+`--protocol-payloads` on open/browse/fetch/action opts into WebTransport and
+WebRTC data-channel API observation. Capture results include stream handles,
+coverage counts and bounded warnings; `rep stream ID --saved HASH --info` shows
+source, effective limits and gaps. Use `open` to attach before application
+construction. Page API evidence has a declared scope and page-controlled trust;
+it cannot establish raw packet/media visibility. See [transport capture](transport-capture.md).
+
+Use `packets capture` for a bounded, explicitly filtered native interface
+recording, and `--webrtc-media` for browser-native recordings of existing track
+clones. Their scopes are independent. `rep media ID --saved HASH --save PATH`
+assembles one track's ordered container chunks; `--require-complete` checks its
+recorded interval. Run IDs can link packet and browser evidence but do not prove
+packet-to-tab or packet-to-track identity. See [native capture](native-capture.md).
+
+Use `browser native-capture URL --tls-keys --webrtc-rtp` when a new private
+Chromium session should emit native keys and original encoded RTP/RTCP. TLS mode
+requires an explicit wire interface/filter. The extension-free session produces
+a private bundle with a manifest and loss counters; its payloads are not inserted
+into page API archives. `--run` imports only the manifest and references the
+remaining artifacts. Read `rep describe native-capture` before using its output.
+
+## Run identity and operation evidence
+
+Create a run when a workflow needs a durable record across commands:
+
+```sh
+rep --workspace demo --task inspect evidence begin --intent 'Inspect local fixture' --stop 'Save observations'
+rep --workspace demo --task inspect --run RUN_ID browser screenshot --tab TAB_ID --raw-json
+rep --workspace demo --task inspect evidence operations RUN_ID --limit 10
+rep --workspace demo --task inspect evidence artifacts RUN_ID --limit 10
+```
+
+The same explicit run ID connects supported page operations, captures and saved
+artifacts. A durable pending record precedes browser work; an immutable
+completion record refers to that start through `parent_id`. Missing completion
+leaves the outcome unresolved, because the action may already have happened.
+Run intent/stop metadata is not a proof that the task reached its goal.
+
+Status, declared verification and model claims are separate. An observation
+failure remains unknown; a fingerprint reference does not imply that a DOM
+snapshot was retained. Bounded summaries and reference lists disclose omissions.
+Without `--run`, browser commands do not perform evidence-journal I/O.
+
+Capture ownership still excludes concurrent semantic/page execution on the same
+tab. There is no general concurrent `--record` wrapper. Use an explicit capture
+operation and connect separate phases through the run, preserving any gaps.
+See [run evidence](evidence.md) for supported commands and native artifact import.
+
 ## Context projection and incremental delivery
 
 Ownership is deterministic. Jev is not used to guess which agent owns a capture.
@@ -163,7 +219,8 @@ REP_BINARY="$HOME/.local/bin/rep" REP_HOST_BINARY="$HOME/.local/bin/rep-host" \
   python3 scripts/verify_agent_context.py
 ```
 
-Full Go tests pass. Canvas tests pass (119); extension tests pass (237). Canvas
+The September 20 verification passed the full Go suite, 119 Canvas tests and
+237 extension tests. Canvas
 RepClient and Arcctl RepProcess now give each instance a unique default task,
 keep that task stable for their subprocesses, and accept explicit workspace/task
 options or process environment for intentional continuity.
@@ -180,13 +237,20 @@ transactional, so independent agents should never share one task identity.
 
 Route redaction is heuristic; names in paths can still be personal information.
 Raw capture data remains local and should be fetched only when relevant. Durable
-archives use the existing JSONL format and can grow on disk; body blob storage
-and a lazy archive index are sensible future storage work, not shipped claims.
+network archives retain inline JSONL bodies and can grow on disk. Saved body
+lookups and saved `summary`/`context` now use a source-validated offset index and
+decode the selected archive;
+they need not load every historical body. The index rebuilds when absent/stale
+and has an 8 MiB metadata budget with a legacy lookup fallback above that bound.
+The `--primary` summary filter still loads settings through the existing store.
+Imported run artifacts use their own content-addressed blob storage; HTTP bodies
+have not been migrated to that store. Byte identity, collection coverage and
+claim verification remain separate properties.
 Byte budgets are exact; tokenizer-dependent token counts are not.
 
-## Activation check
+## Historical activation check — September 20
 
-The updated CLI and native host are installed in `~/.local/bin`. The user
+The September 20 CLI and native host were installed in `~/.local/bin`. The user
 explicitly authorized interrupting the old active/queued captures; the Rep
 extension was reloaded and the new host reconnected with zero active/queued
 captures and immutable-snapshot protocol support.
@@ -196,3 +260,7 @@ verified and automatically archived its two requests, closed its owned tab, and
 returned a 1,277-byte summary plus an 814-byte unchanged delta. A different task
 returned `no_capture`. Temporary verification data was removed. This check used
 a local fixture, not a user form or account-changing action.
+
+That historical check does not establish that the current source changes are
+installed. New capture protocol features require matching CLI, native host and
+extension versions.

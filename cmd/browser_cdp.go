@@ -26,6 +26,8 @@ type browserEvaluationOptions struct {
 	AwaitPromise, ReturnByValue, UserGesture, REPLMode, KeepAttached bool
 	Timeout, Idle, Settle                                            time.Duration
 	MaxBodyBytes, MaxResultBytes                                     int
+	ProtocolPayloads                                                 bool
+	WebRTCMedia                                                      bool
 }
 
 func newBrowserTargetCommand(name, short string, timeout time.Duration, run browserCommandRunner) *cobra.Command {
@@ -84,6 +86,8 @@ func newBrowserEvaluationCommand(capture bool, run browserCommandRunner) *cobra.
 		if capture {
 			params["timeout_ms"], params["idle_ms"], params["settle_ms"] = timeout.Milliseconds(), options.Idle.Milliseconds(), options.Settle.Milliseconds()
 			params["max_body_bytes"], params["max_result_bytes"] = options.MaxBodyBytes, options.MaxResultBytes
+			params["protocol_payloads"] = options.ProtocolPayloads
+			params["webrtc_media"] = options.WebRTCMedia
 			timeout += 10 * time.Second
 		} else {
 			params["keep_attached"] = options.KeepAttached
@@ -101,6 +105,8 @@ func newBrowserEvaluationCommand(capture bool, run browserCommandRunner) *cobra.
 		command.Flags().DurationVar(&options.Settle, "settle", 1500*time.Millisecond, "Minimum observation window for delayed callbacks")
 		command.Flags().IntVar(&options.MaxBodyBytes, "max-body", 8*1024*1024, "Maximum captured response bytes per request")
 		command.Flags().IntVar(&options.MaxResultBytes, "max-result", 64*1024, "Maximum serialized evaluation-result bytes")
+		command.Flags().BoolVar(&options.ProtocolPayloads, "protocol-payloads", false, "Instrument page WebTransport and WebRTC data-channel APIs during capture")
+		command.Flags().BoolVar(&options.WebRTCMedia, "webrtc-media", false, "Record clones of observed WebRTC audio/video tracks with native browser codecs")
 		advancedFlags(command, "idle", "settle", "max-result")
 	} else {
 		command.Flags().BoolVar(&options.KeepAttached, "keep-attached", false, "Keep the target attached for subsequent commands")
@@ -127,10 +133,23 @@ func init() {
 	)
 }
 
-func callBrowserRPC(cmd *cobra.Command, command, method string, params map[string]interface{}, timeout time.Duration) error {
+func callBrowserRPC(cmd *cobra.Command, command, method string, params map[string]interface{}, timeout time.Duration) (returnErr error) {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
+	tab := -1
+	if value, ok := params["tab_id"].(int); ok {
+		tab = value
+	}
+	input := map[string]any{"intent": command, "timeout_ms": timeout.Milliseconds()}
+	if value, ok := params["method"].(string); ok {
+		input["cdp_method"] = value
+	}
+	record, err := beginBrowserEvidence(method, input, browserSelector, tab)
+	if err != nil {
+		return emitBrowserCallError(command, err)
+	}
+	defer record.finishOnReturn(&returnErr)
 	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 	defer cancel()
 	client, err := selectBrowserBridge(ctx, browserSelector, command)
@@ -143,8 +162,15 @@ func callBrowserRPC(cmd *cobra.Command, command, method string, params map[strin
 		if err != nil {
 			return emitBrowserCallError(command, err)
 		}
+		handoff.applyLimits(params)
+		protocolPayloads, _ := params["protocol_payloads"].(bool)
+		webrtcMedia, _ := params["webrtc_media"].(bool)
+		if err := requireBrowserCollectors(ctx, client, protocolPayloads, webrtcMedia); err != nil {
+			return emitBrowserCallError(command, err)
+		}
 	}
 	var result map[string]interface{}
+	record.dispatch()
 	if err := client.Call(ctx, method, params, &result); err != nil {
 		return emitBrowserCallError(command, err)
 	}
@@ -152,7 +178,16 @@ func callBrowserRPC(cmd *cobra.Command, command, method string, params map[strin
 		if err := finishBrowserCapture(ctx, client, result, handoff, "", false); err != nil {
 			return emitBrowserCaptureReadError(command, err, false)
 		}
+		record.capture(result)
 	}
+	// Raw evaluator results may contain credentials or large response bodies.
+	// Their command completion is recorded without copying renderer payloads.
+	summary := captureEvidenceSummary(result)
+	summary["rpc_completed"] = true
+	if err := record.finish(summary, "completed", "unverified", "", nil); err != nil {
+		return emitBrowserCallError(command, err)
+	}
+	attachOperationEvidence(result, record)
 	return emitBrowserResult(result, func() { printBrowserJSON(result) })
 }
 

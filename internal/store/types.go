@@ -1,35 +1,47 @@
 package store
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
-// Request represents a captured HTTP request from the extension
+// Request represents a captured HTTP request or browser stream record.
 // Matches the exact export format from rep+ extension
 type Request struct {
-	ID                      string       `json:"id"`
-	OriginalID              string       `json:"original_id,omitempty"`
-	Method                  string       `json:"method"`
-	URL                     string       `json:"url"`
-	PageURL                 string       `json:"page_url,omitempty"`
-	ResourceType            string       `json:"resource_type,omitempty"`
-	Initiator               string       `json:"initiator,omitempty"`
-	Headers                 HeaderMap    `json:"headers,omitempty"`
-	Body                    string       `json:"body,omitempty"`
-	Response                *Response    `json:"response,omitempty"`
-	ResponseEncoding        string       `json:"response_encoding,omitempty"`
-	ResponseBodyTruncated   bool         `json:"response_body_truncated,omitempty"`
-	ResponseBodyError       string       `json:"response_body_error,omitempty"`
-	ResponseBodyCapture     *BodyCapture `json:"response_body_capture,omitempty"`
-	RequestBodyCapture      *BodyCapture `json:"request_body_capture,omitempty"`
-	NetworkState            string       `json:"network_state,omitempty"`
-	ErrorText               string       `json:"error_text,omitempty"`
-	Canceled                bool         `json:"canceled,omitempty"`
-	IntentionalCancellation string       `json:"intentional_cancellation,omitempty"`
-	CaptureSource           string       `json:"capture_source,omitempty"`
-	TabID                   int          `json:"tab_id,omitempty"`
-	Timestamp               int64        `json:"timestamp"`
-	StartOrdinal            int64        `json:"start_ordinal,omitempty"`
-	ResponseOrdinal         int64        `json:"response_ordinal,omitempty"`
-	CompletionOrdinal       int64        `json:"completion_ordinal,omitempty"`
+	RecordKind                   string          `json:"record_kind,omitempty"`
+	Stream                       *StreamCapture  `json:"stream,omitempty"`
+	ID                           string          `json:"id"`
+	OriginalID                   string          `json:"original_id,omitempty"`
+	Method                       string          `json:"method"`
+	URL                          string          `json:"url"`
+	PageURL                      string          `json:"page_url,omitempty"`
+	ResourceType                 string          `json:"resource_type,omitempty"`
+	Initiator                    string          `json:"initiator,omitempty"`
+	Headers                      HeaderMap       `json:"headers,omitempty"`
+	Body                         string          `json:"body,omitempty"`
+	Response                     *Response       `json:"response,omitempty"`
+	ResponseEncoding             string          `json:"response_encoding,omitempty"`
+	ResponseBodyTruncated        bool            `json:"response_body_truncated,omitempty"`
+	ResponseBodyError            string          `json:"response_body_error,omitempty"`
+	ResponseBodyCapture          *BodyCapture    `json:"response_body_capture,omitempty"`
+	RequestBodyCapture           *BodyCapture    `json:"request_body_capture,omitempty"`
+	NetworkState                 string          `json:"network_state,omitempty"`
+	ErrorText                    string          `json:"error_text,omitempty"`
+	Canceled                     bool            `json:"canceled,omitempty"`
+	IntentionalCancellation      string          `json:"intentional_cancellation,omitempty"`
+	CaptureSource                string          `json:"capture_source,omitempty"`
+	TabID                        int             `json:"tab_id,omitempty"`
+	Timestamp                    int64           `json:"timestamp"`
+	StartOrdinal                 int64           `json:"start_ordinal,omitempty"`
+	ResponseOrdinal              int64           `json:"response_ordinal,omitempty"`
+	CompletionOrdinal            int64           `json:"completion_ordinal,omitempty"`
+	FrameID                      string          `json:"frame_id,omitempty"`
+	LoaderID                     string          `json:"loader_id,omitempty"`
+	SourceSessionID              string          `json:"source_session_id,omitempty"`
+	MonotonicTimestamp           float64         `json:"monotonic_timestamp,omitempty"`
+	ResponseMonotonicTimestamp   float64         `json:"response_monotonic_timestamp,omitempty"`
+	CompletionMonotonicTimestamp float64         `json:"completion_monotonic_timestamp,omitempty"`
+	InitiatorDetails             json.RawMessage `json:"initiator_details,omitempty"`
 	// Computed fields (not from export)
 	Domain     string     `json:"-"`
 	Path       string     `json:"-"`
@@ -39,24 +51,34 @@ type Request struct {
 // RequestMeta provides lightweight metadata for AI agent consumption
 // Contains only essential info without headers/bodies to minimize token usage
 type RequestMeta struct {
-	ID           string     `json:"id"`
-	SemanticID   SemanticID `json:"sid"`
-	Method       string     `json:"method"`
-	URL          string     `json:"url"`
-	Domain       string     `json:"domain"`
-	Path         string     `json:"path"`
-	Status       int        `json:"status"`
-	ResourceType string     `json:"type,omitempty"`
-	HasAuth      bool       `json:"has_auth"`
-	AuthType     string     `json:"auth_type,omitempty"` // bearer, cookie, api-key, basic
-	BodyType     string     `json:"body_type,omitempty"` // json, form, xml, text, binary
-	BodySize     int        `json:"body_size"`
-	Timestamp    int64      `json:"ts"`
+	RecordKind             string          `json:"record_kind,omitempty"`
+	Protocol               string          `json:"protocol,omitempty"`
+	StreamState            string          `json:"stream_state,omitempty"`
+	StreamCapture          *StreamCoverage `json:"stream_capture,omitempty"`
+	StreamSource           string          `json:"stream_source,omitempty"`
+	StreamClock            string          `json:"stream_clock,omitempty"`
+	StreamPayloadSemantics string          `json:"stream_payload_semantics,omitempty"`
+	StreamMetadataOmitted  bool            `json:"stream_metadata_omitted,omitempty"`
+	StreamEventsOmitted    bool            `json:"stream_events_omitted,omitempty"`
+	ID                     string          `json:"id"`
+	SemanticID             SemanticID      `json:"sid"`
+	Method                 string          `json:"method"`
+	URL                    string          `json:"url"`
+	Domain                 string          `json:"domain"`
+	Path                   string          `json:"path"`
+	Status                 int             `json:"status"`
+	ResourceType           string          `json:"type,omitempty"`
+	HasAuth                bool            `json:"has_auth"`
+	AuthType               string          `json:"auth_type,omitempty"` // bearer, cookie, api-key, basic
+	BodyType               string          `json:"body_type,omitempty"` // json, form, xml, text, binary
+	BodySize               int             `json:"body_size"`
+	Timestamp              int64           `json:"ts"`
 }
 
 // GetMeta returns lightweight metadata (no bodies/headers) for AI consumption
 func (r *Request) GetMeta() RequestMeta {
 	meta := RequestMeta{
+		RecordKind:   r.RecordKind,
 		ID:           r.ID,
 		SemanticID:   r.SemanticID,
 		Method:       r.Method,
@@ -68,9 +90,26 @@ func (r *Request) GetMeta() RequestMeta {
 	}
 
 	if r.Response != nil {
+		meta.Protocol = r.Response.Protocol
 		meta.Status = r.Response.Status
 		meta.BodySize = len(r.Response.Body)
 		meta.BodyType = detectBodyType(r.Response.Headers, r.Response.Body)
+	}
+	if IsStreamKind(r.RecordKind) {
+		meta.Protocol = r.RecordKind
+		meta.BodyType = "not_applicable"
+		meta.BodySize = 0
+		if r.Stream != nil {
+			meta.Protocol = r.Stream.Protocol
+			meta.StreamState = r.Stream.State
+			meta.StreamSource = r.Stream.Source
+			meta.StreamClock = r.Stream.Clock
+			meta.StreamPayloadSemantics = r.Stream.PayloadSemantics
+			meta.StreamMetadataOmitted = len(r.Stream.Metadata) > 0
+			meta.StreamEventsOmitted = len(r.Stream.Events) > 0 || r.Stream.Capture.CapturedEvents > 0
+			coverage := r.Stream.Capture
+			meta.StreamCapture = &coverage
+		}
 	}
 
 	meta.HasAuth, meta.AuthType = detectAuth(r.Headers)
@@ -163,9 +202,76 @@ func detectBodyType(headers HeaderMap, body string) string {
 
 // Response represents an HTTP response
 type Response struct {
-	Status  int       `json:"status"`
-	Headers HeaderMap `json:"headers,omitempty"`
-	Body    string    `json:"body,omitempty"`
+	Status             int                `json:"status"`
+	Headers            HeaderMap          `json:"headers,omitempty"`
+	Body               string             `json:"body,omitempty"`
+	Protocol           string             `json:"protocol,omitempty"`
+	RemoteIPAddress    string             `json:"remote_ip_address,omitempty"`
+	RemotePort         int                `json:"remote_port,omitempty"`
+	ConnectionID       float64            `json:"connection_id,omitempty"`
+	ConnectionReused   *bool              `json:"connection_reused,omitempty"`
+	FromDiskCache      *bool              `json:"from_disk_cache,omitempty"`
+	FromServiceWorker  *bool              `json:"from_service_worker,omitempty"`
+	FromPrefetchCache  *bool              `json:"from_prefetch_cache,omitempty"`
+	Timing             map[string]float64 `json:"timing,omitempty"`
+	SecurityDetails    json.RawMessage    `json:"security_details,omitempty"`
+	SecurityState      string             `json:"security_state,omitempty"`
+	EncodedDataLength  float64            `json:"encoded_data_length,omitempty"`
+	MonotonicTimestamp float64            `json:"monotonic_timestamp,omitempty"`
+}
+
+// IsStreamKind identifies the browser stream protocols represented by StreamCapture.
+func IsStreamKind(kind string) bool {
+	switch kind {
+	case "websocket", "webtransport", "webrtc", "webrtc_media":
+		return true
+	default:
+		return false
+	}
+}
+
+// StreamCapture records observations within the declared collector scope.
+// Application messages/chunks and lifecycle events do not establish wire coverage.
+type StreamCapture struct {
+	Version          int             `json:"version"`
+	Protocol         string          `json:"protocol"`
+	ConnectionID     string          `json:"connection_id"`
+	State            string          `json:"state"`
+	Source           string          `json:"source,omitempty"`
+	Clock            string          `json:"clock,omitempty"`
+	PayloadSemantics string          `json:"payload_semantics,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	Events           []StreamEvent   `json:"events"`
+	Capture          StreamCoverage  `json:"capture"`
+}
+
+type StreamEvent struct {
+	Sequence        int64           `json:"sequence"`
+	Kind            string          `json:"kind"`
+	Direction       string          `json:"direction,omitempty"`
+	ChannelID       string          `json:"channel_id,omitempty"`
+	Metadata        json.RawMessage `json:"metadata,omitempty"`
+	Reason          string          `json:"reason,omitempty"`
+	Timestamp       float64         `json:"timestamp,omitempty"`
+	Opcode          int             `json:"opcode,omitempty"`
+	Mask            *bool           `json:"mask,omitempty"`
+	Payload         string          `json:"payload,omitempty"`
+	PayloadEncoding string          `json:"payload_encoding,omitempty"`
+	Bytes           int64           `json:"bytes"`
+	Error           string          `json:"error,omitempty"`
+	Truncated       bool            `json:"truncated,omitempty"`
+}
+
+type StreamCoverage struct {
+	State          string   `json:"state"`
+	Reason         string   `json:"reason,omitempty"`
+	Scope          string   `json:"scope,omitempty"`
+	Limitations    []string `json:"limitations,omitempty"`
+	CapturedEvents int64    `json:"captured_events"`
+	ObservedEvents int64    `json:"observed_events"`
+	CapturedBytes  int64    `json:"captured_bytes"`
+	ObservedBytes  int64    `json:"observed_bytes"`
+	DroppedEvents  int64    `json:"dropped_events"`
 }
 
 // BodyCapture describes evidence retained from an observation. Complete with
@@ -196,18 +302,20 @@ type Export struct {
 
 // BrowserSession records the provenance of one completed browser capture.
 type BrowserSession struct {
-	Browser          string   `json:"browser,omitempty"`
-	URL              string   `json:"url,omitempty"`
-	TabID            int      `json:"tab_id,omitempty"`
-	CaptureMode      string   `json:"capture_mode,omitempty"`
-	StartedAt        string   `json:"started_at,omitempty"`
-	FinishedAt       string   `json:"finished_at,omitempty"`
-	TimedOut         bool     `json:"timed_out,omitempty"`
-	ExpectedRequests *int     `json:"expected_requests,omitempty"`
-	ReceivedRequests int      `json:"received_requests,omitempty"`
-	DroppedRequests  int      `json:"dropped_requests,omitempty"`
-	CaptureError     string   `json:"capture_error,omitempty"`
-	CaptureWarnings  []string `json:"capture_warnings,omitempty"`
+	CaptureStats     map[string]int64 `json:"capture_stats,omitempty"`
+	CaptureLimits    map[string]int64 `json:"capture_limits,omitempty"`
+	Browser          string           `json:"browser,omitempty"`
+	URL              string           `json:"url,omitempty"`
+	TabID            int              `json:"tab_id,omitempty"`
+	CaptureMode      string           `json:"capture_mode,omitempty"`
+	StartedAt        string           `json:"started_at,omitempty"`
+	FinishedAt       string           `json:"finished_at,omitempty"`
+	TimedOut         bool             `json:"timed_out,omitempty"`
+	ExpectedRequests *int             `json:"expected_requests,omitempty"`
+	ReceivedRequests int              `json:"received_requests,omitempty"`
+	DroppedRequests  int              `json:"dropped_requests,omitempty"`
+	CaptureError     string           `json:"capture_error,omitempty"`
+	CaptureWarnings  []string         `json:"capture_warnings,omitempty"`
 }
 
 // Session represents a saved capture session

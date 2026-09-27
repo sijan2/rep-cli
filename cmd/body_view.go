@@ -86,6 +86,9 @@ func bodyEvidence(req *store.Request, request bool) ([]byte, string, store.BodyC
 }
 
 func renderCapturedBody(cmd *cobra.Command, req *store.Request) error {
+	if store.IsStreamKind(req.RecordKind) {
+		return fmt.Errorf("%s stream evidence is available through rep stream %s; use the same --saved archive selector", req.RecordKind, req.ID)
+	}
 	flags := bodyView
 	if flags.Offset < 0 || bodyHead < 0 || flags.MaxBytes < 1024 || flags.RecordOffset < 0 || flags.Records < 1 {
 		return fmt.Errorf("offset/head/record-offset must be nonnegative, records positive, and max-bytes at least 1024")
@@ -189,6 +192,10 @@ func bodyArtifactExtension(contentType, format string, binary bool) string {
 }
 
 func writeBodyView(cmd *cobra.Command, out map[string]interface{}, body []byte, binary bool, budget int) error {
+	return writePayloadView(cmd, out, body, binary, budget, "body", bodySaved)
+}
+
+func writePayloadView(cmd *cobra.Command, out map[string]interface{}, body []byte, binary bool, budget int, operation, saved string) error {
 	baseOffset, _ := out["offset"].(int)
 	selectedBytes, hasSelectedBytes := out["selected_bytes"].(int)
 	originalSelection, hasSelection := out["selection"].(bodyview.Selection)
@@ -217,10 +224,10 @@ func writeBodyView(cmd *cobra.Command, out map[string]interface{}, body []byte, 
 		var payload interface{} = out
 		if forceEnvelope && !rawJSON {
 			source := "live-or-saved"
-			if bodySaved != "" {
+			if saved != "" {
 				source = "saved"
 			}
-			payload = output.WrapData("body", source, out)
+			payload = output.WrapData(operation, source, out)
 		}
 		value, err := json.Marshal(payload)
 		return append(value, '\n'), err
@@ -241,10 +248,29 @@ func writeBodyView(cmd *cobra.Command, out map[string]interface{}, body []byte, 
 		if body == nil {
 			return fmt.Errorf("body metadata exceeds --max-bytes; increase the budget")
 		}
+		// Only complete text prefixes have monotonic JSON sizes. Encoding a
+		// split rune inserts replacement characters and can reject a prefix
+		// that would fit intact. The candidate list is output-budget bounded.
+		var boundaries []int
+		if !binary {
+			boundaries = make([]int, 1, inlineLimit+1)
+			for end := 0; end < inlineLimit; {
+				_, size := utf8.DecodeRune(body[end:inlineLimit])
+				end += size
+				boundaries = append(boundaries, end)
+			}
+		}
 		low, high := 0, inlineLimit
+		if boundaries != nil {
+			high = len(boundaries) - 1
+		}
 		for low < high {
 			mid := (low + high + 1) / 2
-			candidate, err := encode(mid)
+			count := mid
+			if boundaries != nil {
+				count = boundaries[mid]
+			}
+			candidate, err := encode(count)
 			if err != nil {
 				return err
 			}
@@ -254,10 +280,8 @@ func writeBodyView(cmd *cobra.Command, out map[string]interface{}, body []byte, 
 				high = mid - 1
 			}
 		}
-		if !binary {
-			for low > 0 && low < len(body) && !utf8.RuneStart(body[low]) {
-				low--
-			}
+		if boundaries != nil {
+			low = boundaries[low]
 		}
 		value, err = encode(low)
 		if err != nil {
@@ -265,6 +289,9 @@ func writeBodyView(cmd *cobra.Command, out map[string]interface{}, body []byte, 
 		}
 		if len(value) > budget {
 			return fmt.Errorf("body metadata exceeds --max-bytes; increase the budget")
+		}
+		if low == 0 && len(body) > 0 {
+			return fmt.Errorf("%s metadata leaves no payload space within --max-bytes; increase the budget", operation)
 		}
 	}
 	// JSON for every mode gives agents one loss/completeness contract, including

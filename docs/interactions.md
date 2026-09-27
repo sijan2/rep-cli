@@ -3,7 +3,8 @@
 `rep browser interact` is Rep's typed browser interaction primitive.
 `rep jev act` remains a compatibility entrypoint for the same runtime. Both operate on an existing owned tab through
 the normal browser bridge; the runtime is embedded in the CLI binary. No extra
-bot, extension reload, or page-specific script installation is needed.
+bot or page-specific script installation is needed. Install matching CLI, host,
+and extension versions once; the runtime then persists across CLI invocations.
 
 ```sh
 rep --workspace my-project --task my-task browser interact interaction.json \
@@ -56,8 +57,13 @@ postcondition wait from 1 to 30000 ms; omitted/zero defaults to 10000 ms.
 Targets use an exact accessible `name`, optional `role`, or a supplied CSS
 `selector`. A selector plus name/role means all constraints must match. The
 runtime resolves fresh elements for every step and rejects missing or ambiguous
-matches. It supports the top document and open shadow roots, with bounded DOM
-traversal. It does not guess missing/virtualized controls or cross frame contexts.
+matches. It supports open shadow roots and explicit same-process or out-of-process
+frames, with bounded traversal. Add `frame_id` to a target and optional exact
+`frame_url`; a semantic goal can use a unique `frame_url` alone. Frame/session and
+document identity survive selection, resolution, action guards, and outcome
+checks. Unscoped target conditions follow the action frame; supply an explicit
+`frame_id` to check a different frame, including the root. URL conditions check
+the root document. Missing/virtualized controls are not guessed.
 
 Repeated labels need a scope. `text_selector` identifies the stable label inside
 each possible scope, avoiding a match against changing button/feedback text:
@@ -83,6 +89,14 @@ result with complete coverage and adequate confidence. `needs_review`,
 model request or Jev credentials. Goal selections retain the existing cache;
 `--no-cache` bypasses it. No values, code, or postconditions are model-generated.
 
+Consecutive independent semantic steps can use the same explicit `batch` string.
+Their goals share one observation and packed provider requests. Each target is
+still checked before its step; dependency changes caused by earlier edits
+invalidate later bindings and trigger reselection. Do not mark dependent steps
+as independent. An optional `root_backend_dom_node_id` with a frame restricts
+a goal to a known subtree while retaining its contextual evidence. See
+[the decision runtime](decision-runtime.md) for scope and reuse contracts.
+
 ## Actions and evidence
 
 | Action | Explicit payload | Verification |
@@ -101,8 +115,9 @@ preserved unless the plan explicitly permits replacement. `replace` requires
 exactly one matching source substring. Other editor implementations and custom
 widgets need a supported adapter; unknown controls stop rather than pretending
 the edit worked. Native clicks are DOM clicks; keyboard input uses CDP events.
-The runtime does not claim trusted mouse input, occlusion detection, or universal
-framework compatibility.
+The runtime checks target geometry and occlusion, including ancestor iframes,
+before dispatch. It does not claim trusted mouse input or universal framework
+compatibility. Unsupported iframe transforms fail explicitly.
 
 Keys: `Enter`, `Tab`, `Escape`, `Space`, arrow keys, `Backspace`, `Delete`,
 `Home`, and `End`. A single step can express a keyboard-accessible block movement:
@@ -116,6 +131,10 @@ Conditions use deterministic targets, never repeated model calls. A condition
 that is already true cannot confirm a new click or changed input: the runtime
 rejects it before dispatch. Use explicit `skip_if` conditions for work that is
 already complete. A skipped step does not advance the expected page URL.
+For a semantic target whose action frame is not yet known, default-frame
+element skip conditions are checked after binding that frame. Explicitly scoped
+conditions can be checked earlier. Existing cross-frame success conditions
+cannot certify a new action; they are checked before dispatch too.
 
 For navigation, require both the expected URL and the next page's real content:
 
@@ -134,9 +153,11 @@ For navigation, require both the expected URL and the next page's real content:
 Observers wait on mutations, with a 100 ms fallback for property changes. Full
 navigation may destroy an observer; only the read-only observation is retried in
 the new document. There is no fixed network-idle delay per action and no new
-CLI process per field. The runtime acquires one debugger attachment and releases
-it on success and failure. It rejects a tab that is already attached, preserving
-its existing owner. Do not run simultaneous interactions against one tab.
+CLI process per field. The runtime acquires an exclusive execution lease on
+the persistent extension-owned session and releases that lease on exit.
+Read-only observers and existing captures retain their ownership. Concurrent
+executors cannot mutate the same tab. Reconnect and navigation invalidate stale
+bindings. Observers are armed before dispatch so immediate outcomes can be seen.
 
 Reports separate `input_readback`, `postcondition`, and `skip_condition` evidence.
 Input read-back proves entry, not application acceptance or durable server
@@ -174,3 +195,9 @@ navigation. It needs a running Arc bridge and configured Jev credentials.
 private report path (default `/tmp/rep-interaction-verification.json`). Timings
 and bridge call counts are measured, not assumed. The ACE fixture uses its public
 API shape; it does not certify every ACE version or other editors.
+
+The additional `scripts/verify_decision_runtime.py` harness owns a private
+Chromium profile and local multi-origin fixtures. It checks nested frame routing,
+ancestor occlusion, shadow controls, dynamic replacement, and independent
+readbacks. `--with-jev` adds pinned-model auto/legacy selection comparisons. Run
+its `--help` for build paths and report options.

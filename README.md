@@ -6,10 +6,12 @@ profile, capture its network traffic with response bodies, and inspect or replay
 requests. The CLI reaches the extension through a native-messaging host
 (`rep-host`), and captures stay on your machine.
 
-- **Capture**: open pages or run page actions; requests and bodies are archived per task.
-- **Inspect**: `summary`, `context`, `list`, `search`, and `body` return compact, filterable views.
+- **Capture**: open pages or run page actions; archive HTTP bodies, WebSocket messages and opt-in WebTransport/WebRTC data-channel payloads per task. See [transport capture](docs/transport-capture.md).
+- **Packets and media**: collect filtered packets through native libpcap, or launch private Chromium diagnostics for TLS/QUIC keys and original WebRTC RTP. Track recordings remain available separately. See [native capture](docs/native-capture.md).
+- **Inspect**: `summary`, `context`, `list`, `search`, `body`, and `stream` return bounded views with capture status.
 - **Act**: replay or mutate captured requests, or run verified UI steps with `browser interact`.
 - **Isolate**: each agent works in its own workspace/task, so captured data never mixes.
+- **Record**: opt into an explicit run journal with `--run`; retain failed/unknown operations, saved artifacts and native diagnostic files.
 
 ## Install
 
@@ -58,6 +60,22 @@ Optional:
 - `rep jev config --env-file /path/to/.env` enables [Jev](docs/jev.md) element lookup
   (`browser select`) and traffic classification. Needs a TypeSafe API key.
 
+For durable workflow evidence:
+
+```sh
+rep evidence begin --intent 'Inspect local fixture' --stop 'Save observations'
+rep --run RUN_ID browser screenshot --tab TAB_ID --raw-json
+rep evidence operations RUN_ID --limit 10
+rep evidence import RUN_ID trace.bin --manifest collection.json
+```
+
+Runs link explicit browser operations and artifacts. Native diagnostic imports
+preserve bytes and declared collector metadata; they do not start live platform
+tracing. Network capture remains serialized against page/semantic execution on
+the same tab. See [run evidence](docs/evidence.md) for the supported commands and
+[architecture](docs/architecture.md) for protocol coverage, limits and measured
+local lookup/durability costs.
+
 ## Docs
 
 [Workspaces and context](docs/agent-context.md) ·
@@ -65,6 +83,8 @@ Optional:
 [Interactions](docs/interactions.md) ·
 [Headless](docs/headless.md) ·
 [Jev](docs/jev.md) ·
+[Decision runtime](docs/decision-runtime.md) ·
+[Run evidence](docs/evidence.md) ·
 [Architecture](docs/architecture.md) ·
 [Arc control](docs/arc-browser-control.md) ·
 [Android](docs/android-skills.md)

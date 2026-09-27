@@ -212,6 +212,7 @@ func TestSecretsEditableValuesAndHiddenDisabledNodesNeverBecomeCandidates(t *tes
 
 func TestMoreThan255CandidatesUsesBoundedGroupsAndOneCrossGroupDecision(t *testing.T) {
 	opt := options()
+	opt.Strategy = "legacy"
 	opt.Limit = 480
 	evaluator := &fakeEvaluator{target: "Item 310"}
 	result, err := (Selector{Browser: browserFor(page(321)), Evaluator: evaluator}).Select(context.Background(), opt)
@@ -248,7 +249,9 @@ func TestGroupUncertaintyCannotBeHiddenByConfidentFinalResult(t *testing.T) {
 		}
 		return choice, 1
 	}}
-	result, err := (Selector{Browser: browserFor(page(41)), Evaluator: evaluator}).Select(context.Background(), options())
+	opt := options()
+	opt.Strategy = "legacy"
+	result, err := (Selector{Browser: browserFor(page(41)), Evaluator: evaluator}).Select(context.Background(), opt)
 	if err != nil || result.Status != "needs_review" || result.Confidence != 1 {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
@@ -386,10 +389,10 @@ func TestCacheReusesOnlyVerifiedSnapshotsWithoutPersistingPageText(t *testing.T)
 	}
 	changed := page(2)
 	changed.frames[0].loader = "new-loader"
-	selector.Browser = browserFor(page(2), changed)
-	stale, err := selector.Select(context.Background(), options())
-	if err != nil || stale.Status != "stale" || !stale.CacheHit || stale.Selected != nil {
-		t.Fatalf("result=%+v err=%v", stale, err)
+	selector.Browser = browserFor(changed)
+	fresh, err := selector.Select(context.Background(), options())
+	if err != nil || fresh.Status != "selected" || fresh.CacheHit || fresh.Binding.Generation == first.Binding.Generation {
+		t.Fatalf("changed document reused cached observation: result=%+v err=%v", fresh, err)
 	}
 }
 
@@ -473,8 +476,8 @@ func TestQuestionDescriptionsContainOnlyMinimizedDataAndFitConservativeBudget(t 
 	call := evaluator.calls[0]
 	state, _ := json.Marshal(call.state)
 	question, _ := json.Marshal(call.questions["selection"])
-	if len(state)+len(question) > 24*1024 {
-		t.Fatalf("contextbytes=%d", len(state)+len(question))
+	if estimated := jev.EstimateTokens(state) + jev.EstimateTokens(question); estimated > jev.MaxQuestionContextTokens {
+		t.Fatalf("estimated context tokens=%d", estimated)
 	}
 	var parsed map[string]any
 	_ = json.Unmarshal(state, &parsed)

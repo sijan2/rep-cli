@@ -31,11 +31,17 @@ type requestRef struct {
 }
 
 type accumulator struct {
-	group      Group
-	statuses   map[string]int
-	types      map[string]int
-	bodyStates map[string]int
-	requests   []requestRef
+	group                  Group
+	statuses               map[string]int
+	types                  map[string]int
+	bodyStates             map[string]int
+	protocols              map[string]int
+	streamStates           map[string]int
+	streamCaptureStates    map[string]int
+	streamSources          map[string]int
+	streamScopes           map[string]int
+	streamPayloadSemantics map[string]int
+	requests               []requestRef
 }
 
 func aggregateRequests(requests []store.Request) ([]aggregate, int) {
@@ -44,13 +50,22 @@ func aggregateRequests(requests []store.Request) ([]aggregate, int) {
 	for i := range requests {
 		req := &requests[i]
 		method := normalizedMethod(req.Method)
+		kind := ""
+		if store.IsStreamKind(req.RecordKind) {
+			kind, method = req.RecordKind, ""
+		}
 		origin, host, route := normalizedURL(req.URL)
 		key := method + "\x00" + origin + "\x00" + route
+		if kind != "" {
+			key = kind + "\x00" + key
+		}
 		group, exists := groups[key]
 		if !exists {
 			group = &accumulator{
-				group:    Group{ID: "g1_" + digestString(key)[:32], Method: method, Host: host, Origin: origin, Route: route, IDs: []string{}},
+				group:    Group{ID: "g1_" + digestString(key)[:32], RecordKind: kind, Method: method, Host: host, Origin: origin, Route: route, IDs: []string{}},
 				statuses: map[string]int{}, types: map[string]int{}, bodyStates: map[string]int{},
+				protocols: map[string]int{}, streamStates: map[string]int{}, streamCaptureStates: map[string]int{},
+				streamSources: map[string]int{}, streamScopes: map[string]int{}, streamPayloadSemantics: map[string]int{},
 			}
 			groups[key] = group
 		}
@@ -60,6 +75,9 @@ func aggregateRequests(requests []store.Request) ([]aggregate, int) {
 			group.group.Latest = req.Timestamp
 		}
 		status := "pending"
+		if kind != "" {
+			status = "not_observed"
+		}
 		if req.Response != nil {
 			if req.Response.Status >= 100 && req.Response.Status <= 599 {
 				status = strconv.Itoa(req.Response.Status)
@@ -70,7 +88,9 @@ func aggregateRequests(requests []store.Request) ([]aggregate, int) {
 		group.statuses[status]++
 		group.types[normalizedType(req.ResourceType)]++
 		bodyState := "unknown"
-		if req.ResponseBodyCapture != nil {
+		if kind != "" {
+			bodyState = "not_applicable"
+		} else if req.ResponseBodyCapture != nil {
 			bodyState = req.ResponseBodyCapture.State
 		} else if req.ResponseBodyTruncated {
 			bodyState = "partial"
@@ -83,6 +103,44 @@ func aggregateRequests(requests []store.Request) ([]aggregate, int) {
 			bodyState = "unknown"
 		}
 		group.bodyStates[bodyState]++
+		if kind == "" && req.Response != nil && req.Response.Protocol != "" {
+			group.protocols[normalizedProtocol(req.Response.Protocol)]++
+		}
+		if kind != "" {
+			group.protocols[kind]++
+			state, coverage := "unknown", "unknown"
+			if req.Stream != nil {
+				switch req.Stream.State {
+				case "connecting", "open", "closed", "interrupted":
+					state = req.Stream.State
+				}
+				switch req.Stream.Capture.State {
+				case "complete", "partial", "unavailable", "pending":
+					coverage = req.Stream.Capture.State
+				}
+				group.group.StreamCapturedEvents += req.Stream.Capture.CapturedEvents
+				group.group.StreamObservedEvents += req.Stream.Capture.ObservedEvents
+				group.group.StreamDroppedEvents += req.Stream.Capture.DroppedEvents
+				group.group.StreamCapturedBytes += req.Stream.Capture.CapturedBytes
+				if req.Stream.Source != "" {
+					group.streamSources[normalizedStreamLabel(req.Stream.Source, "source")]++
+				}
+				if req.Stream.Capture.Scope != "" {
+					group.streamScopes[normalizedStreamLabel(req.Stream.Capture.Scope, "scope")]++
+				}
+				if req.Stream.PayloadSemantics != "" {
+					group.streamPayloadSemantics[normalizedStreamLabel(req.Stream.PayloadSemantics, "payload")]++
+				}
+				if len(req.Stream.Capture.Limitations) > 0 {
+					group.group.StreamWithLimitations++
+				}
+				if len(req.Stream.Metadata) > 0 {
+					group.group.StreamMetadataOmitted++
+				}
+			}
+			group.streamStates[state]++
+			group.streamCaptureStates[coverage]++
+		}
 
 		// Hash the original capture locally, including response content. This
 		// detects a response arriving later under the same request ID and time.
@@ -102,6 +160,12 @@ func aggregateRequests(requests []store.Request) ([]aggregate, int) {
 		group.group.Statuses = sortedCounts(group.statuses)
 		group.group.Types = sortedCounts(group.types)
 		group.group.BodyStates = sortedCounts(group.bodyStates)
+		group.group.Protocols = sortedCounts(group.protocols)
+		group.group.StreamStates = sortedCounts(group.streamStates)
+		group.group.StreamCaptureStates = sortedCounts(group.streamCaptureStates)
+		group.group.StreamSources = sortedCounts(group.streamSources)
+		group.group.StreamScopes = sortedCounts(group.streamScopes)
+		group.group.StreamPayloadSemantics = sortedCounts(group.streamPayloadSemantics)
 		group.group.IDs, group.group.OtherIDs = representatives(group.requests)
 		sort.Slice(group.requests, func(i, j int) bool { return group.requests[i].digest < group.requests[j].digest })
 		hash := sha256.New()
@@ -116,6 +180,37 @@ func aggregateRequests(requests []store.Request) ([]aggregate, int) {
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].group.ID < result[j].group.ID })
 	return result, len(hosts)
+}
+
+func normalizedProtocol(value string) string {
+	switch strings.ToLower(value) {
+	case "http/0.9", "http/1.0", "http/1.1", "h2", "h3", "websocket", "webtransport", "webrtc", "webrtc_media":
+		return strings.ToLower(value)
+	default:
+		return "other"
+	}
+}
+
+// Collector labels are a small vocabulary, not arbitrary page metadata.
+func normalizedStreamLabel(value, kind string) string {
+	switch kind {
+	case "source":
+		switch value {
+		case "cdp", "cdp_lifecycle", "page_api", "browser_media_recorder":
+			return value
+		}
+	case "scope":
+		switch value {
+		case "instrumented_api_calls", "browser_exposed_messages", "connection_lifecycle", "lifecycle", "recorded_media_interval":
+			return value
+		}
+	case "payload":
+		switch value {
+		case "application_messages", "application_chunks", "unavailable", "reencoded_media":
+			return value
+		}
+	}
+	return "other"
 }
 
 func representatives(requests []requestRef) ([]string, int) {
@@ -186,7 +281,7 @@ func normalizedMethod(method string) string {
 
 func normalizedType(value string) string {
 	switch strings.ToLower(value) {
-	case "main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "xhr", "fetch", "ping", "csp_report", "media", "websocket", "webtransport", "webbundle", "document", "manifest":
+	case "main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object", "xmlhttprequest", "xhr", "fetch", "ping", "csp_report", "media", "websocket", "webtransport", "webrtc", "webrtc_media", "webbundle", "document", "manifest":
 		return strings.ToLower(value)
 	default:
 		return "other"

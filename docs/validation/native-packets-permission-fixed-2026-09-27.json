@@ -1,0 +1,554 @@
+{
+  "schema": 1,
+  "passed": true,
+  "started_at": "2026-09-27T17:50:58Z",
+  "harness_sha256": "39ae59c3b79a280a73ec1777751cca64aa653f5304d4e377f1438baceb8062e1",
+  "fixture_sha256": "7b1fdcff0fa3ed98b5477de43de9a8a9c2cdbc1ac46b6d13cbb9042c1576b686",
+  "limits": "Synthetic local media is reencoded by Chromium MediaRecorder; it does not reproduce original codecs, encrypted RTP packets, or every source frame. Constructed offline PCAP and any live loopback capture are reported separately.",
+  "extension_js_sha256": "be89c452ec5596ed119e70711258c1c2940705e0460f13f3d38b3c963c1aa485",
+  "task": "native-capture-verify-20260927-1956bcc261",
+  "cli_sha256": "e8da5d97bff78a155089472eb46cb86378cba506b832d6ac71e88d893a8b1f86",
+  "host_sha256": "08183c906724df9d15de6cfead73a2db7ce3ce4429a52e3b3588d8418d88b5b0",
+  "run_id": "run_e164fde07e8471f2133d80cd95e80636",
+  "packets": {
+    "loopback_interface": {
+      "name": "lo0",
+      "loopback": true,
+      "up": true,
+      "running": true
+    },
+    "offline": [
+      {
+        "source": "constructed PCAP, not a live wire capture",
+        "packets": 4,
+        "variant": "little-microseconds",
+        "ports": [
+          56901,
+          58967
+        ],
+        "payloads": [
+          {
+            "bytes": 92,
+            "sha256": "85c8d51242d7b7da60fd13a83a829b757320ecef88bfd690eac7081b24e9715f"
+          },
+          {
+            "bytes": 92,
+            "sha256": "76adf0fba86dc06baeef0d7402af2e57a8d5d0a5b40df46cdb5394bd2af34725"
+          },
+          {
+            "bytes": 92,
+            "sha256": "cad8c05a5faa766172b6189719e4fbcd09344c8a15d0ea27b46e20ca83bd0787"
+          },
+          {
+            "bytes": 92,
+            "sha256": "861435ae60a7983698750f33ac53f4dcadf8d9857a318baef4d3c372529710d6"
+          }
+        ],
+        "bytes": 584,
+        "sha256": "be4909fa07151f70fa98ce9010c5ac8648bff507bc501cebf00daba29d87d48a",
+        "pages": 2,
+        "inspected": [
+          {
+            "offset": 24,
+            "next_offset": 164,
+            "timestamp": "2023-11-14T22:13:20.123456Z",
+            "captured_length": 124,
+            "original_length": 124,
+            "truncated": false,
+            "network": "ipv4",
+            "source_ip": "127.0.0.1",
+            "destination_ip": "127.0.0.1",
+            "transport": "udp",
+            "udp": {
+              "source_port": 56901,
+              "destination_port": 58967,
+              "length": 100,
+              "captured_payload_bytes": 92
+            },
+            "candidates": [
+              {
+                "kind": "rtp_v2_header_candidate",
+                "basis": "version and header shape only; RTP, SRTP, RTCP, and application bytes are not identified",
+                "verified": false
+              }
+            ]
+          },
+          {
+            "offset": 164,
+            "next_offset": 304,
+            "timestamp": "2023-11-14T22:13:21.123456Z",
+            "captured_length": 124,
+            "original_length": 124,
+            "truncated": false,
+            "network": "ipv4",
+            "source_ip": "127.0.0.1",
+            "destination_ip": "127.0.0.1",
+            "transport": "udp",
+            "udp": {
+              "source_port": 56901,
+              "destination_port": 58967,
+              "length": 100,
+              "captured_payload_bytes": 92
+            },
+            "candidates": [
+              {
+                "kind": "rtp_v2_header_candidate",
+                "basis": "version and header shape only; RTP, SRTP, RTCP, and application bytes are not identified",
+                "verified": false
+              }
+            ]
+          },
+          {
+            "offset": 304,
+            "next_offset": 444,
+            "timestamp": "2023-11-14T22:13:22.123456Z",
+            "captured_length": 124,
+            "original_length": 124,
+            "truncated": false,
+            "network": "ipv4",
+            "source_ip": "127.0.0.1",
+            "destination_ip": "127.0.0.1",
+            "transport": "udp",
+            "udp": {
+              "source_port": 56901,
+              "destination_port": 58967,
+              "length": 100,
+              "captured_payload_bytes": 92
+            },
+            "candidates": [
+              {
+                "kind": "rtp_v2_header_candidate",
+                "basis": "version and header shape only; RTP, SRTP, RTCP, and application bytes are not identified",
+                "verified": false
+              }
+            ]
+          },
+          {
+            "offset": 444,
+            "next_offset": 584,
+            "timestamp": "2023-11-14T22:13:23.123456Z",
+            "captured_length": 124,
+            "original_length": 124,
+            "truncated": false,
+            "network": "ipv4",
+            "source_ip": "127.0.0.1",
+            "destination_ip": "127.0.0.1",
+            "transport": "udp",
+            "udp": {
+              "source_port": 56901,
+              "destination_port": 58967,
+              "length": 100,
+              "captured_payload_bytes": 92
+            },
+            "candidates": [
+              {
+                "kind": "rtp_v2_header_candidate",
+                "basis": "version and header shape only; RTP, SRTP, RTCP, and application bytes are not identified",
+                "verified": false
+              }
+            ]
+          }
+        ],
+        "final_offset": 584
+      },
+      {
+        "source": "constructed PCAP, not a live wire capture",
+        "packets": 4,
+        "variant": "big-nanoseconds",
+        "ports": [
+          56901,
+          58967
+        ],
+        "payloads": [
+          {
+            "bytes": 92,
+            "sha256": "85c8d51242d7b7da60fd13a83a829b757320ecef88bfd690eac7081b24e9715f"
+          },
+          {
+            "bytes": 92,
+            "sha256": "76adf0fba86dc06baeef0d7402af2e57a8d5d0a5b40df46cdb5394bd2af34725"
+          },
+          {
+            "bytes": 92,
+            "sha256": "cad8c05a5faa766172b6189719e4fbcd09344c8a15d0ea27b46e20ca83bd0787"
+          },
+          {
+            "bytes": 92,
+            "sha256": "861435ae60a7983698750f33ac53f4dcadf8d9857a318baef4d3c372529710d6"
+          }
+        ],
+        "bytes": 584,
+        "sha256": "1209f185bbb4ca0f12e6d34b89a8b52cb24f3ea28485531b0f91c2cce4dfdac9",
+        "pages": 2,
+        "inspected": [
+          {
+            "offset": 24,
+            "next_offset": 164,
+            "timestamp": "2023-11-14T22:13:20.123456Z",
+            "captured_length": 124,
+            "original_length": 124,
+            "truncated": false,
+            "network": "ipv4",
+            "source_ip": "127.0.0.1",
+            "destination_ip": "127.0.0.1",
+            "transport": "udp",
+            "udp": {
+              "source_port": 56901,
+              "destination_port": 58967,
+              "length": 100,
+              "captured_payload_bytes": 92
+            },
+            "candidates": [
+              {
+                "kind": "rtp_v2_header_candidate",
+                "basis": "version and header shape only; RTP, SRTP, RTCP, and application bytes are not identified",
+                "verified": false
+              }
+            ]
+          },
+          {
+            "offset": 164,
+            "next_offset": 304,
+            "timestamp": "2023-11-14T22:13:21.123456Z",
+            "captured_length": 124,
+            "original_length": 124,
+            "truncated": false,
+            "network": "ipv4",
+            "source_ip": "127.0.0.1",
+            "destination_ip": "127.0.0.1",
+            "transport": "udp",
+            "udp": {
+              "source_port": 56901,
+              "destination_port": 58967,
+              "length": 100,
+              "captured_payload_bytes": 92
+            },
+            "candidates": [
+              {
+                "kind": "rtp_v2_header_candidate",
+                "basis": "version and header shape only; RTP, SRTP, RTCP, and application bytes are not identified",
+                "verified": false
+              }
+            ]
+          },
+          {
+            "offset": 304,
+            "next_offset": 444,
+            "timestamp": "2023-11-14T22:13:22.123456Z",
+            "captured_length": 124,
+            "original_length": 124,
+            "truncated": false,
+            "network": "ipv4",
+            "source_ip": "127.0.0.1",
+            "destination_ip": "127.0.0.1",
+            "transport": "udp",
+            "udp": {
+              "source_port": 56901,
+              "destination_port": 58967,
+              "length": 100,
+              "captured_payload_bytes": 92
+            },
+            "candidates": [
+              {
+                "kind": "rtp_v2_header_candidate",
+                "basis": "version and header shape only; RTP, SRTP, RTCP, and application bytes are not identified",
+                "verified": false
+              }
+            ]
+          },
+          {
+            "offset": 444,
+            "next_offset": 584,
+            "timestamp": "2023-11-14T22:13:23.123456Z",
+            "captured_length": 124,
+            "original_length": 124,
+            "truncated": false,
+            "network": "ipv4",
+            "source_ip": "127.0.0.1",
+            "destination_ip": "127.0.0.1",
+            "transport": "udp",
+            "udp": {
+              "source_port": 56901,
+              "destination_port": 58967,
+              "length": 100,
+              "captured_payload_bytes": 92
+            },
+            "candidates": [
+              {
+                "kind": "rtp_v2_header_candidate",
+                "basis": "version and header shape only; RTP, SRTP, RTCP, and application bytes are not identified",
+                "verified": false
+              }
+            ]
+          }
+        ],
+        "final_offset": 584
+      }
+    ],
+    "live": {
+      "capture": {
+        "version": 1,
+        "collector": "rep-libpcap",
+        "backend_version": "libpcap version 1.10.1",
+        "interface": "lo0",
+        "filter": "udp and host 127.0.0.1 and (port 56901 or port 58967)",
+        "promiscuous": false,
+        "status": "completed",
+        "stop_reason": "duration_limit",
+        "started_at": "2026-09-27T17:50:58.302188Z",
+        "stopped_at": "2026-09-27T17:51:00.309072Z",
+        "observation_started_at": "2026-09-27T17:50:58.307583Z",
+        "duration_ms": 2006,
+        "limits": {
+          "duration_ms": 2000,
+          "max_packets": 100,
+          "max_bytes": 1048576,
+          "snaplen": 65535,
+          "buffer_bytes": 1048576
+        },
+        "datalink": {
+          "id": 0,
+          "name": "NULL"
+        },
+        "packets": 4,
+        "captured_bytes": 496,
+        "original_bytes": 496,
+        "truncated_packets": 0,
+        "stats": {
+          "available": true,
+          "received": 4,
+          "dropped": 0,
+          "interface_dropped": 0,
+          "interpretation": "libpcap ps_recv may include unfiltered or unread packets depending on platform; zero ps_drop may mean unsupported; zero ps_ifdrop does not prove no interface drops. Counters are not transmitted totals."
+        },
+        "coverage": {
+          "state": "unknown",
+          "scope": "filtered_interface_observation",
+          "reasons": [
+            "wire_completeness_not_established"
+          ],
+          "limitations": [
+            "filter_and_interface_define_observation_scope",
+            "os_capture_point_can_reflect_offloads_and_link_header_transformations",
+            "zero_reported_drops_do_not_establish_wire_completeness",
+            "encrypted_bytes_remain_encrypted_no_decryption",
+            "packet_timestamps_are_host_capture_timestamps"
+          ]
+        },
+        "artifact": {
+          "path": "/tmp/rep-native-capture-uo8srcx8/loopback-live.pcap",
+          "metadata_path": "/tmp/rep-native-capture-uo8srcx8/loopback-live.metadata.json",
+          "sha256": "7db847fbb1bc4dca9f11fde4f71e6bb1b7a69b14db453130aebd288462172962",
+          "bytes": 584,
+          "pcap_valid": true
+        }
+      },
+      "exit_code": 0,
+      "sent": [
+        {
+          "bytes": 92,
+          "sha256": "85c8d51242d7b7da60fd13a83a829b757320ecef88bfd690eac7081b24e9715f"
+        },
+        {
+          "bytes": 92,
+          "sha256": "76adf0fba86dc06baeef0d7402af2e57a8d5d0a5b40df46cdb5394bd2af34725"
+        },
+        {
+          "bytes": 92,
+          "sha256": "cad8c05a5faa766172b6189719e4fbcd09344c8a15d0ea27b46e20ca83bd0787"
+        },
+        {
+          "bytes": 92,
+          "sha256": "861435ae60a7983698750f33ac53f4dcadf8d9857a318baef4d3c372529710d6"
+        }
+      ],
+      "received": [
+        {
+          "bytes": 92,
+          "sha256": "85c8d51242d7b7da60fd13a83a829b757320ecef88bfd690eac7081b24e9715f"
+        },
+        {
+          "bytes": 92,
+          "sha256": "76adf0fba86dc06baeef0d7402af2e57a8d5d0a5b40df46cdb5394bd2af34725"
+        },
+        {
+          "bytes": 92,
+          "sha256": "cad8c05a5faa766172b6189719e4fbcd09344c8a15d0ea27b46e20ca83bd0787"
+        },
+        {
+          "bytes": 92,
+          "sha256": "861435ae60a7983698750f33ac53f4dcadf8d9857a318baef4d3c372529710d6"
+        }
+      ],
+      "sender_errors": [],
+      "command_seconds": 2.120272167,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": {
+        "run_id": "run_e164fde07e8471f2133d80cd95e80636",
+        "operation_id": "op_c992b967f52bc0d2a5b2f71fc18c0e93",
+        "completion_id": "op_ae56821368b20f279c13f49d2f1e8530",
+        "artifact_ids": [
+          "art_4c5cb68e9c464fb0510910017e42e04c",
+          "art_d2109336d127318ba224576e9465d3db"
+        ]
+      },
+      "evidence_operation": {
+        "version": 1,
+        "id": "op_ae56821368b20f279c13f49d2f1e8530",
+        "run_id": "run_e164fde07e8471f2133d80cd95e80636",
+        "parent_id": "op_c992b967f52bc0d2a5b2f71fc18c0e93",
+        "sequence": 2,
+        "kind": "packets.capture",
+        "phase": "finished",
+        "status": "completed",
+        "recorded_at": "2026-09-27T17:51:00.381315Z",
+        "started_at": "2026-09-27T17:50:58.286168Z",
+        "finished_at": "2026-09-27T17:51:00.38113Z",
+        "result": {
+          "version": 1,
+          "collector": "rep-libpcap",
+          "backend_version": "libpcap version 1.10.1",
+          "interface": "lo0",
+          "filter": "udp and host 127.0.0.1 and (port 56901 or port 58967)",
+          "promiscuous": false,
+          "status": "completed",
+          "stop_reason": "duration_limit",
+          "started_at": "2026-09-27T17:50:58.302188Z",
+          "stopped_at": "2026-09-27T17:51:00.309072Z",
+          "observation_started_at": "2026-09-27T17:50:58.307583Z",
+          "duration_ms": 2006,
+          "limits": {
+            "duration_ms": 2000,
+            "max_packets": 100,
+            "max_bytes": 1048576,
+            "snaplen": 65535,
+            "buffer_bytes": 1048576
+          },
+          "datalink": {
+            "id": 0,
+            "name": "NULL"
+          },
+          "packets": 4,
+          "captured_bytes": 496,
+          "original_bytes": 496,
+          "truncated_packets": 0,
+          "stats": {
+            "available": true,
+            "received": 4,
+            "dropped": 0,
+            "interface_dropped": 0,
+            "interpretation": "libpcap ps_recv may include unfiltered or unread packets depending on platform; zero ps_drop may mean unsupported; zero ps_ifdrop does not prove no interface drops. Counters are not transmitted totals."
+          },
+          "coverage": {
+            "state": "unknown",
+            "scope": "filtered_interface_observation",
+            "reasons": [
+              "wire_completeness_not_established"
+            ],
+            "limitations": [
+              "filter_and_interface_define_observation_scope",
+              "os_capture_point_can_reflect_offloads_and_link_header_transformations",
+              "zero_reported_drops_do_not_establish_wire_completeness",
+              "encrypted_bytes_remain_encrypted_no_decryption",
+              "packet_timestamps_are_host_capture_timestamps"
+            ]
+          },
+          "artifact": {
+            "path": "/tmp/rep-native-capture-uo8srcx8/loopback-live.pcap",
+            "metadata_path": "/tmp/rep-native-capture-uo8srcx8/loopback-live.metadata.json",
+            "sha256": "7db847fbb1bc4dca9f11fde4f71e6bb1b7a69b14db453130aebd288462172962",
+            "bytes": 584,
+            "pcap_valid": true
+          }
+        },
+        "artifact_ids": [
+          "art_4c5cb68e9c464fb0510910017e42e04c",
+          "art_d2109336d127318ba224576e9465d3db"
+        ],
+        "verification": "unverified"
+      },
+      "evidence_artifacts": [
+        {
+          "version": 1,
+          "id": "art_4c5cb68e9c464fb0510910017e42e04c",
+          "run_id": "run_e164fde07e8471f2133d80cd95e80636",
+          "sequence": 1,
+          "imported_at": "2026-09-27T17:51:00.339603Z",
+          "kind": "pcap",
+          "collector": "rep-libpcap",
+          "build": "0.1.0",
+          "trial": "op_c992b967f52bc0d2a5b2f71fc18c0e93",
+          "declared_coverage": {
+            "state": "unknown",
+            "reason": "wire_completeness_not_established"
+          },
+          "metadata": {
+            "capture_status": "completed",
+            "interface": "lo0",
+            "original_pcap_sha256": "7db847fbb1bc4dca9f11fde4f71e6bb1b7a69b14db453130aebd288462172962",
+            "pcap_valid": true,
+            "scope": "filtered_interface_observation",
+            "stop_reason": "duration_limit"
+          },
+          "source_name": "loopback-live.pcap",
+          "path": "evidence/v1/blobs/7db847fbb1bc4dca9f11fde4f71e6bb1b7a69b14db453130aebd288462172962",
+          "sha256": "7db847fbb1bc4dca9f11fde4f71e6bb1b7a69b14db453130aebd288462172962",
+          "size": 584
+        },
+        {
+          "version": 1,
+          "id": "art_d2109336d127318ba224576e9465d3db",
+          "run_id": "run_e164fde07e8471f2133d80cd95e80636",
+          "sequence": 2,
+          "imported_at": "2026-09-27T17:51:00.370647Z",
+          "kind": "pcap_metadata",
+          "collector": "rep-libpcap",
+          "build": "0.1.0",
+          "trial": "op_c992b967f52bc0d2a5b2f71fc18c0e93",
+          "declared_coverage": {
+            "state": "unknown",
+            "reason": "wire_completeness_not_established"
+          },
+          "metadata": {
+            "capture_status": "completed",
+            "interface": "lo0",
+            "original_pcap_sha256": "7db847fbb1bc4dca9f11fde4f71e6bb1b7a69b14db453130aebd288462172962",
+            "pcap_valid": true,
+            "scope": "filtered_interface_observation",
+            "stop_reason": "duration_limit"
+          },
+          "source_name": "loopback-live.metadata.json",
+          "path": "evidence/v1/blobs/ae7ff286070ce2dba7a5b764307bd3a4377adb4e9490694bce063583d7b80717",
+          "sha256": "ae7ff286070ce2dba7a5b764307bd3a4377adb4e9490694bce063583d7b80717",
+          "size": 1579
+        }
+      ],
+      "fixture_and_evidence_check_seconds": 2.189336667,
+      "state": "verified",
+      "packet_count": 4,
+      "duplicate_packets": 0,
+      "captured_payloads": [
+        {
+          "bytes": 92,
+          "sha256": "85c8d51242d7b7da60fd13a83a829b757320ecef88bfd690eac7081b24e9715f"
+        },
+        {
+          "bytes": 92,
+          "sha256": "76adf0fba86dc06baeef0d7402af2e57a8d5d0a5b40df46cdb5394bd2af34725"
+        },
+        {
+          "bytes": 92,
+          "sha256": "cad8c05a5faa766172b6189719e4fbcd09344c8a15d0ea27b46e20ca83bd0787"
+        },
+        {
+          "bytes": 92,
+          "sha256": "861435ae60a7983698750f33ac53f4dcadf8d9857a318baef4d3c372529710d6"
+        }
+      ]
+    }
+  },
+  "live_packet_capture_verified": true,
+  "owned_browser_started": false,
+  "test_data_retention": "Temporary task archives, browser profile, media artifacts and packet fixtures are removed; this report retains hashes and validation results."
+}

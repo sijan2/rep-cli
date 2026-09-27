@@ -6,14 +6,16 @@ import (
 
 	"github.com/repplus/rep-cli/internal/jev"
 	"github.com/repplus/rep-cli/internal/jevdom"
+	"github.com/repplus/rep-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
 type jevDOMDependencies struct {
-	loadConfig func() (jev.Config, error)
-	browser    func(context.Context, string) (jevdom.Browser, error)
-	evaluator  func(jev.Config) jevdom.Evaluator
-	cache      func() *jevdom.Cache
+	loadConfig  func() (jev.Config, error)
+	browser     func(context.Context, string) (jevdom.Browser, error)
+	evaluator   func(jev.Config) jevdom.Evaluator
+	cache       func() *jevdom.Cache
+	selectBatch func(context.Context, jevdom.Browser, jev.Config, []jevdom.Options) ([]jevdom.Result, error)
 }
 
 func defaultJevDOMDependencies() jevDOMDependencies {
@@ -22,12 +24,13 @@ func defaultJevDOMDependencies() jevDOMDependencies {
 		browser: func(ctx context.Context, name string) (jevdom.Browser, error) {
 			client, err := connectBrowser(ctx, name)
 			if err != nil {
-				return nil, errors.New("cannot connect to the selected browser bridge")
+				return nil, output.NewAgentError(output.ErrCodeBrowserUnavailable, "", "cannot connect to the selected browser bridge: "+err.Error(), "rep browser status", "rep browser tabs")
 			}
 			return client, nil
 		},
-		evaluator: func(config jev.Config) jevdom.Evaluator { return jev.NewClient(config) },
-		cache:     jevdom.DefaultCache,
+		evaluator:   func(config jev.Config) jevdom.Evaluator { return jev.NewClient(config) },
+		cache:       jevdom.DefaultCache,
+		selectBatch: hostSelectBatch,
 	}
 }
 
@@ -64,14 +67,17 @@ func newBrowserSelectCommand(dependencies jevDOMDependencies) *cobra.Command {
 			if err != nil {
 				return reportJevError(command, err)
 			}
-			selector := jevdom.Selector{Browser: browser, Evaluator: dependencies.evaluator(config)}
-			if !validated.NoCache {
-				selector.Cache = dependencies.cache()
+			if dependencies.selectBatch != nil {
+				validated.Owner, err = decisionOwner()
+				if err != nil {
+					return reportJevError(command, err)
+				}
 			}
-			result, err := selector.Select(ctx, validated)
+			results, err := runSelections(ctx, dependencies, browser, config, []jevdom.Options{validated})
 			if err != nil {
 				return reportJevError(command, err)
 			}
+			result := results[0]
 			commandName := "jev select"
 			if command.Parent() != nil && command.Parent().Name() == "browser" {
 				commandName = "browser select"
@@ -87,8 +93,13 @@ func newBrowserSelectCommand(dependencies jevDOMDependencies) *cobra.Command {
 	command.Flags().BoolVar(&options.NoCache, "no-cache", false, "Bypass the local five-minute decision cache")
 	command.Flags().StringVar(&options.Origin, "origin", "", "Require this top-frame origin and skip frames outside it")
 	command.Flags().StringVar(&browserName, "browser", "arc", "Browser bridge: arc, chrome, any, or task-owned headless")
+	command.Flags().StringVar(&options.Strategy, "strategy", "auto", "Decision packing: auto or legacy (comparison baseline)")
+	command.Flags().StringVar(&options.ObservationMode, "observation", "auto", "Observation transport: auto or legacy (comparison baseline)")
+	command.Flags().StringVar(&options.FrameID, "frame", "", "Restrict the semantic observation to this frame id")
+	command.Flags().StringVar(&options.FrameURL, "frame-url", "", "Restrict to the unique frame at this exact URL")
+	command.Flags().Int64Var(&options.ScopeBackendDOMNodeID, "root-node", 0, "Restrict candidates to this backend node subtree; requires a frame")
 	_ = command.MarkFlagRequired("tab")
-	advancedFlags(command, "goal", "limit", "confidence", "no-cache")
+	advancedFlags(command, "goal", "limit", "confidence", "no-cache", "strategy", "observation", "frame", "frame-url", "root-node")
 	return command
 }
 

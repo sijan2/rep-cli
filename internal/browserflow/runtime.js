@@ -47,8 +47,11 @@ async function repInteraction(spec) {
       if (!useBound || !bound?.isConnected) fail('stale_semantic_target');
       matches = [bound];
     } else matches = query(scope, target.selector || 'input,textarea,select,button,a,summary,option,[role],[contenteditable],[aria-label],[aria-labelledby]');
-    if (target.name) matches = matches.filter(el => name(el) === norm(target.name));
-    if (target.role) matches = matches.filter(el => role(el) === target.role);
+    // Bound semantic targets have already passed AX name/role and scope
+    // validation. Recomputing an approximate DOM name here loses img-alt,
+    // recursive labels, and other browser accessibility semantics.
+    if (!target.goal && target.name) matches = matches.filter(el => name(el) === norm(target.name));
+    if (!target.goal && target.role) matches = matches.filter(el => role(el) === target.role);
     if (matches.length > 1) fail('ambiguous_target');
     if (!matches.length && !allowMissing) fail('target_missing_or_changed');
     return matches[0] || null;
@@ -64,6 +67,7 @@ async function repInteraction(spec) {
   const test = condition => {
     if (condition.url && location.href !== condition.url) return false;
     if (!condition.target) return true;
+    if (condition.target.frame_url && location.href !== condition.target.frame_url) return false;
     const el = locate(condition.target, true, false);
     if (condition.absent) return !el;
     if (!el) return false;
@@ -80,6 +84,21 @@ async function repInteraction(spec) {
     if (!enabled(el)) fail('target_disabled');
     if (edit && (el.readOnly || el.getAttribute('aria-readonly') === 'true' || editor(el)?.getReadOnly())) fail('target_readonly');
   };
+  const hitGuard = el => {
+    const rect = el.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) fail('target_outside_viewport');
+    if (spec.expected_point && (Math.abs(x-spec.expected_point.x)>0.5 || Math.abs(y-spec.expected_point.y)>0.5)) fail('target_geometry_changed');
+    // Walk from the target's shadow root outward, checking every host at the
+    // same point. This also works for a bound element in a closed shadow root.
+    let target = el, root = el.getRootNode();
+    while (root) {
+      const hit = root.elementFromPoint?.(x, y);
+      if (!hit || !(hit === target || target.contains(hit))) fail('target_occluded');
+      if (!root.host) break;
+      target = root.host; root = target.getRootNode();
+    }
+    return {x,y};
+  };
   const emitInput = el => { el.dispatchEvent(new InputEvent('input',{bubbles:true,composed:true,inputType:'insertText'})); el.dispatchEvent(new Event('change',{bubbles:true})); };
   const wait = conditions => new Promise(resolve => {
     let timer, interval, observer, finished = false;
@@ -94,20 +113,43 @@ async function repInteraction(spec) {
     check();
   });
   try {
-    if (window !== window.top) fail('frame_target_unsupported');
+    // The extension checks the root URL and document generation before routing.
+    // Cross-origin frames cannot read top.location and must not guess it here.
+    if (window !== window.top && !spec.frame_id) fail('frame_scope_required');
+    if (spec.frame_url && location.href !== spec.frame_url) fail('frame_changed');
     if (spec.operation === 'wait') return await wait(spec.step.after);
-    if (location.href !== spec.url) fail('page_changed');
+    if (window === window.top && location.href !== spec.url) fail('page_changed');
     const step = spec.step;
-    if (all(step.skip_if)) return result('skipped',{evidence:'skip_condition'});
+    if (spec.operation === 'check_conditions' || spec.operation === 'arm_conditions') {
+      const outcomes = window.__repInteractionOutcomes ||= new Map();
+      const key = spec.outcome_id + ':' + JSON.stringify(step.after);
+      if (spec.operation === 'arm_conditions') {
+        if (!outcomes.has(key)) {
+          const entry = {};
+          outcomes.set(key,entry);
+          wait(step.after).then(value => {entry.result=value;});
+          while(outcomes.size>128)outcomes.delete(outcomes.keys().next().value);
+        }
+        return result('prepared');
+      }
+      const observed = outcomes.get(key)?.result;
+      if (observed?.status === 'verified') {outcomes.delete(key);return result('verified',{evidence:'observed_postcondition'});}
+      return result(all(step.after) ? 'verified' : 'planned');
+    }
+    const local = condition => (!condition.url || window === window.top) &&
+      (!condition.target?.frame_id || condition.target.frame_id === spec.frame_id);
+    const allLocal = conditions => !!conditions?.length && conditions.every(local);
+    if (allLocal(step.skip_if) && all(step.skip_if)) return result('skipped',{evidence:'skip_condition'});
     if (spec.operation === 'check_skip') return result('planned');
     if (step.action === 'wait') return spec.operation === 'preview' ? result('planned') : await wait(step.after);
     const el = locate(step.target);
     usable(el,['fill','replace','choose','check'].includes(step.action));
     if (spec.operation === 'focus_guard') {
       if (el.getRootNode().activeElement !== el) fail('focus_changed');
+      hitGuard(el);
       return result('verified',{evidence:'focus'});
     }
-    let value, selected, current;
+    let value, selected, current, wouldChange = false;
     if (step.action === 'fill' || step.action === 'replace') {
       if (!editor(el) && !el.isContentEditable && !el.matches('textarea,input:not([type]),input[type=text],input[type=search],input[type=email],input[type=url],input[type=tel],input[type=password],input[type=number]')) fail('unsupported_text_control');
       current = read(el);
@@ -118,7 +160,7 @@ async function repInteraction(spec) {
         if (index < 0 || current.indexOf(step.old,index+1)>=0) fail('replacement_missing_or_ambiguous');
         value = current.slice(0,index)+step.value+current.slice(index+step.old.length);
       } else if (current !== '' && current !== value && !step.replace) fail('existing_value_preserved');
-      changed = current !== value;
+      wouldChange = current !== value;
     } else if (step.action === 'choose') {
       if (!(el instanceof HTMLSelectElement)) fail('unsupported_select_control');
       if (!el.multiple && step.values.length!==1) fail('single_select_requires_one_option');
@@ -129,19 +171,22 @@ async function repInteraction(spec) {
         if (!option || option.disabled || option.parentElement?.disabled) fail('option_missing_or_disabled');
         return option;
       });
-      changed=[...el.options].some(option=>option.selected!==selected.includes(option));
+      wouldChange=[...el.options].some(option=>option.selected!==selected.includes(option));
     } else if (step.action === 'check') {
       if (!el.matches('input[type=checkbox],input[type=radio]')) fail('unsupported_check_control');
       if (el.type==='radio'&&!step.checked) fail('radio_requires_true');
-      changed=el.checked!==step.checked;
+      wouldChange=el.checked!==step.checked;
     } else if (!['click','press'].includes(step.action)) fail('unsupported_action');
-    if (step.action==='click' || step.action==='press') changed=true;
-    if (changed && all(step.after)) fail('postcondition_already_satisfied');
-    if (spec.operation==='preview') return result('ready',{control:editor(el)?'ace':el.tagName.toLowerCase(),would_change:changed,changed:false});
-    if (spec.operation!=='perform') fail('invalid_operation');
+    if (step.action==='click' || step.action==='press') wouldChange=true;
+    if (wouldChange && allLocal(step.after) && all(step.after)) fail('postcondition_already_satisfied');
+    if (spec.operation==='preview') return result('ready',{control:editor(el)?'ace':el.tagName.toLowerCase(),would_change:wouldChange,changed:false});
+    if (!['perform','prepare_geometry'].includes(spec.operation)) fail('invalid_operation');
     el.scrollIntoView({block:'center',inline:'nearest'});
+    usable(el,['fill','replace','choose','check'].includes(step.action));
+    const point=hitGuard(el);
+    if(spec.operation==='prepare_geometry')return result('ready',{point,changed:false});
     if (step.action==='press') { el.focus();if(el.getRootNode().activeElement!==el)fail('focus_failed');return result('prepared'); }
-    if (changed) {
+    if (wouldChange) {
       attempted=true; // Set before dispatch: an exception does not imply the side effect was absent.
       if (step.action==='click') el.click();
       else if (step.action==='check') el.click();
@@ -154,6 +199,7 @@ async function repInteraction(spec) {
         el.focus();const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
         Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);emitInput(el);
       }
+      changed=true;
     }
     if(step.action!=='click') {
       const fresh=locate(step.target);usable(fresh,true);

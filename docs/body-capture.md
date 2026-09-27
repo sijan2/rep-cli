@@ -1,6 +1,8 @@
 # Reliable bodies, bounded parsing, and persistent browser control
 
-Implemented and locally verified 2026-09-20. This extends the
+The body-capture foundation was locally verified 2026-09-20. The September 26
+source update adds WebSocket records, HTTP metadata, collection budgets, native
+record spooling and indexed saved lookup. This extends the
 [task ownership architecture](agent-context.md) and uses the same capture path
 for Arc and [task-owned headless Chromium](headless.md).
 
@@ -25,7 +27,7 @@ Several independent problems could make the correct response disappear:
 
 ```mermaid
 flowchart LR
-    B[Owned Arc tab or isolated Chromium profile] --> C[CDP observation and decoded byte collector]
+    B[Owned Arc tab or isolated Chromium profile] --> C[CDP HTTP and WebSocket collection]
     C --> E[Body state and byte-preserving representation]
     E --> T[Sequenced native transport fragments]
     T --> H[Private host spool: count and hash verification]
@@ -55,13 +57,73 @@ browser buffers, and detached child targets have explicit reasons. Coverage
 warnings disclose unavailable related-target support. Requests that occurred
 before attachment cannot be reconstructed by this implementation.
 
-The native host spools oversized serialized records privately, verifies sequence,
-chunk count, total bytes, and SHA-256, then incorporates the record. Missing,
-corrupt, conflicting, or foreign-session data cannot produce a verified snapshot.
-The session's expected request total catches a whole record disappearing. Snapshot
-and archive I/O serialize/decode one request at a time; staged archive appends
-use locks, fsync, and rollback on write errors. Malformed archive tails report an
-error instead of silently resetting history.
+The native host acknowledges ordered capture messages and writes completed
+records to a private disk spool. Its live capture state retains a compact index
+and metadata; sealing copies the serialized records into the snapshot. Oversized
+records use fragments with sequence, chunk-count, length and SHA-256 checks.
+Transport loss or a persistence failure cannot become a verified snapshot. The
+snapshot's expected record total checks transport delivery of the records the
+collector retained; collector omissions remain separately disclosed in capture
+statistics. Snapshot/archive I/O serialize or decode one request at a time;
+staged archive appends use locks, fsync and rollback on write errors. Malformed
+archive tails report an error instead of silently resetting history.
+
+Capture actions check acknowledged incremental-host support before acting on
+the page. Older hosts fail this preflight. The host still allocates space for
+the largest individual record, and startup can rehydrate a previous live file;
+spooling does not establish a strict process-memory ceiling.
+
+## Browser protocol visibility
+
+WebSocket captures preserve `ws://` / `wss://` connection identity, creation,
+handshake metadata, sent/received events, direction, opcode, timestamps, errors
+and close/interruption state. Text payloads retain UTF-8 bytes; binary payloads
+retain a declared encoding. Browser-exposed messages do not reconstruct original
+network fragmentation, compression or masking bytes. HTTP `body` views do not
+stand in for WebSocket payloads; use `rep stream` and inspect the stream's own
+capture state and event counters.
+
+A connection first observed after creation has a partial start. An open socket
+when capture ends, a detached target, a payload limit or an event limit also
+leaves explicit partial evidence. A closed connection is not sufficient to
+establish complete capture when events or bytes were omitted. Sequence gaps,
+dropped counts and reason fields remain visible.
+
+HTTP records preserve frame/loader/CDP-session identity and available event
+timestamps. Responses retain browser-reported protocol, remote IP/port,
+connection ID/reuse, timing, TLS/security details, cache/service-worker flags and
+encoded length. Availability depends on what the browser supplies. HTTP/2 and
+HTTP/3 content remains at the browser HTTP layer; Rep does not record transport
+frames or QUIC packets through this collector.
+
+WebTransport records distinguish CDP lifecycle observation from optional page
+API observation. Lifecycle-only records declare unavailable payload capture and
+partial coverage. Page API records preserve instrumented WebTransport stream
+chunks/datagrams and WebRTC data-channel messages. WebTransport event
+`channel_id` values identify logical streams or datagram channels; a WebRTC
+record represents one data channel and can name its parent peer in metadata.
+The reader preserves collector source, declared scope, payload semantics,
+channel metadata and explicit observation gaps.
+
+Page API records declare `scope: "instrumented_api_calls"` and
+`observer_trust: "page_controlled"`. Their timestamps use performance-clock
+seconds within a realm, with the time origin recorded when supplied. They do
+not establish observations outside that scope, and clocks from different realms
+are not directly comparable. CDP lifecycle records and page API payload records
+remain independent; matching URLs do not prove a common connection. Neither
+collector supplies interface packets or media recordings. Separate
+`rep packets capture` and `--webrtc-media` collectors provide those artifacts;
+see [native capture](native-capture.md). Packet bytes retain wire encryption,
+and media recordings contain re-encoded track content.
+
+`browser native-capture` can separately launch a new private browser for native
+TLS/QUIC key logs and original RTP/RTCP datagrams. Its artifacts are a diagnostic
+bundle with explicit provenance, not HTTP bodies or re-encoded track records.
+
+Existing native diagnostic recordings can be imported through
+[`evidence import`](evidence.md#import-native-diagnostic-files), retaining their
+original bytes and declared provenance. Import does not start a platform tracer
+or imply that its recording is complete.
 
 ## Read only the useful part
 
@@ -75,6 +137,9 @@ rep --workspace research --task site-a body REQUEST_ID --saved SAVED_HASH --form
 rep --workspace research --task site-a body REQUEST_ID --saved SAVED_HASH --find 'desired text'
 rep --workspace research --task site-a body REQUEST_ID --saved SAVED_HASH --offset 8192 --head 4096
 rep --workspace research --task site-a body REQUEST_ID --saved SAVED_HASH --require-complete --save -j
+rep --workspace research --task site-a stream CONNECTION_ID --saved SAVED_HASH --info
+rep --workspace research --task site-a stream CONNECTION_ID --saved SAVED_HASH --events 20 --max-bytes 4096
+rep --workspace research --task site-a stream CONNECTION_ID --saved SAVED_HASH --event SEQUENCE --head 0 --save
 ```
 
 HTTP transfer chunks, CDP chunks, and native messaging fragments are different
@@ -92,6 +157,18 @@ concerns captured evidence. A partially emitted record page does not advance its
 record cursor. Continue the same page with byte offsets or read its private
 artifact before moving to later records. `rep describe body` is the full contract.
 
+Browser stream event pages return descriptors without payloads. Use `next_after` as
+the next `--after` cursor; it acknowledges only returned descriptors. Retrieve
+one event with `--event SEQUENCE`, then follow byte offsets or save the entire
+captured message with `--head 0 --save`. Inline stream JSON defaults to 8 KiB.
+Capture completeness applies to the declared observer scope and is separate
+from page/range completeness. Static limitations can remain on a complete scoped
+capture; explicit gaps and truncation cannot pass `--require-complete`.
+`--require-complete` checks the connection's evidence state and validates every
+retained payload's encoding and decoded length. Ordinary metadata reads report
+`payload_validation: "not_checked"`; selecting an event validates its bytes. See
+`rep describe stream` for the full contract.
+
 Canvas's read adapter now drains the authorized response while returning only
 small renderer metadata. It resolves candidate request IDs by exact URL, method,
 and status in the verified archive, allowing OPTIONS/unrelated reads while
@@ -108,10 +185,14 @@ unlimited. Budgets are now visible and failures are explicit.
 | Resource | Default | Configuration |
 | --- | ---: | --- |
 | Decoded body per captured request | 8 MiB | `--max-body`, 0 through 256 MiB; invalid values fail |
+| Aggregate archived request/response and WebSocket payload bytes | 64 MiB | Collector limit negotiated by CLI; lower host snapshot limits reduce it |
+| Request/connection records per capture | 10,000 | Collector cap; lower `REP_CAPTURE_MAX_REQUESTS` also applies |
+| WebSocket events per capture | 10,000 | Collector event budget; omitted events are counted |
+| Native-send backlog | 16 MiB | Collector queue budget; overflow fails explicitly |
 | Serialized request accepted by host | 384 MiB | `REP_CAPTURE_MAX_REQUEST_BYTES` in host environment |
 | One sealed snapshot | 512 MiB | `REP_CAPTURE_MAX_SNAPSHOT_BYTES` |
 | Aggregate temporary snapshots | 1 GiB | `REP_CAPTURE_TOTAL_SNAPSHOT_BYTES` |
-| Requests per capture | 10,000 | `REP_CAPTURE_MAX_REQUESTS`; exceeding it fails publication |
+| Records accepted per host capture | 10,000 | `REP_CAPTURE_MAX_REQUESTS`; exceeding it fails publication |
 | Temporary snapshot retention | 32 entries / one hour | Retained host policy |
 | Inline body output | 8 KiB | `--max-bytes` |
 
@@ -120,13 +201,26 @@ already connected CLI does not reconfigure its running host. The CLI negotiates
 the actual host snapshot limit. The serialized size can exceed decoded size due
 to base64 or JSON escaping. Raising one budget does not raise the others.
 
-Durable archives still use inline JSONL bodies, and archive lookup can load all
-sessions in one task into memory. Per-request serialization reduces extra
-capture-sized copies but does not make peak memory constant: the current capture,
-largest individual record, and loaded archives still matter. A content-addressed
-body store plus lazy archive index is future storage work, not a shipped feature.
+The aggregate payload budget is a retained/archived byte limit, not a strict
+process RSS cap. Browser/CDP delivery, UTF-8/base64 conversion and JSON encoding
+can create transient copies. The native spool also counts obsolete record
+revisions against its disk budget, so repeated updates cannot grow it without
+limit. Native transport, collector storage and snapshot limits remain separate.
 
-## Verification
+Durable network archives retain inline JSONL bodies. `body --saved` now resolves
+an archive through an offset index and decodes only that selected session's
+records. The index checks the source inode/device, size and modification time
+under a shared log lock; normal appends update it under the exclusive append
+lock. Missing/stale indexes rebuild lazily. Metadata is capped at 8 MiB; above
+that bound the existing lookup path is used. A selected large archive can still
+require substantial memory, and unpinned history queries can load more data.
+
+Imported run artifacts have a separate content-addressed byte store. Existing
+HTTP/stream bodies have not been migrated to it. See
+[architecture measurements](architecture.md#local-measurements) for a controlled
+saved-lookup comparison and the cost of opt-in durable operation journaling.
+
+## Historical body verification — September 20
 
 The Go suite, host/store/headless race tests, 237 extension tests, and 119 Canvas
 tests passed. Regression coverage includes compressed/cached bodies, late setup
@@ -145,12 +239,17 @@ exact artifacts, and archive reuse. One optional Jev call selected the intended
 test button. Measurements and repeatable commands are in [headless.md](headless.md).
 These are local fixture results, not a guarantee about every remote website.
 
-The updated CLI and native host are installed in `~/.local/bin`, and the Arc
-extension was reloaded while it had zero active/queued captures. An actual Arc
+The September 20 CLI and native host were installed in `~/.local/bin`, and the
+Arc extension was reloaded while it had zero active/queued captures. An actual Arc
 metadata-only action then captured all 2,109,569 decoded bytes of the gzip fixture
 through `cdp-stream`, verified the archive and exact raw artifact, and closed its
 owned test tab. The installed binaries also passed the headless fixture and the
 two-agent isolation check. Temporary test profiles and task data were removed.
+
+These are historical results for the body-capture foundation. Current source
+validation uses `go test ./...` in rep-cli and `npm test` in rep; the new stream
+and evidence tests cover their own contracts. The earlier installed-build check
+does not establish that the current capture protocol is already active.
 
 Primary protocol references: [CDP Network](https://chromedevtools.github.io/devtools-protocol/tot/Network/),
 [Chrome related-target debugging](https://developer.chrome.com/docs/extensions/reference/api/debugger#attach-to-related-targets),

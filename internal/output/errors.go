@@ -35,6 +35,7 @@ const (
 	ErrCodeTransferFailed     = "transfer_failed"
 	ErrCodeNotImplemented     = "not_implemented"
 	ErrCodeInternal           = "internal_error"
+	ErrCodeCommandFailed      = "command_failed"
 )
 
 // errorChain walks err.Unwrap() / errors.Unwrap() collecting the message
@@ -85,8 +86,9 @@ func WrapError(err error, code, command string, suggest ...string) AgentError {
 func (ae AgentError) Error() string { return ae.Message }
 
 // EmitAgentError writes ae to w in the right shape for the current output
-// format (JSON envelope vs reflection-style text) and returns ae itself so
-// callers can `return output.EmitAgentError(...)` for non-zero exit.
+// format (JSON envelope vs reflection-style text) and returns ae, marked as
+// reported, so callers can `return output.EmitAgentError(...)` for non-zero
+// exit without the entry point printing it a second time.
 func EmitAgentError(w io.Writer, ae AgentError, jsonMode bool) error {
 	if jsonMode {
 		payload := map[string]interface{}{"error": ae}
@@ -95,7 +97,24 @@ func EmitAgentError(w io.Writer, ae AgentError, jsonMode bool) error {
 	} else {
 		fmt.Fprint(w, FormatErrorText(ae))
 	}
-	return ae
+	return reportedError{ae}
+}
+
+// MarkReported returns an error for an AgentError the command already wrote
+// as part of its own result, so the process exits nonzero without printing a
+// second document.
+func MarkReported(ae AgentError) error { return reportedError{ae} }
+
+// reportedError is an AgentError whose details were already written.
+type reportedError struct{ AgentError }
+
+func (e reportedError) Unwrap() error { return e.AgentError }
+
+// Reported reports whether err was already written by EmitAgentError. The
+// process entry point prints every other error, so no failure exits silently.
+func Reported(err error) bool {
+	var marked reportedError
+	return errors.As(err, &marked)
 }
 
 // FormatErrorText renders the AgentError for plain-text output with a

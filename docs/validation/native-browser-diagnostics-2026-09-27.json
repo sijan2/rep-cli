@@ -1,0 +1,662 @@
+{
+  "schema": 1,
+  "passed": true,
+  "verified_at": "2026-09-27T18:14:34Z",
+  "rep_binary": {
+    "path": "/private/tmp/rep-native-diagnostics-validation-20260927",
+    "bytes": 18379314,
+    "sha256": "30bb8a04ce64664d65c0821735a7ebfb87f9b53bfb18835ab8e765ba1c04b94b"
+  },
+  "source_identities": [
+    {
+      "path": "scripts/verify_browser_diagnostics.py",
+      "bytes": 32715,
+      "sha256": "adbdadfebd1db0303e2f1bab40142f78990326e80bca704b4fd226c6caa01868"
+    },
+    {
+      "path": "scripts/fixtures/native-media/index.html",
+      "bytes": 5846,
+      "sha256": "7b1fdcff0fa3ed98b5477de43de9a8a9c2cdbc1ac46b6d13cbb9042c1576b686"
+    },
+    {
+      "path": "scripts/verify_transport_capture.py",
+      "bytes": 42531,
+      "sha256": "92835363f4063ebff96acd7ab63ec1ac78ffc30e9115f029519c4c486b9f321e"
+    },
+    {
+      "path": "cmd/browser_native_capture.go",
+      "bytes": 5478,
+      "sha256": "26c9df0f9429fb39bde28fc02888ffc801d7fba4d6a8ff6a4962b423d895329a"
+    },
+    {
+      "path": "internal/browserdiagnostics/capture.go",
+      "bytes": 25208,
+      "sha256": "cb3b233845254cda6fbc71e91b1e28b6aa2b6845fa4961a73231139ba4109f02"
+    },
+    {
+      "path": "internal/browserdiagnostics/capture_test.go",
+      "bytes": 8737,
+      "sha256": "93c970c4e39807b46cffc47a44ec1d7e56c9ffdbc24013e4c1384c2d84c267c1"
+    },
+    {
+      "path": "internal/browserdiagnostics/rtp.go",
+      "bytes": 12088,
+      "sha256": "1db806f3a84496771c3de2cb28b4f4cad1012bc60505702f2dcf7033f814b3cd"
+    },
+    {
+      "path": "internal/browserdiagnostics/rtp_test.go",
+      "bytes": 9374,
+      "sha256": "a126a7ef79ce83a4e964fa11c0b20d511ea90eb954012d171c054d71c2ab175f"
+    },
+    {
+      "path": "internal/browserdiagnostics/types.go",
+      "bytes": 3502,
+      "sha256": "2eecca9e777e819d399782f0586ec61cf630145df67b5603cdc3bac8644bd11d"
+    },
+    {
+      "path": "internal/packetcapture/backend_darwin.go",
+      "bytes": 4787,
+      "sha256": "0a94402faaa43d46ba1883e66cbf02020cdbada53af06f8ef7d99227e0e0490a"
+    },
+    {
+      "path": "internal/packetcapture/backend_unsupported.go",
+      "bytes": 390,
+      "sha256": "4fbe1cf5ecbaf52f4a1aa4c5e68ef7e43a710ceb78935953de07859e25661d76"
+    },
+    {
+      "path": "internal/packetcapture/capture.go",
+      "bytes": 9908,
+      "sha256": "68f78bc2341805206c26eab054374b5f2ea9356538d6b5a458f0efeab4d568e7"
+    },
+    {
+      "path": "internal/packetcapture/capture_test.go",
+      "bytes": 9381,
+      "sha256": "69892e47338fea6faf5841a5600e620ca00bccf7cd7ca60cb8cc65d50b929f21"
+    },
+    {
+      "path": "internal/packetcapture/fixture_test.go",
+      "bytes": 2123,
+      "sha256": "15a62357c8555313ee6e4a35fc4a5bdc32c27664dc2d843666d88c5aa993300a"
+    },
+    {
+      "path": "internal/packetcapture/inspect.go",
+      "bytes": 12499,
+      "sha256": "cefe9fd5720a0f332669ae9452d646d736ab8214962bfa41bf51a732660efe88"
+    },
+    {
+      "path": "internal/packetcapture/inspect_test.go",
+      "bytes": 7617,
+      "sha256": "e6e1368b937fcd72132db78cde3ca660a1f3b477ad47abe4d56a4a8b84bbad48"
+    },
+    {
+      "path": "internal/packetcapture/inspect_unix_test.go",
+      "bytes": 360,
+      "sha256": "fccee3499253d791def68308acec3f39d1e5ef5101c86f84bca08cc51b6dbc66"
+    },
+    {
+      "path": "internal/packetcapture/native.h",
+      "bytes": 950,
+      "sha256": "7941c7200965b05ac6f2fb92407f4bf6cb9f316ce57dc9214fffb605ea50e573"
+    },
+    {
+      "path": "internal/packetcapture/native_darwin.c",
+      "bytes": 12107,
+      "sha256": "62cee03a98fd7c59b3d8c1a1569d67df30e36549f5e83f51f6bcf28820074387"
+    },
+    {
+      "path": "internal/packetcapture/native_darwin_test.go",
+      "bytes": 10609,
+      "sha256": "fa0378883403ae4a340e4cfc1520b00fb35886ac1081e7f1d2742de2f05e3a6a"
+    },
+    {
+      "path": "internal/packetcapture/open_regular_other.go",
+      "bytes": 128,
+      "sha256": "d53f8b3adfa448857482e8179308eb10bc76a975b59613b87849ded7cf76d9d8"
+    },
+    {
+      "path": "internal/packetcapture/open_regular_unix.go",
+      "bytes": 330,
+      "sha256": "8b7def706e12c7bd4498eb971129800ae916f466a671b84bab4ff2e60e0bd7f7"
+    },
+    {
+      "path": "internal/packetcapture/types.go",
+      "bytes": 6076,
+      "sha256": "67b4288e77ce6f1f236f12cf996b2cfaab9cfef8fa519004dab47cf79fd3477a"
+    }
+  ],
+  "tools": {
+    "tshark": "TShark (Wireshark) 4.6.0 (v4.6.0-0-gcdfb6721e77c).",
+    "ffmpeg": "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffprobe": "ffprobe version 9.0.1 Copyright (c) 2007-2026 the FFmpeg developers"
+  },
+  "directory": "/var/folders/zw/4jtkmy417mv_79rgj2pm_7240000gn/T/rep-native-browser-validation-99y1ymuq",
+  "browser_collectors": {
+    "extension": false,
+    "protocol_payloads": false,
+    "media_recorder": false
+  },
+  "fixture": "owned loopback synthetic WebTransport and oscillator/canvas WebRTC",
+  "browser_ready": {
+    "version": 1,
+    "pid": 27513,
+    "port": 61483,
+    "ready_at": "2026-09-27T18:14:35.911198Z"
+  },
+  "codecs": [
+    {
+      "payload_type": 111,
+      "mime_type": "audio/opus",
+      "clock_rate": 48000,
+      "channels": 2
+    },
+    {
+      "payload_type": 96,
+      "mime_type": "video/VP8",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 63,
+      "mime_type": "audio/red",
+      "clock_rate": 48000,
+      "channels": 2
+    },
+    {
+      "payload_type": 9,
+      "mime_type": "audio/G722",
+      "clock_rate": 8000
+    },
+    {
+      "payload_type": 0,
+      "mime_type": "audio/PCMU",
+      "clock_rate": 8000
+    },
+    {
+      "payload_type": 8,
+      "mime_type": "audio/PCMA",
+      "clock_rate": 8000
+    },
+    {
+      "payload_type": 13,
+      "mime_type": "audio/CN",
+      "clock_rate": 8000
+    },
+    {
+      "payload_type": 110,
+      "mime_type": "audio/telephone-event",
+      "clock_rate": 48000
+    },
+    {
+      "payload_type": 126,
+      "mime_type": "audio/telephone-event",
+      "clock_rate": 8000
+    },
+    {
+      "payload_type": 97,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 102,
+      "mime_type": "video/H264",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 103,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 104,
+      "mime_type": "video/H264",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 107,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 108,
+      "mime_type": "video/H264",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 109,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 114,
+      "mime_type": "video/H264",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 115,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 116,
+      "mime_type": "video/H264",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 117,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 39,
+      "mime_type": "video/H264",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 40,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 45,
+      "mime_type": "video/AV1",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 46,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 98,
+      "mime_type": "video/VP9",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 99,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 100,
+      "mime_type": "video/VP9",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 101,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 118,
+      "mime_type": "video/H264",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 119,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 49,
+      "mime_type": "video/H265",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 50,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 122,
+      "mime_type": "video/red",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 123,
+      "mime_type": "video/rtx",
+      "clock_rate": 90000
+    },
+    {
+      "payload_type": 124,
+      "mime_type": "video/ulpfec",
+      "clock_rate": 90000
+    }
+  ],
+  "browser_observations": {
+    "webdriver": true,
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36"
+  },
+  "fixture_stats": {
+    "started": true,
+    "closed": false,
+    "left_state": "connected",
+    "right_state": "connected",
+    "received_audio_rms": 0.05627617834802065,
+    "audio_context": "running",
+    "canvas_frames": 34,
+    "tracks": [
+      {
+        "id": "81b40c44-bf27-482c-a5a6-068a977fb964",
+        "kind": "audio",
+        "ready_state": "live",
+        "enabled": true,
+        "muted": false
+      },
+      {
+        "id": "0617fe2e-6cdc-4b0e-a59a-0939cb783834",
+        "kind": "video",
+        "ready_state": "live",
+        "enabled": true,
+        "muted": false
+      }
+    ],
+    "received_tracks": [
+      {
+        "id": "81b40c44-bf27-482c-a5a6-068a977fb964",
+        "kind": "audio",
+        "ready_state": "live",
+        "enabled": true,
+        "muted": false
+      },
+      {
+        "id": "0617fe2e-6cdc-4b0e-a59a-0939cb783834",
+        "kind": "video",
+        "ready_state": "live",
+        "enabled": true,
+        "muted": false
+      }
+    ],
+    "outbound_packets": 287,
+    "outbound_bytes": 130088,
+    "inbound_packets": 287,
+    "inbound_bytes": 130088,
+    "frames_decoded": 30,
+    "audio_energy": 0,
+    "audio_energy_fields": 1,
+    "audio_outbound_bytes": 12563,
+    "audio_inbound_bytes": 12563,
+    "video_outbound_bytes": 117525,
+    "video_inbound_bytes": 117525
+  },
+  "capture": {
+    "version": 1,
+    "status": "completed",
+    "stop_reason": "duration",
+    "browser": {
+      "binary": "/Users/sijan/Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+      "version": "Chrome/153.0.8010.12",
+      "pid": 27513,
+      "port": 61483,
+      "headless": true,
+      "profile_removed": true
+    },
+    "duration_ms": 15793,
+    "packet_capture": {
+      "version": 1,
+      "collector": "rep-libpcap",
+      "backend_version": "libpcap version 1.10.1",
+      "interface": "lo0",
+      "filter": "udp port 55006 and host 127.0.0.1",
+      "promiscuous": false,
+      "status": "cancelled",
+      "stop_reason": "cancelled",
+      "started_at": "2026-09-27T18:14:35.388323Z",
+      "stopped_at": "2026-09-27T18:14:51.104717Z",
+      "observation_started_at": "2026-09-27T18:14:35.394136Z",
+      "duration_ms": 15716,
+      "limits": {
+        "duration_ms": 65000,
+        "max_packets": 100000,
+        "max_bytes": 67108864,
+        "snaplen": 65535,
+        "buffer_bytes": 4194304
+      },
+      "datalink": {
+        "id": 0,
+        "name": "NULL"
+      },
+      "packets": 17,
+      "captured_bytes": 7524,
+      "original_bytes": 7524,
+      "truncated_packets": 0,
+      "stats": {
+        "available": true,
+        "received": 836,
+        "dropped": 0,
+        "interface_dropped": 0,
+        "interpretation": "libpcap ps_recv may include unfiltered or unread packets depending on platform; zero ps_drop may mean unsupported; zero ps_ifdrop does not prove no interface drops. Counters are not transmitted totals."
+      },
+      "coverage": {
+        "state": "partial",
+        "scope": "filtered_interface_observation",
+        "reasons": [
+          "cancelled"
+        ],
+        "limitations": [
+          "filter_and_interface_define_observation_scope",
+          "os_capture_point_can_reflect_offloads_and_link_header_transformations",
+          "zero_reported_drops_do_not_establish_wire_completeness",
+          "encrypted_bytes_remain_encrypted_no_decryption",
+          "packet_timestamps_are_host_capture_timestamps"
+        ]
+      },
+      "artifact": {
+        "path": "/var/folders/zw/4jtkmy417mv_79rgj2pm_7240000gn/T/rep-native-browser-validation-99y1ymuq/capture/wire.pcap",
+        "metadata_path": "/var/folders/zw/4jtkmy417mv_79rgj2pm_7240000gn/T/rep-native-browser-validation-99y1ymuq/capture/wire.metadata.json",
+        "sha256": "3fd5a4a6fc6b5fe2048f6791ac16a6c1137b592a37b24c0fea972c5bd1aba44f",
+        "bytes": 7820,
+        "pcap_valid": true
+      }
+    },
+    "rtp": {
+      "packets": 692,
+      "rtp_packets": 574,
+      "rtcp_packets": 118,
+      "outgoing_packets": 346,
+      "incoming_packets": 346,
+      "packet_bytes": 281948,
+      "output_bytes": 687688,
+      "input_bytes": 934035,
+      "source_lines": 2112,
+      "malformed_records": 0,
+      "overlong_lines": 0,
+      "timestamped_packets": 692,
+      "unterminated_final_line": false,
+      "truncated": false,
+      "stop_reason": "end_of_log",
+      "sha256": "85ec473700bfec0b5e496c28b89143583c0a6f65cbef14587294eff627577ab8",
+      "payload_sha256": "5b949e322dfb2add7d3082874c4ceb25c63ec64cbd06f69007349f54abafb2a2"
+    },
+    "limitations": [
+      "explicit_new_private_browser_session",
+      "browser_diagnostics_can_affect_timing_no_undetectability_claim",
+      "capture_interval_does_not_establish_wire_completeness",
+      "tls_key_log_does_not_export_webrtc_dtls_srtp_keys",
+      "rtp_datagrams_preserve_encoded_payloads_at_srtp_boundary_not_original_ip_udp_headers",
+      "outgoing_rtp_logged_before_encryption_does_not_prove_transmission",
+      "incoming_rtp_requires_successful_srtp_authentication",
+      "application_level_encrypted_media_remains_encrypted",
+      "native_rtp_inner_timestamp_may_have_incorrect_hours_and_minutes",
+      "browser_log_does_not_provide_global_packet_loss_counters",
+      "key_log_file_may_temporarily_exceed_budget_between_samples_and_during_shutdown"
+    ]
+  },
+  "artifacts": [
+    {
+      "kind": "browser_log",
+      "path": "/var/folders/zw/4jtkmy417mv_79rgj2pm_7240000gn/T/rep-native-browser-validation-99y1ymuq/capture/browser.log",
+      "bytes": 934035,
+      "sha256": "55c331dbfb48e34a8a69c5ad2774328cf515b02232a3da3737bf45fccab4200c"
+    },
+    {
+      "kind": "tls_key_log",
+      "path": "/var/folders/zw/4jtkmy417mv_79rgj2pm_7240000gn/T/rep-native-browser-validation-99y1ymuq/capture/tls.keys",
+      "bytes": 7834,
+      "sha256": "ea90dfad9722317328733463b5924fb2cd70a182ae7599656486f8ea226d5f22"
+    },
+    {
+      "kind": "webrtc_rtp",
+      "path": "/var/folders/zw/4jtkmy417mv_79rgj2pm_7240000gn/T/rep-native-browser-validation-99y1ymuq/capture/webrtc-rtp.jsonl",
+      "bytes": 687688,
+      "sha256": "85ec473700bfec0b5e496c28b89143583c0a6f65cbef14587294eff627577ab8"
+    },
+    {
+      "kind": "wire_metadata",
+      "path": "/var/folders/zw/4jtkmy417mv_79rgj2pm_7240000gn/T/rep-native-browser-validation-99y1ymuq/capture/wire.metadata.json",
+      "bytes": 1650,
+      "sha256": "18be93164be2c017d19b2063a3958a7f5361c8800b26b6da420e1b1ac506ba48"
+    },
+    {
+      "kind": "wire_packets",
+      "path": "/var/folders/zw/4jtkmy417mv_79rgj2pm_7240000gn/T/rep-native-browser-validation-99y1ymuq/capture/wire.pcap",
+      "bytes": 7820,
+      "sha256": "3fd5a4a6fc6b5fe2048f6791ac16a6c1137b592a37b24c0fea972c5bd1aba44f"
+    }
+  ],
+  "cleanup": {
+    "profile_removed": true,
+    "ready_file_removed": true,
+    "browser_process_stopped": true,
+    "cdp_endpoint_closed": true,
+    "private_files_and_directory": true
+  },
+  "quic": {
+    "plaintext": {
+      "bytes": 106,
+      "sha256": "ec134f349499f69421e94c7c04d3c5fd92f492bc6895eb46e48ad3c25a07512f"
+    },
+    "without_keys": {
+      "payload_field_matches": 0,
+      "matching_packets": 0,
+      "decrypted_stream_fields": 0
+    },
+    "with_keys": {
+      "payload_field_matches": 2,
+      "matching_packets": 2,
+      "decrypted_stream_fields": 14
+    },
+    "secret_labels_only": {
+      "CLIENT_HANDSHAKE_TRAFFIC_SECRET": 9,
+      "SERVER_HANDSHAKE_TRAFFIC_SECRET": 9,
+      "CLIENT_TRAFFIC_SECRET_0": 9,
+      "SERVER_TRAFFIC_SECRET_0": 9,
+      "EXPORTER_SECRET": 9,
+      "CLIENT_RANDOM": 2
+    },
+    "wire_ciphertext_preserved": true,
+    "decryption_tool": "tshark",
+    "certificate_validation": "WebTransport serverCertificateHashes; temporary ECDSA certificate"
+  },
+  "native_rtp": {
+    "records": 692,
+    "incoming": 346,
+    "outgoing": 346,
+    "packet_kinds": {
+      "rtp": 574,
+      "rtcp": 118
+    },
+    "raw_log_to_jsonl_all_bytes_identical": true,
+    "outgoing_incoming_all_bytes_identical": true,
+    "decoded_original_media": {
+      "collector_reencoded": false,
+      "opus_packets": 156,
+      "vp8_encoded_frames": 31,
+      "depacketization": "strip RTP/RED/VP8 framing, preserve encoded bytes; add Ogg/IVF container headers",
+      "streams": [
+        {
+          "kind": "audio",
+          "codec": "opus",
+          "decoded_frames": 156,
+          "container": {
+            "bytes": 17025,
+            "sha256": "2b8555a2d06a1b5de22a7c56fa002d32fd1afac8da0956c45d995520ae2b4d65"
+          },
+          "decoded": {
+            "bytes": 599040,
+            "sha256": "f67fecd1a955998fb985f7d97c267b1658b0bc05e8319f2dad8a0740cc86565b"
+          },
+          "pcm_rms": 0.07996417047264223,
+          "oscillator_hz": 440.07163293117105
+        },
+        {
+          "kind": "video",
+          "codec": "vp8",
+          "decoded_frames": 31,
+          "container": {
+            "bytes": 86934,
+            "sha256": "9461ba1ddfd7a6afcf51a512cb0d0e1ae52ee521c162a7270d93a9d23380fb6c"
+          },
+          "decoded": {
+            "bytes": 2678400,
+            "sha256": "ee4f08b85ec1abef9f90ea2d1706e648163780b2986343d16873b77f4074ff59"
+          }
+        }
+      ]
+    }
+  },
+  "server": {
+    "aioquic": "1.2.0",
+    "connections": 1,
+    "observations": [
+      {
+        "case": "native-diagnostics",
+        "connection": 1,
+        "kind": "bidi",
+        "bytes": 106,
+        "sha256": "ec134f349499f69421e94c7c04d3c5fd92f492bc6895eb46e48ad3c25a07512f"
+      }
+    ],
+    "errors": []
+  },
+  "termination_cases": [
+    {
+      "case": "byte_limit",
+      "status": "partial",
+      "stop_reason": "log_byte_limit",
+      "exit_code": 0,
+      "log": {
+        "observed_bytes": 2335,
+        "retained_bytes": 1024,
+        "dropped_bytes": 1311
+      },
+      "cleanup": {
+        "profile_removed": true,
+        "ready_file_removed": true,
+        "browser_process_stopped": true,
+        "cdp_endpoint_closed": true,
+        "private_files_and_directory": true
+      }
+    },
+    {
+      "case": "cancelled",
+      "status": "cancelled",
+      "stop_reason": "cancelled",
+      "exit_code": 1,
+      "log": {
+        "observed_bytes": 2335,
+        "retained_bytes": 2335,
+        "dropped_bytes": 0
+      },
+      "cleanup": {
+        "profile_removed": true,
+        "ready_file_removed": true,
+        "browser_process_stopped": true,
+        "cdp_endpoint_closed": true,
+        "private_files_and_directory": true
+      }
+    }
+  ],
+  "owned_fixture_processes_stopped": true,
+  "installed_build": {
+    "path": "/Users/sijan/.local/bin/rep",
+    "bytes": 18379506,
+    "sha256": "cb1a16a505e67711532ce5abab508f9c1368d4002042da16f97323d7efe49084",
+    "installed_at": "2026-09-27T18:16:14.746331+00:00",
+    "verified_runtime_sources_unchanged": true,
+    "command_help_verified": true,
+    "updated_embedded_contract_verified": true,
+    "note": "Installed build includes build metadata and final documentation refinements; the live-tested runtime source hashes match.",
+    "required_go_suite": "passed",
+    "native_package_race_tests": "passed",
+    "native_package_cgo_disabled_tests": "passed"
+  }
+}

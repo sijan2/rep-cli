@@ -1,0 +1,138 @@
+<!doctype html><meta charset="utf-8"><title>Rep local transport fixture</title>
+<h1>Rep local transport fixture</h1><p id="status">Starting</p>
+<script>
+const fixture = __FIXTURE_CONFIG__;
+const encoder = new TextEncoder();
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const limit = (promise, label) => Promise.race([promise, delay(10000).then(() => { throw new Error(label + ' timed out'); })]);
+const once = (target, event) => new Promise(resolve => target.addEventListener(event, resolve, {once:true}));
+const bytes = async value => typeof value === 'string' ? encoder.encode(value) : value instanceof Blob ? new Uint8Array(await value.arrayBuffer()) : new Uint8Array(value.buffer || value, value.byteOffset || 0, value.byteLength);
+const digest = async value => ({bytes:value.byteLength, sha256:[...new Uint8Array(await crypto.subtle.digest('SHA-256',value))].map(byte=>byte.toString(16).padStart(2,'0')).join('')});
+const large = () => Uint8Array.from({length:32768}, (_, index) => index % 251);
+const stressCount = 1024, stressBytes = 1024;
+const stressMessage = index => {const value=new Uint8Array(stressBytes);value.fill(index%251);new DataView(value.buffer).setUint32(0,index);return value;};
+const concatenate = chunks => { const out = new Uint8Array(chunks.reduce((n, chunk) => n + chunk.length, 0)); let offset=0; for(const chunk of chunks){out.set(chunk,offset);offset+=chunk.length;} return out; };
+window.closeFixture = () => {};
+
+async function rtcFixture() {
+  const left = new RTCPeerConnection({iceServers:[]});
+  const right = new RTCPeerConnection({iceServers:[]});
+  const outbound = left.createDataChannel('rep-fixture', {ordered:true});
+  const inboundPromise = new Promise(resolve => { right.ondatachannel = event => resolve(event.channel); });
+  const opened = once(outbound, 'open');
+  const gather = async peer => {
+    if(peer.iceGatheringState !== 'complete') await new Promise(resolve => peer.addEventListener('icegatheringstatechange', () => {if(peer.iceGatheringState === 'complete')resolve();}));
+  };
+  await left.setLocalDescription(await left.createOffer()); await gather(left);
+  await right.setRemoteDescription(left.localDescription);
+  await right.setLocalDescription(await right.createAnswer()); await gather(right);
+  await left.setRemoteDescription(right.localDescription);
+  const inbound = await limit(inboundPromise, 'remote data channel');
+  await limit(opened, 'data channel open');
+  outbound.binaryType = inbound.binaryType = 'arraybuffer';
+  const leftValues = fixture.mode === 'stress' ? Array.from({length:stressCount},(_,index)=>stressMessage(index)) : fixture.mode === 'truncated' ? [large().buffer] : [
+    'rtc text café 雪', new Uint8Array([0,255,1,128,42]).buffer,
+    new Uint8Array(new Uint8Array([9,10,11,12,13,14]).buffer,1,4),
+    new Blob([new Uint8Array([254,253,0,127])]),
+  ];
+  const rightValues = ['rtc receipt', new Uint8Array([3,0,255,99]).buffer];
+  const collect = (channel, count, summarize=false) => {
+    const found = []; let chain=Promise.resolve(), done;
+    const completed = new Promise(resolve => {done=resolve;});
+    channel.addEventListener('message', event => {
+      chain=chain.then(async()=>{
+        const value=await bytes(event.data);found.push(summarize?value:await digest(value));
+        if(found.length===count)done(summarize?{messages:found.length,...await digest(concatenate(found))}:found);
+      });
+    });
+    return completed;
+  };
+  const rightReceived = collect(inbound,leftValues.length,fixture.mode==='stress'), leftReceived = collect(outbound,rightValues.length);
+  const sendStarted=performance.now();
+  for(const value of leftValues)outbound.send(value);
+  const sendLoopSeconds=(performance.now()-sendStarted)/1000;
+  const receivedRight = await limit(rightReceived,'right messages');
+  const sendToDeliverySeconds=(performance.now()-sendStarted)/1000;
+  for(const value of rightValues)inbound.send(value);
+  const receivedLeft = await limit(leftReceived,'left messages');
+  window.closeFixture = () => {outbound.close();inbound.close();left.close();right.close();};
+  if(fixture.mode !== 'open') {
+    const closed=once(outbound,'close'); outbound.close(); await limit(closed,'data channel close');
+    left.close();right.close();
+  }
+  return {protocol:'webrtc', mode:fixture.mode, left_received:receivedLeft, right_received:receivedRight, peers_closed:fixture.mode!=='open',
+    ...(fixture.mode==='stress'?{send_loop_seconds:sendLoopSeconds,send_to_receiver_digest_seconds:sendToDeliverySeconds}: {})};
+}
+
+async function allBytes(readable, method='reader') {
+  const chunks=[];
+  if(method==='pipe') await readable.pipeTo(new WritableStream({write(value){chunks.push(new Uint8Array(value));}}));
+  else {
+    const reader=readable.getReader(method==='byob'?{mode:'byob'}:undefined);
+    while(true){const item=await (method==='byob'?reader.read(new Uint8Array(7)):reader.read());if(item.done)break;chunks.push(new Uint8Array(item.value));}
+    reader.releaseLock();
+  }
+  return concatenate(chunks);
+}
+
+async function wtFixture() {
+  const transport = new WebTransport(fixture.quic.url, {serverCertificateHashes:[{algorithm:'sha-256',value:new Uint8Array(fixture.quic.certificate_hash)}]});
+  window.closeFixture = () => transport.close();
+  window.fixtureStage='wt-ready';
+  await limit(transport.ready,'WebTransport ready');
+  const datagram = new Uint8Array([0,255,1,128,77]);
+  const datagramReader=transport.datagrams.readable.getReader(), datagramWriter=transport.datagrams.writable.getWriter();
+  await datagramWriter.write(datagram);
+  const receivedDatagram=(await limit(datagramReader.read(),'datagram echo')).value;
+  datagramReader.releaseLock();datagramWriter.releaseLock();
+
+  const uniPayload=encoder.encode('uni café 雪');
+  const incoming=transport.incomingUnidirectionalStreams.getReader();
+  const uni=await transport.createUnidirectionalStream(), uniWriter=uni.getWriter();
+  await uniWriter.write(uniPayload);await uniWriter.close();
+  const echoedUni=(await limit(incoming.read(),'unidirectional echo')).value;
+  const uniReceived=await limit(allBytes(echoedUni),'unidirectional bytes'); incoming.releaseLock();
+
+  const bidiPayload=fixture.mode==='truncated'?large():new Uint8Array([0,13,10,255,42,7,8,9]);
+  const bidi=await transport.createBidirectionalStream(), bidiWriter=bidi.writable.getWriter();
+  if(fixture.mode==='truncated')await bidiWriter.write(bidiPayload);
+  else {await bidiWriter.write(bidiPayload.subarray(0,3));await bidiWriter.write(bidiPayload.subarray(3));}
+  await bidiWriter.close();
+  const bidiReceived=await limit(allBytes(bidi.readable,fixture.mode==='gap'?'pipe':'reader'),'bidirectional bytes');
+  let incomingBidiResult;
+  if(fixture.mode==='incoming') {
+    const incomingBidi=transport.incomingBidirectionalStreams.getReader();
+    window.fixtureStage='incoming-bidi-stream';
+    const serverBidi=(await limit(incomingBidi.read(),'server bidirectional stream')).value;
+    window.fixtureStage='incoming-bidi-byob';
+    const serverData=await limit(allBytes(serverBidi.readable,'byob'),'server BYOB bytes');
+    const reply=encoder.encode('server bidi receipt'), writer=serverBidi.writable.getWriter();
+    window.fixtureStage='incoming-bidi-write';
+    await writer.write(reply);await writer.close();incomingBidi.releaseLock();
+    const acknowledged=transport.datagrams.readable.getReader();
+    window.fixtureStage='incoming-bidi-acknowledgement';
+    const acknowledgement=(await limit(acknowledged.read(),'server bidi receipt acknowledgement')).value;
+    acknowledged.releaseLock();
+    incomingBidiResult={received:await digest(serverData),sent:await digest(reply),acknowledgement:await digest(new Uint8Array(acknowledgement)),reader:'byob',view_bytes:7};
+  }
+  window.fixtureStage='wt-close';
+  if(fixture.mode!=='open'){transport.close();await limit(transport.closed,'WebTransport close');}
+  return {protocol:'webtransport',mode:fixture.mode,datagram:await digest(new Uint8Array(receivedDatagram)),
+    unidirectional:await digest(uniReceived),bidirectional:await digest(bidiReceived),transport_closed:fixture.mode!=='open',
+    ...(incomingBidiResult?{server_bidirectional:incomingBidiResult}: {})};
+}
+
+window.runTransportFixture = async () => {
+  const held=fetch('/hold?case='+fixture.case).then(response=>response.text()).catch(()=>{});
+  let result;
+  try { result=await (fixture.protocol==='webrtc'?rtcFixture():wtFixture()); }
+  catch(error){result={error:error.name+': '+error.message,protocol:fixture.protocol,mode:fixture.mode};}
+  window.fixtureResult=result;
+  window.fixtureStage='finished';
+  document.querySelector('#status').textContent=result.error?'Failed':'Finished';
+  await fetch('/release?case='+fixture.case,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(result)}).then(response=>response.text());
+  await held;
+  return result;
+};
+window.runTransportFixture();
+</script>

@@ -36,16 +36,17 @@ type browserDownloadOptions struct {
 }
 
 type browserDownloadResult struct {
-	RequestID           string `json:"request_id"`
-	OutputPath          string `json:"output_path"`
-	Transport           string `json:"transport"`
-	Status              int    `json:"status"`
-	Bytes               int64  `json:"bytes"`
-	SHA256              string `json:"sha256"`
-	ContentType         string `json:"content_type"`
-	DetectedContentType string `json:"detected_content_type"`
-	TabID               int    `json:"tab_id"`
-	TabClosed           bool   `json:"tab_closed"`
+	Evidence            *operationEvidenceRef `json:"evidence,omitempty"`
+	RequestID           string                `json:"request_id"`
+	OutputPath          string                `json:"output_path"`
+	Transport           string                `json:"transport"`
+	Status              int                   `json:"status"`
+	Bytes               int64                 `json:"bytes"`
+	SHA256              string                `json:"sha256"`
+	ContentType         string                `json:"content_type"`
+	DetectedContentType string                `json:"detected_content_type"`
+	TabID               int                   `json:"tab_id"`
+	TabClosed           bool                  `json:"tab_closed"`
 }
 
 var (
@@ -69,7 +70,7 @@ the completed part file, and publishes it atomically. This path needs only the
 rep+ Native Messaging bridge; Arc's browser-process debugging port is not
 required.`,
 	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (returnErr error) {
 		req := lookupRequestForReplay(args[0])
 		if req == nil {
 			return output.EmitAgentError(os.Stdout, output.NewAgentError(
@@ -79,6 +80,12 @@ required.`,
 				"rep list --primary=false --pattern 'download|export|artifact' --limit 10 -o meta",
 			), getOutputMode() == "json")
 		}
+		record, err := beginBrowserEvidence("browser.download", map[string]any{"intent": "save a fresh browser transfer", "source_request_id": req.ID, "new_observation": true}, browserSelector, -1)
+		if err != nil {
+			return emitBrowserCallError("browser download", err)
+		}
+		defer record.finishOnReturn(&returnErr)
+		record.dispatch()
 		result, err := downloadCapturedRequestInBrowser(cmd.Context(), req, args[1], browserDownloadOptions{
 			Overwrite: browserDownloadOverwrite, Timeout: browserDownloadTimeout,
 			ChunkSize: browserDownloadChunkSize, NoCache: browserDownloadNoCache,
@@ -91,6 +98,14 @@ required.`,
 				"rep browser status --browser arc -j",
 				"capture the final GET, then retry its request ID",
 			), getOutputMode() == "json")
+		}
+		result.Evidence = record.ref()
+		if err := record.artifact(result.OutputPath, "download", "complete", "browser stream reached EOF and the saved file passed transfer validation",
+			map[string]any{"source_request_id": req.ID, "new_observation": true, "transport": result.Transport, "status": result.Status}); err != nil {
+			return emitBrowserCallError("browser download", err)
+		}
+		if err := record.finish(result, "completed", "satisfied", "", nil); err != nil {
+			return emitBrowserCallError("browser download", err)
 		}
 		return emitBrowserResult(result, func() {
 			fmt.Printf("saved: %s\ntransport: browser\nstatus: %d\nbytes: %d\ncontent-type: %s\ndetected-content-type: %s\nsha256: %s\n",

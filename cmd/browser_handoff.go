@@ -27,6 +27,8 @@ type browserCaptureHandoff struct {
 	Immutable        bool
 	HostInstance     string
 	MaxSnapshotBytes int64
+	MaxRequests      int
+	MaxRequestBytes  int64
 }
 
 type browserSnapshotReference struct {
@@ -54,6 +56,8 @@ func prepareBrowserCapture(ctx context.Context, client browserCaptureCaller) (br
 		HostInstance     string `json:"host_instance"`
 		RequestChunks    bool   `json:"request_chunks"`
 		MaxSnapshotBytes int64  `json:"max_snapshot_bytes"`
+		MaxRequests      int    `json:"max_requests"`
+		MaxRequestBytes  int64  `json:"max_request_bytes"`
 	}
 	err = client.Call(ctx, "bridge.capture.capabilities", nil, &capabilities)
 	if err == nil && capabilities.Schema == 1 && capabilities.Immutable && capabilities.HostInstance != "" {
@@ -62,6 +66,7 @@ func prepareBrowserCapture(ctx context.Context, client browserCaptureCaller) (br
 		}
 		handoff.Immutable, handoff.HostInstance = true, capabilities.HostInstance
 		handoff.MaxSnapshotBytes = capabilities.MaxSnapshotBytes
+		handoff.MaxRequests, handoff.MaxRequestBytes = capabilities.MaxRequests, capabilities.MaxRequestBytes
 		return handoff, nil
 	}
 	if selected.Scoped {
@@ -115,6 +120,9 @@ func finishBrowserCapture(ctx context.Context, client browserCaptureCaller, resu
 		result["saved_session_id"], result["saved_hash_id"] = session.ID, session.HashID
 	}
 	result["capture_snapshot_verified"] = handoff.Immutable
+	if export.CaptureDigest != "" {
+		result["capture_sha256"] = export.CaptureDigest
+	}
 	if handoff.Scoped {
 		selected, err := scope.Current()
 		if err != nil {

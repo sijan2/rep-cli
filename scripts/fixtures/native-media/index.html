@@ -1,0 +1,88 @@
+<!doctype html><meta charset="utf-8"><title>Rep synthetic media fixture</title>
+<h1>Rep synthetic media fixture</h1><canvas id="source" width="320" height="180"></canvas>
+<video id="received" muted playsinline></video>
+<script>
+// This fixture creates its own pixels and oscillator samples. It never requests
+// camera, microphone, screen-sharing or external ICE services.
+const delay = ms => new Promise(resolve=>setTimeout(resolve,ms));
+const bounded = (promise,name) => Promise.race([promise,delay(8000).then(()=>{throw new Error(name+' timed out');})]);
+let current;
+
+async function fixtureStats() {
+  if(!current)return {started:false};
+  const totals={outbound_packets:0,outbound_bytes:0,inbound_packets:0,inbound_bytes:0,frames_decoded:0,audio_energy:0,audio_energy_fields:0,
+    audio_outbound_bytes:0,audio_inbound_bytes:0,video_outbound_bytes:0,video_inbound_bytes:0};
+  for(const peer of [current.left,current.right]) {
+    for(const row of (await peer.getStats()).values()) {
+      const kind=row.kind||row.mediaType;
+      if(row.type==='outbound-rtp'&&!row.isRemote){totals.outbound_packets+=row.packetsSent||0;totals.outbound_bytes+=row.bytesSent||0;if(kind==='audio'||kind==='video')totals[kind+'_outbound_bytes']+=row.bytesSent||0;}
+      if(row.type==='inbound-rtp'&&!row.isRemote){totals.inbound_packets+=row.packetsReceived||0;totals.inbound_bytes+=row.bytesReceived||0;totals.frames_decoded+=row.framesDecoded||0;
+        if(kind==='audio'||kind==='video')totals[kind+'_inbound_bytes']+=row.bytesReceived||0;
+        if(typeof row.totalAudioEnergy==='number'){totals.audio_energy+=row.totalAudioEnergy;totals.audio_energy_fields++;}}
+    }
+  }
+  const samples=new Float32Array(1024);if(current.analyser)current.analyser.getFloatTimeDomainData(samples);
+  const receivedAudioRMS=Math.sqrt(samples.reduce((sum,value)=>sum+value*value,0)/samples.length);
+  return {started:true,closed:current.closed,left_state:current.left.connectionState,right_state:current.right.connectionState,received_audio_rms:receivedAudioRMS,
+    audio_context:current.audio.state,canvas_frames:current.frame,
+    tracks:current.local.getTracks().map(track=>({id:track.id,kind:track.kind,ready_state:track.readyState,enabled:track.enabled,muted:track.muted})),
+    received_tracks:current.received.getTracks().map(track=>({id:track.id,kind:track.kind,ready_state:track.readyState,enabled:track.enabled,muted:track.muted})),...totals};
+}
+
+window.startMediaFixture=async()=>{
+  if(current)throw new Error('fixture already started');
+  const canvas=document.querySelector('#source'), context=canvas.getContext('2d');
+  let frame=0;
+  const draw=()=>{
+    context.fillStyle=frame%2?'#224466':'#446622';context.fillRect(0,0,320,180);
+    context.fillStyle='#f2b234';context.fillRect((frame*7)%260,45,60,70);
+    context.fillStyle='#fff';context.font='18px sans-serif';context.fillText('Rep synthetic '+frame,12,25);
+    frame++;if(current)current.frame=frame;
+  };
+  draw();
+  const video=canvas.captureStream(10);
+  const audio=new AudioContext({sampleRate:48000});
+  await bounded(audio.resume(),'synthetic audio resume');
+  const oscillator=audio.createOscillator(), gain=audio.createGain(), destination=audio.createMediaStreamDestination();
+  oscillator.frequency.value=440;gain.gain.value=0.08;oscillator.connect(gain).connect(destination);oscillator.start();
+  const local=new MediaStream([video.getVideoTracks()[0],destination.stream.getAudioTracks()[0]]);
+  const left=new RTCPeerConnection({iceServers:[]}),right=new RTCPeerConnection({iceServers:[]});
+  const received=new MediaStream();
+  let ready;
+  const tracksReady=new Promise(resolve=>{ready=resolve;});
+  right.addEventListener('track',event=>{received.addTrack(event.track);if(received.getTracks().length===2)ready();});
+  current={left,right,audio,oscillator,local,received,frame,closed:false,timer:setInterval(draw,100)};
+  for(const track of local.getTracks())left.addTrack(track,local);
+  const gather=async peer=>{
+    if(peer.iceGatheringState==='complete')return;
+    await bounded(new Promise(resolve=>peer.addEventListener('icegatheringstatechange',()=>{if(peer.iceGatheringState==='complete')resolve();})),'ICE gathering');
+  };
+  await left.setLocalDescription(await left.createOffer());await gather(left);
+  await right.setRemoteDescription(left.localDescription);
+  await right.setLocalDescription(await right.createAnswer());await gather(right);
+  await left.setRemoteDescription(right.localDescription);await bounded(tracksReady,'received tracks');
+  // Consume received audio through an analyser and a zero-gain output. This
+  // establishes live PCM without producing audible sound or requesting inputs.
+  const receiverSource=audio.createMediaStreamSource(received),analyser=audio.createAnalyser(),silence=audio.createGain();
+  analyser.fftSize=1024;silence.gain.value=0;receiverSource.connect(analyser).connect(silence).connect(audio.destination);current.analyser=analyser;
+  const receivedVideo=document.querySelector('#received');receivedVideo.srcObject=received;
+  await receivedVideo.play();
+  const started=performance.now();
+  while(performance.now()-started<5000) {
+    const stats=await fixtureStats();
+    if(stats.left_state==='connected'&&stats.right_state==='connected'&&stats.frames_decoded>0&&stats.inbound_packets>5)return stats;
+    await delay(100);
+  }
+  throw new Error('synthetic media did not reach both receivers');
+};
+
+window.fixtureStats=fixtureStats;
+window.stopMediaFixture=async()=>{
+  if(!current||current.closed)return fixtureStats();
+  current.closed=true;clearInterval(current.timer);current.oscillator.stop();
+  for(const track of current.local.getTracks())track.stop();
+  current.left.close();current.right.close();await current.audio.close();
+  document.querySelector('#received').srcObject=null;
+  return fixtureStats();
+};
+</script>

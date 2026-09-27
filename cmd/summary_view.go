@@ -108,7 +108,15 @@ func loadTrafficSummary(selected scope.Scope, options trafficSummaryOptions) (co
 	}
 	var persistent *store.Store
 	var err error
-	if options.Saved != "" || options.Primary {
+	var session *store.Session
+	indexed := false
+	if options.Saved != "" {
+		session, indexed, err = store.LoadIndexedSession(options.Saved)
+		if err != nil {
+			return input, err
+		}
+	}
+	if (!indexed && options.Saved != "") || options.Primary {
 		// Load directly rather than reusing a singleton from another command.
 		persistent, err = store.Load()
 		if err != nil {
@@ -117,10 +125,9 @@ func loadTrafficSummary(selected scope.Scope, options trafficSummaryOptions) (co
 	}
 	var export store.Export
 	if options.Saved != "" {
-		var session *store.Session
-		if options.Saved == "latest" || options.Saved == "last" {
+		if !indexed && (options.Saved == "latest" || options.Saved == "last") {
 			session = persistent.GetLatestSession()
-		} else {
+		} else if !indexed {
 			session, err = selectSummaryArchive(persistent.Sessions, options.Saved)
 			if err != nil {
 				return input, err

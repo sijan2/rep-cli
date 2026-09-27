@@ -47,13 +47,16 @@ func dispatchJev(ctx context.Context, message *Message, send func(interface{}) e
 		defer func() { <-jevSlots }()
 		config, err := jev.LoadConfig()
 		if err != nil {
-			response["error"] = err.Error()
+			response["error"], response["error_code"] = err.Error(), jev.CodeNotConfigured
 			_ = send(response)
 			return
 		}
 		result, err := jev.NewClient(config).Classify(ctx, input)
 		if err != nil {
 			response["error"] = err.Error()
+			if code := jev.CodeOf(err); code != "" {
+				response["error_code"] = code
+			}
 		} else {
 			response["success"] = true
 			response["result"] = result

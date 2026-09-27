@@ -1,0 +1,618 @@
+{
+  "browser": "Chrome/153.0.8010.48",
+  "capture_source": "real Chromium local generated product table, URLs normalized",
+  "before": {
+    "frameTree": {
+      "frame": {
+        "id": "FBA8F32BA9EE24C8DACE1601FD3FED07",
+        "loaderId": "1088759948EF92B4B35D4BEF98152D71",
+        "url": "https://fixture.test/products"
+      }
+    },
+    "nodes": [
+      {
+        "nodeId": "2",
+        "backendDOMNodeId": 2,
+        "ignored": false,
+        "frameId": "FBA8F32BA9EE24C8DACE1601FD3FED07",
+        "role": {
+          "value": "RootWebArea"
+        },
+        "name": {
+          "value": "Product shop"
+        },
+        "properties": [
+          {
+            "name": "focusable",
+            "value": {
+              "value": true
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "value": "file:///tmp/rep-jev-arch-probe.yKq8L0/products-fixture.html"
+            }
+          }
+        ]
+      },
+      {
+        "nodeId": "3",
+        "parentId": "2",
+        "backendDOMNodeId": 3,
+        "ignored": true,
+        "role": {
+          "value": "none"
+        }
+      },
+      {
+        "nodeId": "6",
+        "parentId": "3",
+        "backendDOMNodeId": 6,
+        "ignored": true,
+        "role": {
+          "value": "none"
+        }
+      },
+      {
+        "nodeId": "7",
+        "parentId": "6",
+        "backendDOMNodeId": 7,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTable"
+        },
+        "name": {
+          "value": "Products"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "8",
+        "parentId": "7",
+        "backendDOMNodeId": 8,
+        "ignored": true,
+        "role": {
+          "value": "none"
+        }
+      },
+      {
+        "nodeId": "9",
+        "parentId": "8",
+        "backendDOMNodeId": 9,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableRow"
+        },
+        "name": {
+          "value": ""
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "13",
+        "parentId": "8",
+        "backendDOMNodeId": 13,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableRow"
+        },
+        "name": {
+          "value": ""
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "10",
+        "parentId": "9",
+        "backendDOMNodeId": 10,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableCell"
+        },
+        "name": {
+          "value": "Widget Basic $10"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "11",
+        "parentId": "9",
+        "backendDOMNodeId": 11,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableCell"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "14",
+        "parentId": "13",
+        "backendDOMNodeId": 14,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableCell"
+        },
+        "name": {
+          "value": "Widget Pro $20"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "15",
+        "parentId": "13",
+        "backendDOMNodeId": 15,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableCell"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "17",
+        "parentId": "10",
+        "backendDOMNodeId": 17,
+        "ignored": false,
+        "role": {
+          "value": "StaticText"
+        },
+        "name": {
+          "value": "Widget Basic $10"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "12",
+        "parentId": "11",
+        "backendDOMNodeId": 12,
+        "ignored": false,
+        "role": {
+          "value": "button"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": [
+          {
+            "name": "invalid",
+            "value": {
+              "value": "false"
+            }
+          },
+          {
+            "name": "focusable",
+            "value": {
+              "value": true
+            }
+          }
+        ]
+      },
+      {
+        "nodeId": "19",
+        "parentId": "14",
+        "backendDOMNodeId": 19,
+        "ignored": false,
+        "role": {
+          "value": "StaticText"
+        },
+        "name": {
+          "value": "Widget Pro $20"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "16",
+        "parentId": "15",
+        "backendDOMNodeId": 16,
+        "ignored": false,
+        "role": {
+          "value": "button"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": [
+          {
+            "name": "invalid",
+            "value": {
+              "value": "false"
+            }
+          },
+          {
+            "name": "focusable",
+            "value": {
+              "value": true
+            }
+          }
+        ]
+      },
+      {
+        "nodeId": "-1000000002",
+        "parentId": "17",
+        "ignored": false,
+        "role": {
+          "value": "InlineTextBox"
+        },
+        "name": {
+          "value": "Widget Basic $10"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "18",
+        "parentId": "12",
+        "backendDOMNodeId": 18,
+        "ignored": false,
+        "role": {
+          "value": "StaticText"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "-1000000004",
+        "parentId": "19",
+        "ignored": false,
+        "role": {
+          "value": "InlineTextBox"
+        },
+        "name": {
+          "value": "Widget Pro $20"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "20",
+        "parentId": "16",
+        "backendDOMNodeId": 20,
+        "ignored": false,
+        "role": {
+          "value": "StaticText"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "-1000000003",
+        "parentId": "18",
+        "ignored": false,
+        "role": {
+          "value": "InlineTextBox"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "-1000000005",
+        "parentId": "20",
+        "ignored": false,
+        "role": {
+          "value": "InlineTextBox"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      }
+    ]
+  },
+  "after": {
+    "frameTree": {
+      "frame": {
+        "id": "FBA8F32BA9EE24C8DACE1601FD3FED07",
+        "loaderId": "1088759948EF92B4B35D4BEF98152D71",
+        "url": "https://fixture.test/products"
+      }
+    },
+    "nodes": [
+      {
+        "nodeId": "2",
+        "backendDOMNodeId": 2,
+        "ignored": false,
+        "frameId": "FBA8F32BA9EE24C8DACE1601FD3FED07",
+        "role": {
+          "value": "RootWebArea"
+        },
+        "name": {
+          "value": "Product shop"
+        },
+        "properties": [
+          {
+            "name": "focusable",
+            "value": {
+              "value": true
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "value": "file:///tmp/rep-jev-arch-probe.yKq8L0/products-fixture.html"
+            }
+          }
+        ]
+      },
+      {
+        "nodeId": "3",
+        "parentId": "2",
+        "backendDOMNodeId": 3,
+        "ignored": true,
+        "role": {
+          "value": "none"
+        }
+      },
+      {
+        "nodeId": "6",
+        "parentId": "3",
+        "backendDOMNodeId": 6,
+        "ignored": true,
+        "role": {
+          "value": "none"
+        }
+      },
+      {
+        "nodeId": "7",
+        "parentId": "6",
+        "backendDOMNodeId": 7,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTable"
+        },
+        "name": {
+          "value": "Products"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "8",
+        "parentId": "7",
+        "backendDOMNodeId": 8,
+        "ignored": true,
+        "role": {
+          "value": "none"
+        }
+      },
+      {
+        "nodeId": "9",
+        "parentId": "8",
+        "backendDOMNodeId": 9,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableRow"
+        },
+        "name": {
+          "value": ""
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "13",
+        "parentId": "8",
+        "backendDOMNodeId": 13,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableRow"
+        },
+        "name": {
+          "value": ""
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "10",
+        "parentId": "9",
+        "backendDOMNodeId": 10,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableCell"
+        },
+        "name": {
+          "value": "Widget Pro $20"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "11",
+        "parentId": "9",
+        "backendDOMNodeId": 11,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableCell"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "14",
+        "parentId": "13",
+        "backendDOMNodeId": 14,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableCell"
+        },
+        "name": {
+          "value": "Widget Basic $10"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "15",
+        "parentId": "13",
+        "backendDOMNodeId": 15,
+        "ignored": false,
+        "role": {
+          "value": "LayoutTableCell"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "21",
+        "parentId": "10",
+        "backendDOMNodeId": 21,
+        "ignored": false,
+        "role": {
+          "value": "StaticText"
+        },
+        "name": {
+          "value": "Widget Pro $20"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "12",
+        "parentId": "11",
+        "backendDOMNodeId": 12,
+        "ignored": false,
+        "role": {
+          "value": "button"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": [
+          {
+            "name": "invalid",
+            "value": {
+              "value": "false"
+            }
+          },
+          {
+            "name": "focusable",
+            "value": {
+              "value": true
+            }
+          }
+        ]
+      },
+      {
+        "nodeId": "22",
+        "parentId": "14",
+        "backendDOMNodeId": 22,
+        "ignored": false,
+        "role": {
+          "value": "StaticText"
+        },
+        "name": {
+          "value": "Widget Basic $10"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "16",
+        "parentId": "15",
+        "backendDOMNodeId": 16,
+        "ignored": false,
+        "role": {
+          "value": "button"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": [
+          {
+            "name": "invalid",
+            "value": {
+              "value": "false"
+            }
+          },
+          {
+            "name": "focusable",
+            "value": {
+              "value": true
+            }
+          }
+        ]
+      },
+      {
+        "nodeId": "-1000000010",
+        "parentId": "21",
+        "ignored": false,
+        "role": {
+          "value": "InlineTextBox"
+        },
+        "name": {
+          "value": "Widget Pro $20"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "18",
+        "parentId": "12",
+        "backendDOMNodeId": 18,
+        "ignored": false,
+        "role": {
+          "value": "StaticText"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "-1000000011",
+        "parentId": "22",
+        "ignored": false,
+        "role": {
+          "value": "InlineTextBox"
+        },
+        "name": {
+          "value": "Widget Basic $10"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "20",
+        "parentId": "16",
+        "backendDOMNodeId": 20,
+        "ignored": false,
+        "role": {
+          "value": "StaticText"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "-1000000003",
+        "parentId": "18",
+        "ignored": false,
+        "role": {
+          "value": "InlineTextBox"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      },
+      {
+        "nodeId": "-1000000005",
+        "parentId": "20",
+        "ignored": false,
+        "role": {
+          "value": "InlineTextBox"
+        },
+        "name": {
+          "value": "Buy"
+        },
+        "properties": []
+      }
+    ]
+  }
+}

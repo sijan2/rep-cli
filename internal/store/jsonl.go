@@ -17,6 +17,12 @@ func appendJSONL(path string, v interface{}) error {
 // Stage complete entries before taking the append lock. Readers and writers
 // coordinate on the log descriptor; errors roll back this append's bytes.
 func appendJSONLStream(path string, encode func(io.Writer) error) error {
+	return appendJSONLStreamIndexed(path, encode, nil)
+}
+
+// afterAppend is an optional rebuildable-cache update. It runs while the log's
+// exclusive append lock is still held and never changes committed log bytes.
+func appendJSONLStreamIndexed(path string, encode func(io.Writer) error, afterAppend func(*os.File, os.FileInfo, int64, int64)) error {
 	if err := EnsureStoreDir(); err != nil {
 		return err
 	}
@@ -44,6 +50,10 @@ func appendJSONLStream(path string, encode func(io.Writer) error) error {
 		return err
 	}
 	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	before, err := file.Stat()
+	if err != nil {
+		return err
+	}
 	offset, err := file.Seek(0, io.SeekEnd)
 	if err != nil {
 		return err
@@ -54,6 +64,11 @@ func appendJSONLStream(path string, encode func(io.Writer) error) error {
 	if err != nil {
 		_ = file.Truncate(offset)
 		_ = file.Sync()
+	} else if afterAppend != nil {
+		end, seekErr := file.Seek(0, io.SeekCurrent)
+		if seekErr == nil {
+			afterAppend(file, before, offset, end-offset)
+		}
 	}
 	return err
 }

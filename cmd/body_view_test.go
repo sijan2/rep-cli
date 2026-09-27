@@ -14,6 +14,36 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestPayloadViewRefusesAnUnchangedCursorWhenNoByteFits(t *testing.T) {
+	command := &cobra.Command{}
+	command.SetOut(new(bytes.Buffer))
+	metadata := map[string]interface{}{"offset": 0, "selected_bytes": 4, "body": "", "encoding": "utf8", "returned_bytes": 0, "next_offset": 0, "view_complete": false}
+	encoded, _ := json.Marshal(metadata)
+	// The empty projection fits; a complete two-byte rune does not.
+	if err := writePayloadView(command, metadata, []byte("éé"), false, len(encoded)+2, "stream", ""); err == nil {
+		t.Fatal("returned success without delivering bytes or advancing the cursor")
+	}
+}
+
+func TestPayloadViewSearchesOnlyCompleteUTF8Prefixes(t *testing.T) {
+	command := &cobra.Command{}
+	var buffer bytes.Buffer
+	command.SetOut(&buffer)
+	body := []byte(strings.Repeat("€", 1000))
+	metadata := map[string]interface{}{"offset": 0, "selected_bytes": len(body), "body": "", "encoding": "utf8", "returned_bytes": 0, "next_offset": 0, "view_complete": false}
+	encoded, _ := json.Marshal(metadata)
+	if err := writePayloadView(command, metadata, body, false, len(encoded)+4, "stream", ""); err != nil {
+		t.Fatal(err)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(buffer.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["body"] != "€" || result["next_offset"] != float64(3) {
+		t.Fatalf("fitting UTF-8 prefix was lost: %v", result)
+	}
+}
+
 func TestBodyEvidenceDistinguishesMissingEmptyAndCorrupt(t *testing.T) {
 	request := &store.Request{Response: &store.Response{}}
 	_, _, evidence, err := bodyEvidence(request, false)

@@ -195,6 +195,15 @@ func findRequestByAnyID(s *store.Store, requestID string) *store.Request {
 // unique across all candidate requests. --saved pins one immutable source.
 func findBodyWebRequest(requestID, saved string) (*store.Request, error) {
 	if saved != "" {
+		if session, handled, err := store.LoadIndexedSession(saved); handled {
+			if err != nil {
+				return nil, err
+			}
+			if session == nil {
+				return nil, fmt.Errorf("saved session not found in this task")
+			}
+			return store.BuildIndex(session.Requests).GetByAny(requestID), nil
+		}
 		persistent, err := store.Load()
 		if err != nil {
 			return nil, fmt.Errorf("cannot read this task's archives")

@@ -9,8 +9,11 @@ Versioned local JSON: `{ "version": 1, "url": "https://example.com/form", "steps
 Every step needs a unique `id` and `action`. Exact targets use `selector` or
 `name` with optional `role`. Repeated labels use `within: {selector, text,
 text_selector}`; text_selector identifies the scope's stable label. Names/text
-normalize whitespace; input values remain exact. Open shadow roots are supported;
-frames, closed roots, virtualized content, and arbitrary custom widgets are not.
+normalize whitespace; input values remain exact. Targets may specify `frame_id`
+and optional exact `frame_url`; semantic targets may use a unique `frame_url`
+alone. Same-process and out-of-process frames retain document/session identity
+through execution and outcome checks. Open shadow roots are supported. Missing
+virtualized content and unsupported custom widgets are not inferred.
 
 Actions: `fill` with `value` (different nonempty text needs `replace: true`);
 `replace` with unique `old` substring and `value`; `choose` with option-label
@@ -27,8 +30,14 @@ require the destination URL AND its loaded control/content.
 
 `target.goal` uses the existing Jev selector, without selector/within. Optional
 name/role adds local checks. Only `selected` with adequate confidence and complete
-coverage may act. Values and outcome conditions stay local. Exact targets need
+coverage may act. Optional `root_backend_dom_node_id` restricts a semantic goal
+to a known subtree and requires a frame. Values and outcome conditions stay local. Exact targets need
 no model/credentials. `--no-cache` bypasses Jev's existing decision cache.
+
+Consecutive independent semantic steps may share the same explicit `batch`
+string. Their targets resolve together, while each step validates its evidence
+before mutation. A preceding change that invalidates a later binding forces
+reselection. Current bindings can be reused without another provider call.
 
 Default previews: validate every step, inspect first target without input or
 scrolling, defer dependent targets. `--apply` executes and stops on first failure.
@@ -36,13 +45,17 @@ Mutations are never retried. Transport errors after dispatch are `unconfirmed`;
 inspect state before resuming. Only read-only waits retry across page navigation.
 
 Reports: `status`, `steps` with `id/status/code/evidence/attempted/changed`,
-`duration_ms`, `bridge_calls`, and `semantic_selections`. Evidence distinguishes
+`duration_ms`, `bridge_calls`, `semantic_selections`, `decision_requests`, and
+`decision_usage`. Evidence distinguishes
 `input_readback` from application `postcondition` and `skip_condition`. UI
 read-back alone does not establish saved server state. No form values are echoed.
 Partial failures return the report and nonzero exit status.
 
-One debugger attachment per run, released on exit; already-attached tabs are
-rejected without detaching their owner. No extension reload or page installation.
+An exclusive execution lease shares the extension-owned browser session with
+observers. Concurrent executors are rejected; active capture ownership is
+preserved. Target geometry, iframe ancestry, occlusion, and document identity
+are checked before dispatch. Unsupported transformed frames stop explicitly.
+No extension reload or page installation is needed for each run.
 No network capture is started; use `browser action` for archived network evidence.
 
 Limits: version 1, HTTP(S) URLs without credentials, plan <=256 KiB, 1–100 steps,

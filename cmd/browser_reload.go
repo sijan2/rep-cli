@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/repplus/rep-cli/internal/bridge"
+	"github.com/repplus/rep-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +26,14 @@ or requiring Arc's browser-process remote-debugging port.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if browserReloadWait < 0 || browserReloadWait > time.Minute {
 			return emitBrowserArgumentError("browser reload-extension", errors.New("--wait must be between 0 and 1m"))
+		}
+		// Chromium unloads a command-line extension on runtime.reload() but does
+		// not restart its worker in headless mode, which would leave the task
+		// browser without a bridge. A restart registers the changed source.
+		if strings.EqualFold(strings.TrimSpace(browserSelector), "headless") {
+			return output.EmitAgentError(os.Stdout, output.NewAgentError("headless_reload_unsupported", "browser reload-extension",
+				"headless Chromium does not restart a command-line extension after reload; restart the task browser to load changed extension source",
+				"rep browser headless restart"), getOutputMode() == "json")
 		}
 		ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 		client, err := selectBrowserBridge(ctx, browserSelector, "browser reload-extension")

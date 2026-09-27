@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Rep decision runtime fixture</title>
+<style>
+body { font:16px system-ui; margin:20px; } input, select, button { margin:6px; padding:7px; }
+section { margin:18px 0; } iframe { width:650px; height:360px; display:block; margin:10px 0; }
+#overlay-area { position:relative; width:300px; height:70px; } #cover { position:absolute; inset:0; background:#999; z-index:10; }
+</style>
+<h1>Decision runtime verification</h1>
+<form aria-label="Profile">
+<label>Name<input id="name" name="name"></label>
+<label>Email<input id="email" name="email" type="email"></label>
+<label>Phone<input id="phone" name="phone" type="tel"></label>
+<label>Country<select id="country"><option>United States</option><option>Canada</option></select></label>
+<span id="region"><label>State<input id="state" name="state"></label></span>
+</form>
+<section aria-label="Products"><h2>Products</h2>
+<table><tbody>
+<tr id="basic"><td><a href="#basic">Widget Basic</a></td><td class="price">$10</td><td><button class="buy">Buy</button></td></tr>
+<tr id="pro"><td><a href="#pro">Widget Pro</a></td><td class="price">$20</td><td><button class="buy">Buy</button></td></tr>
+</tbody></table><output id="purchase">No purchase</output>
+</section>
+<section aria-label="Shadow controls"><div id="open-shadow"></div><div id="closed-shadow"></div><output id="shadow-status">No shadow action</output></section>
+<div id="overlay-area"><button id="covered">Covered action</button><div id="cover">Overlay</div></div><output id="covered-status">Not clicked</output>
+<section aria-label="Frame controls"><iframe id="local-frame" title="Local fixture" src="/frame.html?kind=local"></iframe><div id="remote-wrapper" style="position:relative"><iframe id="remote-frame" title="Remote fixture" src="__REMOTE__/frame.html?kind=remote"></iframe></div></section>
+<section aria-label="Additional observed actions" id="distractors"></section>
+<script>
+window.outcomes={local:0,remote:0,deep:0,open:0,closed:0,covered:0};
+window.readyFrames={};
+window.addEventListener('message',event=>{
+  if(!event.data?.fixture)return;
+  if(event.data.ready)readyFrames[event.data.kind]=true;
+  else if(event.data.kind in outcomes)outcomes[event.data.kind]++;
+});
+for(const mode of ['open','closed']){
+  const root=document.getElementById(mode+'-shadow').attachShadow({mode});
+  root.innerHTML='<button>'+mode[0].toUpperCase()+mode.slice(1)+' shadow action</button>';
+  root.querySelector('button').onclick=()=>{outcomes[mode]++;document.getElementById('shadow-status').textContent=mode+' completed';};
+}
+document.getElementById('country').onchange=()=>{
+  document.getElementById('region').innerHTML=document.getElementById('country').value==='Canada'
+    ?'<label>Province<input id="province" name="province"></label>':'<label>State<input id="state" name="state"></label>';
+};
+document.querySelectorAll('.buy').forEach(button=>button.onclick=()=>document.getElementById('purchase').textContent=button.closest('tr').id);
+document.getElementById('covered').onclick=()=>{outcomes.covered++;document.getElementById('covered-status').textContent='Clicked';};
+for(let n=0;n<45;n++){const b=document.createElement('button');b.textContent='Fixture action '+n;document.getElementById('distractors').appendChild(b);}
+window.swapPrices=()=>{const a=document.querySelector('#basic .price'),b=document.querySelector('#pro .price');[a.textContent,b.textContent]=[b.textContent,a.textContent];};
+window.fixtureReadback=()=>({outcomes:{...outcomes},fields:{name:document.querySelector('#name').value,email:document.querySelector('#email').value,phone:document.querySelector('#phone').value,region:document.querySelector('#province,#state').value},region_id:document.querySelector('#province,#state').id,purchase:document.querySelector('#purchase').textContent});
+</script>

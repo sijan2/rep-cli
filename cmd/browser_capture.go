@@ -17,15 +17,29 @@ import (
 // browser command that seals a capture. URLs, headers, and bodies deliberately
 // stay in live.json; callers can retrieve one body by ID when they need it.
 type browserCapturedRequest struct {
-	Sequence                int    `json:"sequence"`
-	ID                      string `json:"id"`
-	Method                  string `json:"method"`
-	Status                  int    `json:"status"`
-	BodyBytes               int    `json:"body_bytes"`
-	BodyTruncated           bool   `json:"body_truncated,omitempty"`
-	BodyState               string `json:"body_state"`
-	NetworkState            string `json:"network_state,omitempty"`
-	IntentionalCancellation string `json:"intentional_cancellation,omitempty"`
+	RecordKind              string                 `json:"record_kind,omitempty"`
+	Stream                  *browserCapturedStream `json:"stream,omitempty"`
+	Sequence                int                    `json:"sequence"`
+	ID                      string                 `json:"id"`
+	Method                  string                 `json:"method"`
+	Status                  int                    `json:"status"`
+	BodyBytes               int                    `json:"body_bytes"`
+	BodyTruncated           bool                   `json:"body_truncated,omitempty"`
+	BodyState               string                 `json:"body_state"`
+	NetworkState            string                 `json:"network_state,omitempty"`
+	IntentionalCancellation string                 `json:"intentional_cancellation,omitempty"`
+}
+
+// Only fixed vocabulary and counts enter this immediate capture preview.
+// Labels, URLs, peer metadata and payload bytes remain in the saved archive.
+type browserCapturedStream struct {
+	Protocol       string `json:"protocol"`
+	Source         string `json:"source"`
+	State          string `json:"state"`
+	CaptureState   string `json:"capture_state"`
+	CapturedBytes  int64  `json:"captured_bytes"`
+	CapturedEvents int64  `json:"captured_events"`
+	DroppedEvents  int64  `json:"dropped_events"`
 }
 
 // browserTerminalOutcome describes an observed redirect/download graph using
@@ -96,6 +110,37 @@ func enrichBrowserCaptureSnapshot(result map[string]interface{}, snapshot store.
 	}
 	result["body_capture_states"] = states
 	result["incomplete_bodies"] = incomplete
+	streamStates := map[string]int{}
+	for _, descriptor := range descriptors {
+		if descriptor.Stream != nil {
+			streamStates[descriptor.Stream.CaptureState]++
+		}
+	}
+	if len(streamStates) > 0 {
+		result["stream_capture_states"] = streamStates
+	}
+	if snapshot.BrowserSession != nil {
+		// The sealed snapshot is authoritative for collection/transport loss.
+		stats := map[string]int64{}
+		for _, key := range []string{"retained_body_bytes", "observed_events", "dropped_events", "dropped_requests", "exported_records", "protocol_payloads", "webrtc_media", "protocol_observer_reported_contexts", "protocol_observer_destroyed_contexts", "protocol_observer_dropped_events", "protocol_observer_observed_bytes", "protocol_observer_captured_bytes"} {
+			if value, ok := snapshot.BrowserSession.CaptureStats[key]; ok && value >= 0 {
+				stats[key] = value
+			}
+		}
+		result["capture_stats"] = stats
+		warnings := snapshot.BrowserSession.CaptureWarnings
+		shown := min(16, len(warnings))
+		preview := make([]string, 0, shown)
+		for _, warning := range warnings[:shown] {
+			if len(warning) > 128 {
+				warning = warning[:128]
+				result["capture_warnings_truncated"] = true
+			}
+			preview = append(preview, warning)
+		}
+		result["capture_warnings"] = preview
+		result["capture_warnings_total"], result["capture_warnings_omitted"] = len(warnings), len(warnings)-shown
+	}
 	if outcome := browserTerminalRedirectOutcome(snapshot.Requests); outcome != nil {
 		result["terminal_outcome"] = outcome
 	}
@@ -130,6 +175,24 @@ func browserCapturedRequestDescriptors(requests []store.Request) []browserCaptur
 			descriptor.BodyState = "partial"
 		} else if request.ResponseBodyError != "" {
 			descriptor.BodyState = "unavailable"
+		}
+		if store.IsStreamKind(request.RecordKind) && request.Stream != nil {
+			descriptor.RecordKind = request.RecordKind
+			stream := request.Stream
+			source := "unknown"
+			switch stream.Source {
+			case "page_api", "cdp_lifecycle", "browser_media_recorder":
+				source = stream.Source
+			}
+			if request.RecordKind == "websocket" && stream.Source == "" {
+				source = "cdp"
+			}
+			state := "unknown"
+			switch stream.State {
+			case "connecting", "open", "closed", "interrupted":
+				state = stream.State
+			}
+			descriptor.Stream = &browserCapturedStream{Protocol: request.RecordKind, Source: source, State: state, CaptureState: browserBodyState(stream.Capture.State), CapturedBytes: stream.Capture.CapturedBytes, CapturedEvents: stream.Capture.CapturedEvents, DroppedEvents: stream.Capture.DroppedEvents}
 		}
 		descriptors = append(descriptors, descriptor)
 	}

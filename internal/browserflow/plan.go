@@ -19,11 +19,14 @@ type Scope struct {
 	TextSelector string `json:"text_selector,omitempty"`
 }
 type Target struct {
-	Selector string `json:"selector,omitempty"`
-	Name     string `json:"name,omitempty"`
-	Role     string `json:"role,omitempty"`
-	Within   *Scope `json:"within,omitempty"`
-	Goal     string `json:"goal,omitempty"`
+	Selector              string `json:"selector,omitempty"`
+	Name                  string `json:"name,omitempty"`
+	Role                  string `json:"role,omitempty"`
+	Within                *Scope `json:"within,omitempty"`
+	Goal                  string `json:"goal,omitempty"`
+	FrameID               string `json:"frame_id,omitempty"`
+	FrameURL              string `json:"frame_url,omitempty"`
+	ScopeBackendDOMNodeID int64  `json:"root_backend_dom_node_id,omitempty"`
 }
 type Condition struct {
 	URL     string  `json:"url,omitempty"`
@@ -48,6 +51,9 @@ type Step struct {
 	After     []Condition `json:"after,omitempty"`
 	SkipIf    []Condition `json:"skip_if,omitempty"`
 	TimeoutMS int         `json:"timeout_ms,omitempty"`
+	// Batch opts contiguous steps into sharing one observation for independent
+	// target selection. Every action still validates its binding before input.
+	Batch string `json:"batch,omitempty"`
 }
 type Plan struct {
 	Version int    `json:"version"`
@@ -79,6 +85,12 @@ func validURL(raw string) bool {
 	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil && len(raw) <= 8192
 }
 func (target Target) validate(semantic bool) error {
+	if target.ScopeBackendDOMNodeID < 0 || (target.ScopeBackendDOMNodeID > 0 && (target.Goal == "" || (target.FrameID == "" && target.FrameURL == ""))) {
+		return errors.New("subtree selection requires a semantic goal, explicit frame scope, and positive root_backend_dom_node_id")
+	}
+	if len(target.FrameID) > 256 || (target.FrameURL != "" && ((target.FrameID == "" && target.Goal == "") || !validURL(target.FrameURL))) {
+		return errors.New("frame scope needs a bounded frame_id and optional exact HTTP(S) frame_url")
+	}
 	if target.Goal != "" {
 		if !semantic || len(target.Goal) > 2000 || strings.TrimSpace(target.Goal) == "" || target.Selector != "" || target.Within != nil {
 			return errors.New("goal targets cannot combine selectors/scopes or be used in conditions")
@@ -141,12 +153,29 @@ func (plan Plan) Validate() error {
 		return errors.New("provide 1 to 100 interaction steps")
 	}
 	ids := map[string]bool{}
+	closedBatches := map[string]bool{}
+	previousBatch := ""
 	for _, step := range plan.Steps {
 		if strings.TrimSpace(step.ID) == "" || len(step.ID) > 100 || ids[step.ID] {
 			return errors.New("each step needs a unique, bounded id")
 		}
 		ids[step.ID] = true
 		fail := func(message string) error { return fmt.Errorf("step %s: %s", step.ID, message) }
+		if len(step.Batch) > 100 || (step.Batch != "" && strings.TrimSpace(step.Batch) == "") {
+			return fail("batch must be a nonempty bounded identifier")
+		}
+		if step.Batch != previousBatch {
+			if previousBatch != "" {
+				closedBatches[previousBatch] = true
+			}
+			if step.Batch != "" && closedBatches[step.Batch] {
+				return fail("batch steps must be contiguous")
+			}
+			previousBatch = step.Batch
+		}
+		if step.Batch != "" && step.Action == "wait" {
+			return fail("wait cannot be an independent target batch")
+		}
 		switch step.Action {
 		case "fill", "replace", "choose", "check", "click", "press", "wait":
 		default:

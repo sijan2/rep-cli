@@ -21,6 +21,7 @@ var (
 	workspaceName string
 	taskName      string
 	globalScope   bool
+	evidenceRunID string
 )
 
 var rootCmd = &cobra.Command{
@@ -45,7 +46,11 @@ Low-level controls and specialized tools remain available in the groups below.`,
 
 func Execute() {
 	configureCommandGroups()
-	if err := rootCmd.Execute(); err != nil {
+	runStarted := trackRuns(rootCmd)
+	if command, err := rootCmd.ExecuteC(); err != nil {
+		// SilenceErrors keeps cobra from printing raw text; every error that a
+		// command has not already written is reported here, never dropped.
+		reportUnreported(command, err, *runStarted, processArgs(), os.Stdout, os.Stderr)
 		os.Exit(1)
 	}
 }
@@ -61,6 +66,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&workspaceName, "workspace", "", "Workspace namespace (or REP_WORKSPACE / nearest project binding)")
 	rootCmd.PersistentFlags().StringVar(&taskName, "task", "", "Agent task identity; required for scoped data (or REP_TASK)")
 	rootCmd.PersistentFlags().BoolVar(&globalScope, "global", false, "Explicitly use shared legacy data; bypass workspace bindings and environment")
+	rootCmd.PersistentFlags().StringVar(&evidenceRunID, "run", "", "Attach operation evidence to this task's explicit run ID")
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if noColor || os.Getenv("NO_COLOR") != "" {
 			pterm.DisableColor()
@@ -83,6 +89,9 @@ func configureInvocationScope(cmd *cobra.Command) error {
 	})
 	if err != nil {
 		return err
+	}
+	if evidenceRunID != "" && selected.ExplicitGlobal {
+		return output.NewAgentError("scope_required", cmd.CommandPath(), "--run requires an explicit workspace and task; it cannot be used with --global", "rep --workspace <project> --task <task> --run <id> "+strings.TrimPrefix(cmd.CommandPath(), rootCmd.Name()+" "))
 	}
 	if selected.Scoped && (rootCommandName(cmd) == "android" || rootCommandName(cmd) == "ig") {
 		return output.NewAgentError("scope_unsupported", cmd.CommandPath(), "this command family uses shared device state and does not support workspace isolation; explicitly use --global", "rep --global "+strings.TrimPrefix(cmd.CommandPath(), rootCmd.Name()+" "))
@@ -118,12 +127,19 @@ func rootCommandName(cmd *cobra.Command) string {
 }
 
 func commandRequiresScope(cmd *cobra.Command) bool {
+	if evidenceRunID != "" {
+		return true
+	}
 	switch rootCommandName(cmd) {
+	case "evidence", "stream", "media":
+		return true
+	case "packets":
+		return cmd.Name() != "interfaces"
 	case "summary", "context", "list", "body", "detail", "get", "search", "stats", "group", "compare", "diff", "chain", "domains", "js", "save", "sessions", "import", "note", "findings", "primary", "ignore", "mute", "clear", "setup", "recon", "auth", "curl", "download", "replay", "extract", "audit", "browse":
 		return true
 	case "browser":
 		switch cmd.Name() {
-		case "open", "fetch", "action", "download":
+		case "open", "fetch", "action", "download", "native-capture":
 			return true
 		}
 		return cmd.Parent() != nil && cmd.Parent().Name() == "watch"

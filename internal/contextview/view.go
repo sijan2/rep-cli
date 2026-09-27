@@ -59,6 +59,19 @@ type Count struct {
 // Group represents a method/origin/normalized-route aggregate. IDs are existing
 // request IDs for deliberate drill-down; no synthetic ID is passed off as one.
 type Group struct {
+	RecordKind             string   `json:"record_kind,omitempty"`
+	Protocols              []Count  `json:"protocols,omitempty"`
+	StreamStates           []Count  `json:"stream_states,omitempty"`
+	StreamCaptureStates    []Count  `json:"stream_capture_states,omitempty"`
+	StreamSources          []Count  `json:"stream_sources,omitempty"`
+	StreamScopes           []Count  `json:"stream_scopes,omitempty"`
+	StreamPayloadSemantics []Count  `json:"stream_payload_semantics,omitempty"`
+	StreamWithLimitations  int      `json:"stream_with_limitations,omitempty"`
+	StreamMetadataOmitted  int      `json:"stream_metadata_omitted,omitempty"`
+	StreamCapturedEvents   int64    `json:"stream_captured_events,omitempty"`
+	StreamObservedEvents   int64    `json:"stream_observed_events,omitempty"`
+	StreamDroppedEvents    int64    `json:"stream_dropped_events,omitempty"`
+	StreamCapturedBytes    int64    `json:"stream_captured_bytes,omitempty"`
 	ID                     string   `json:"id"`
 	Method                 string   `json:"method"`
 	Host                   string   `json:"host"`

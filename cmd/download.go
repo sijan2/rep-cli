@@ -64,14 +64,15 @@ type artifactValidator struct {
 }
 
 type capturedDownloadResult struct {
-	RequestID           string `json:"request_id"`
-	OutputPath          string `json:"output_path"`
-	Status              int    `json:"status"`
-	Bytes               int64  `json:"bytes"`
-	SHA256              string `json:"sha256"`
-	ContentType         string `json:"content_type"`
-	DetectedContentType string `json:"detected_content_type"`
-	Retries             int    `json:"retry_limit"`
+	Evidence            *operationEvidenceRef `json:"evidence,omitempty"`
+	RequestID           string                `json:"request_id"`
+	OutputPath          string                `json:"output_path"`
+	Status              int                   `json:"status"`
+	Bytes               int64                 `json:"bytes"`
+	SHA256              string                `json:"sha256"`
+	ContentType         string                `json:"content_type"`
+	DetectedContentType string                `json:"detected_content_type"`
+	Retries             int                   `json:"retry_limit"`
 }
 
 var (
@@ -94,7 +95,7 @@ mode-0600 part file, then atomically publishes and hashes the result.
 The captured final request should be used directly. Redirect following is
 intentionally disabled so explicit Cookie headers cannot leak to another host.`,
 	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (returnErr error) {
 		req := lookupRequestForReplay(args[0])
 		if req == nil {
 			return output.EmitAgentError(os.Stdout, output.NewAgentError(
@@ -104,6 +105,12 @@ intentionally disabled so explicit Cookie headers cannot leak to another host.`,
 				"rep list --primary=false --pattern 'download|export|artifact' --limit 10 -o meta",
 			), getOutputMode() == "json")
 		}
+		record, err := beginBrowserEvidence("download", map[string]any{"intent": "save a fresh HTTP transfer", "source_request_id": req.ID, "new_observation": true}, "curl", -1)
+		if err != nil {
+			return err
+		}
+		defer record.finishOnReturn(&returnErr)
+		record.dispatch()
 		result, err := downloadCapturedRequest(cmd.Context(), req, args[1], capturedDownloadOptions{
 			Overwrite: downloadOverwrite, KeepRange: downloadKeepRange,
 			Retries: downloadRetries, RetryDelay: downloadRetryDelay,
@@ -115,6 +122,14 @@ intentionally disabled so explicit Cookie headers cannot leak to another host.`,
 				"capture the final GET request in Arc and retry its request ID",
 				"use rep browser download <request-id> <output-path> when curl is rejected by browser-bound controls",
 			), getOutputMode() == "json")
+		}
+		result.Evidence = record.ref()
+		if err := record.artifact(result.OutputPath, "download", "complete", "HTTP transfer completed and the saved file passed transfer validation",
+			map[string]any{"source_request_id": req.ID, "new_observation": true, "transport": "curl", "status": result.Status}); err != nil {
+			return err
+		}
+		if err := record.finish(result, "completed", "satisfied", "", nil); err != nil {
+			return err
 		}
 		if getOutputMode() == "json" {
 			data, marshalErr := sonic.MarshalIndent(result, "", "  ")

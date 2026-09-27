@@ -77,7 +77,16 @@ func SetEnvFile(path string) (string, error) {
 	return absolute, nil
 }
 
+// LoadConfig resolves the key and model. Failures are CodeNotConfigured errors.
 func LoadConfig() (Config, error) {
+	config, err := loadConfig()
+	if err != nil {
+		return Config{}, &Error{Code: CodeNotConfigured, Message: err.Error()}
+	}
+	return config, nil
+}
+
+func loadConfig() (Config, error) {
 	model := strings.TrimSpace(os.Getenv("JEV_MODEL"))
 	if model == "" {
 		model = Model

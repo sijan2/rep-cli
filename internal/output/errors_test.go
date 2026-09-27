@@ -65,3 +65,18 @@ func TestWrapError_NilError(t *testing.T) {
 		t.Errorf("suggest not preserved")
 	}
 }
+
+func TestEmitAgentErrorMarksErrorsAsReportedWithoutHidingThem(t *testing.T) {
+	var out strings.Builder
+	err := EmitAgentError(&out, NewAgentError(ErrCodeInvalidArgument, "rep x", "bad input"), false)
+	var ae AgentError
+	if !Reported(err) || !errors.As(err, &ae) || ae.Code != ErrCodeInvalidArgument || err.Error() != "bad input" || !strings.Contains(out.String(), "error: bad input") {
+		t.Fatalf("err=%v output=%q", err, out.String())
+	}
+	if Reported(errors.New("plain")) || Reported(NewAgentError(ErrCodeInternal, "rep x", "not emitted")) || Reported(fmt.Errorf("wrapped: %w", errors.New("plain"))) {
+		t.Fatal("an unreported error was treated as already printed")
+	}
+	if !Reported(fmt.Errorf("context: %w", err)) {
+		t.Fatal("wrapping lost the reported mark")
+	}
+}

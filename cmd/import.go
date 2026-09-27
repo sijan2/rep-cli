@@ -17,7 +17,7 @@ var (
 var importCmd = &cobra.Command{
 	Use:   "import <file>",
 	Short: "Import traffic from rep+ extension export as a saved session",
-	Long: `Import HTTP traffic from rep+ Chrome extension JSON export.
+	Long: `Import HTTP and browser stream evidence from a rep+ Chrome extension JSON export.
 
 Imports the file as a saved session that can be viewed with 'rep list --saved'.
 
@@ -53,7 +53,7 @@ Example:
 
 		// Generate session ID and save as session
 		sessionID := store.GenerateSessionID(importNote)
-		session, err := s.AddSession(sessionID, importNote, export.Requests)
+		session, err := s.AddSession(sessionID, importNote, export.Requests, &export)
 		if err != nil {
 			return fmt.Errorf("failed to write session log: %w", err)
 		}

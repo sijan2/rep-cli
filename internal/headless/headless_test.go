@@ -102,7 +102,7 @@ func TestBridgeLookupRejectsForeignParentAndExtension(t *testing.T) {
 }
 
 func TestLaunchArgumentsKeepFullBrowserAndIsolatedLoopback(t *testing.T) {
-	args := launchArguments("/task/profile", "/project/rep", false)
+	args := launchArguments("/task/profile", "/project/rep", false, "")
 	joined := strings.Join(args, " ")
 	for _, required := range []string{"--headless=new", "--user-data-dir=/task/profile", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--load-extension=/project/rep"} {
 		if !strings.Contains(joined, required) {
@@ -122,7 +122,7 @@ func TestLaunchArgumentsKeepFullBrowserAndIsolatedLoopback(t *testing.T) {
 func TestHeadedArgumentsAndProcessOwnershipMatchRequestedMode(t *testing.T) {
 	const profile = "/task/private profile"
 	for _, headed := range []bool{false, true} {
-		args := launchArguments(profile, "/project/rep", headed)
+		args := launchArguments(profile, "/project/rep", headed, "1440x900")
 		command := "/Applications/Chrome for Testing " + strings.Join(args, " ")
 		state := State{Profile: profile, Headed: headed}
 		if !ownedCommand(state, command) {
@@ -235,5 +235,120 @@ func TestResolveOptionsValidatesRepAndKeepsArgumentsLiteral(t *testing.T) {
 	options.Binary = "/Applications/Arc.app/Contents/MacOS/Arc"
 	if _, _, err := resolveOptions(options); err == nil {
 		t.Fatal("accepted user's Arc profile browser")
+	}
+}
+
+func TestStartDiscardsOnlySessionRestoreState(t *testing.T) {
+	profile := t.TempDir()
+	base := filepath.Join(profile, "Default")
+	for _, dir := range []string{"Sessions", "Sessions_Encrypted", "LocalStorage"} {
+		if err := os.MkdirAll(filepath.Join(base, dir), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, file := range []string{"Sessions/Session_1", "Sessions/Tabs_1", "Current Tabs", "Last Session", "Cookies", "LocalStorage/leveldb"} {
+		if err := os.WriteFile(filepath.Join(base, file), []byte("x"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := discardSessionRestore(profile); err != nil {
+		t.Fatal(err)
+	}
+	for _, gone := range []string{"Sessions", "Sessions_Encrypted", "Current Tabs", "Last Session"} {
+		if _, err := os.Stat(filepath.Join(base, gone)); !os.IsNotExist(err) {
+			t.Fatalf("%s survived: %v", gone, err)
+		}
+	}
+	for _, kept := range []string{"Cookies", "LocalStorage/leveldb"} {
+		if _, err := os.Stat(filepath.Join(base, kept)); err != nil {
+			t.Fatalf("login state %s was removed: %v", kept, err)
+		}
+	}
+	if err := discardSessionRestore(filepath.Join(profile, "missing")); err != nil {
+		t.Fatalf("a new profile must not fail: %v", err)
+	}
+}
+
+func TestExtensionDigestTracksWorkerSourceOnly(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("manifest.json", `{"name":"rep+"}`)
+	write("background.js", "import './js/a.js';")
+	write("js/a.js", "export const a = 1;")
+	write("css/panel.css", "body{}")
+	write("tests/a.test.js", "test")
+	first, err := extensionDigest(dir)
+	if err != nil || len(first) != 64 {
+		t.Fatalf("digest %q %v", first, err)
+	}
+	write("css/panel.css", "body{color:red}")
+	write("tests/a.test.js", "changed")
+	if same, _ := extensionDigest(dir); same != first {
+		t.Fatal("files the worker never loads changed the digest")
+	}
+	write("js/a.js", "export const a = 2;")
+	if changed, _ := extensionDigest(dir); changed == first {
+		t.Fatal("a worker script change did not change the digest")
+	}
+	write("js/b.js", "")
+	renamed, _ := extensionDigest(dir)
+	if err := os.Rename(filepath.Join(dir, "js/b.js"), filepath.Join(dir, "js/c.js")); err != nil {
+		t.Fatal(err)
+	}
+	if moved, _ := extensionDigest(dir); moved == renamed {
+		t.Fatal("renaming a worker module did not change the digest")
+	}
+	if _, err := extensionDigest(filepath.Join(dir, "missing")); err == nil {
+		t.Fatal("a missing extension produced a digest")
+	}
+}
+
+func TestWorkerRefreshKeepsLoginState(t *testing.T) {
+	profile := t.TempDir()
+	base := filepath.Join(profile, "Default")
+	for _, dir := range []string{"Service Worker/Database", "Service Worker/ScriptCache", "IndexedDB"} {
+		if err := os.MkdirAll(filepath.Join(base, dir), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(base, "Cookies"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := discardWorkerRegistrations(profile); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "Service Worker")); !os.IsNotExist(err) {
+		t.Fatalf("stale worker registration survived: %v", err)
+	}
+	for _, kept := range []string{"Cookies", "IndexedDB"} {
+		if _, err := os.Stat(filepath.Join(base, kept)); err != nil {
+			t.Fatalf("%s was removed: %v", kept, err)
+		}
+	}
+}
+
+func TestWindowSizeDefaultsToDesktopViewport(t *testing.T) {
+	if joined := strings.Join(launchArguments("/p", "/e", false, ""), " "); !strings.Contains(joined, "--window-size=1280,900") {
+		t.Fatalf("default window is not a desktop size: %s", joined)
+	}
+	if joined := strings.Join(launchArguments("/p", "/e", false, "1920x1080"), " "); !strings.Contains(joined, "--window-size=1920,1080") {
+		t.Fatalf("explicit window size ignored: %s", joined)
+	}
+	for _, invalid := range []string{"1280", "0x0", "99999x10", "wide", "1280x-5"} {
+		if _, _, ok := parseWindowSize(invalid); ok {
+			t.Fatalf("accepted %q", invalid)
+		}
+	}
+	if width, height, ok := parseWindowSize(" 1440X900 "); !ok || width != 1440 || height != 900 {
+		t.Fatal("rejected a valid size")
 	}
 }

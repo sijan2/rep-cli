@@ -29,6 +29,11 @@ func (w *countedCaptureWriter) Write(data []byte) (int, error) {
 // Encode records one at a time so serialization does not allocate a second
 // contiguous copy of the entire capture. The caller holds liveMu while writing.
 func writeLiveDataFile(path string, data *LiveData, maxBytes int64) (string, int64, error) {
+	if data.spool != nil {
+		if err := data.spool.writer.Flush(); err != nil {
+			return "", 0, err
+		}
+	}
 	file, err := os.CreateTemp(filepath.Dir(path), ".rep-capture-*.tmp")
 	if err != nil {
 		return "", 0, err
@@ -62,6 +67,20 @@ func writeLiveDataFile(path string, data *LiveData, maxBytes int64) (string, int
 			if err = buffer.WriteByte(','); err != nil {
 				return "", 0, err
 			}
+		}
+		if data.spool != nil {
+			ref, ok := data.spool.entries[data.Requests[index].ID]
+			if !ok {
+				return "", 0, fmt.Errorf("capture record missing from spool")
+			}
+			var copied int64
+			if copied, err = io.Copy(buffer, io.NewSectionReader(data.spool.file, ref.offset, ref.length)); err != nil {
+				return "", 0, err
+			}
+			if copied != ref.length {
+				return "", 0, io.ErrUnexpectedEOF
+			}
+			continue
 		}
 		if err = encoder.Encode(&data.Requests[index]); err != nil {
 			return "", 0, err
