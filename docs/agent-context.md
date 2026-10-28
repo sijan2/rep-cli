@@ -211,7 +211,7 @@ route group. A 1,000-request capture fixture returns under 8 KiB of descriptor
 metadata while retaining all 1,000 bodies in its task data and archive. Those are
 synthetic measurements, not a claim of a fixed token saving for every website.
 
-`scripts/verify_agent_context.py` exercises the real CLI and native-host socket
+`scripts/verify/verify_agent_context.py` exercises the real CLI and native-host socket
 with a synthetic extension peer. It deliberately withholds both capture RPC
 results until both captures have been sealed, so a caller must retrieve its
 earlier snapshot after shared live data has changed. Concurrent tasks retained
@@ -224,7 +224,7 @@ after a new capture. These byte counts describe this synthetic fixture.
 
 ```sh
 REP_BINARY="$HOME/.local/bin/rep" REP_HOST_BINARY="$HOME/.local/bin/rep-host" \
-  python3 scripts/verify_agent_context.py
+  python3 scripts/verify/verify_agent_context.py
 ```
 
 The September 20 verification passed the full Go suite, 119 Canvas tests and

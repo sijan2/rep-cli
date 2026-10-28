@@ -130,7 +130,7 @@ go test ./...
 cd ../rep && npm test
 ```
 
-`scripts/verify_decision_runtime.py --help` describes the isolated Chromium
+`scripts/verify/verify_decision_runtime.py --help` describes the isolated Chromium
 harness. It starts local fixtures and a private task/profile, then stops its
 browser. Deterministic checks cover frame routing, shadow controls, occlusion,
 dynamic replacement, and independently read-back outcomes. `--with-jev` adds

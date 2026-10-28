@@ -2,8 +2,8 @@
 
 ## Project Structure & Module Organization
 - `main.go` wires the CLI entrypoint.
-- `cmd/` holds Cobra commands (one file per command).
-- `cmd/host` contains the native messaging host for Chrome extension.
+- `internal/commands/` holds the Cobra command tree (one file per command) with its embedded `descriptions/` contracts.
+- `cmd/rep-host/` is the native messaging host binary.
 - `internal/` contains shared packages (`internal/store`, `internal/output`, `internal/noise`).
 - `scripts/` has build helpers (see `scripts/build_install.sh`).
 - `VERSION` defines the default CLI version.
@@ -24,7 +24,7 @@
 
 ## Coding Style & Naming Conventions
 - Go formatting is standard `gofmt`; use tabs for indentation
-- New commands should live in `cmd/<name>.go` and register with Cobra in `init()`
+- New commands should live in `internal/commands/<name>.go` and register with Cobra in `init()`
 - Keep flags consistent with existing patterns (e.g., `--output`/`-o`, `--json`)
 
 ## Testing Guidelines

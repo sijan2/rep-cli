@@ -240,7 +240,7 @@ through 13 frames to the compiled Go native host. A corrupt frame failed while
 the earlier valid snapshot remained available. A Canvas adapter test read a
 3 MiB body with a 4 KiB stdout budget.
 
-`scripts/verify_body_capture.py` runs a real isolated headless browser against
+`scripts/verify/verify_body_capture.py` runs a real isolated headless browser against
 loopback fixtures: over-2-MiB gzip JSON, chunked NDJSON, finite/open SSE, binary,
 exact artifacts, and archive reuse. One optional Jev call selected the intended
 test button. Measurements and repeatable commands are in [headless.md](headless.md).

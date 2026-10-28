@@ -1,7 +1,7 @@
 package main
 
-import "github.com/repplus/rep-cli/cmd"
+import "github.com/repplus/rep-cli/internal/commands"
 
 func main() {
-	cmd.Execute()
+	commands.Execute()
 }

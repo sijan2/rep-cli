@@ -181,7 +181,7 @@ use `browser action` when an archived network trace is required.
 ```sh
 go test ./...
 go build -o /tmp/rep-jev-interaction .
-node scripts/verify_interaction.mjs
+node scripts/verify/verify_interaction.mjs
 ```
 
 The live regression script creates and closes its own localhost fixture tab.
@@ -196,7 +196,7 @@ private report path (default `/tmp/rep-interaction-verification.json`). Timings
 and bridge call counts are measured, not assumed. The ACE fixture uses its public
 API shape; it does not certify every ACE version or other editors.
 
-The additional `scripts/verify_decision_runtime.py` harness owns a private
+The additional `scripts/verify/verify_decision_runtime.py` harness owns a private
 Chromium profile and local multi-origin fixtures. It checks nested frame routing,
 ancestor occlusion, shadow controls, dynamic replacement, and independent
 readbacks. `--with-jev` adds pinned-model auto/legacy selection comparisons. Run

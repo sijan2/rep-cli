@@ -116,7 +116,7 @@ Blob ordering and timeout, byte/event budgets, partial coverage, context reuse,
 setup/cleanup races, and conditional restoration. `go test ./...` covers exact
 stream retrieval, bounded views, source preservation and completeness checks.
 
-`scripts/verify_transport_capture.py --webtransport --quic-python PYTHON`
+`scripts/verify/verify_transport_capture.py --webtransport --quic-python PYTHON`
 uses a private Chromium profile, two local WebRTC peers, and a loopback aioquic
 HTTP/3 echo server. Its temporary certificate is pinned by the fixture without
 changing browser trust settings. The script compares saved bytes with independent

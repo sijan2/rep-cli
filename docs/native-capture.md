@@ -263,7 +263,7 @@ Reproduce with an isolated Python environment containing `aioquic==1.2.0`, a
 Python interpreter with `websocket-client`, and installed Wireshark/FFmpeg:
 
 ```sh
-REP_BINARY=/path/to/rep python3 scripts/verify_browser_diagnostics.py \
+REP_BINARY=/path/to/rep python3 scripts/verify/verify_browser_diagnostics.py \
   --quic-python /path/to/private-venv/bin/python \
   --output /tmp/native-browser-diagnostics.json
 ```
@@ -275,7 +275,7 @@ go test ./...
 npm --prefix ../rep test
 REP_SKIP_TESTS=1 scripts/build_install.sh --host --install-dir /tmp/rep-native
 REP_BINARY=/tmp/rep-native/rep REP_HOST_BINARY=/tmp/rep-native/rep-host \
-  python3 scripts/verify_native_capture.py --output /tmp/rep-native-results.json
+  python3 scripts/verify/verify_native_capture.py --output /tmp/rep-native-results.json
 ```
 
 The integration fixture uses a private Chromium profile, generated canvas video

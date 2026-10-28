@@ -28,16 +28,16 @@ flowchart TD
 
 | Layer | Location | Owns |
 |---|---|---|
-| Command interface | `cmd/browser_*.go`, `cmd/evidence.go`, `cmd/stream.go` | Scope, arguments, deadlines, bounded output and explicit run selection |
-| Connection | `cmd/browser_connection.go`, `internal/bridge` | Arc/Chrome or the selected task's headless bridge |
+| Command interface | `internal/commands/browser_*.go`, `internal/commands/evidence.go`, `internal/commands/stream.go` | Scope, arguments, deadlines, bounded output and explicit run selection |
+| Connection | `internal/commands/browser_connection.go`, `internal/bridge` | Arc/Chrome or the selected task's headless bridge |
 | Protocol | `internal/browserrpc`, `internal/jevrpc` | Typed browser/decision RPCs, CDP wrapping and lease ownership |
 | Interaction executor | `internal/browserflow` | Plan validation, target checks, input adapters and declared postconditions |
-| Decisions | `internal/jevdom`, `cmd/host/decision_runtime.go` | Compact observations, frame-aware bindings, reusable decisions, batching and persistent provider connections |
+| Decisions | `internal/jevdom`, `cmd/rep-host/decision_runtime.go` | Compact observations, frame-aware bindings, reusable decisions, batching and persistent provider connections |
 | Extension control | `rep/js/background/browser-runtime.js`, `page-control.js`, `semantic-runtime.js` | Tabs, lifecycle waits, screenshots, debugger attachments, document identity and execution leases |
 | Extension capture | `rep/js/background/cdp-capture.js`, `body-capture.js` | HTTP bodies, WebSocket events, collection limits, completeness and loss accounting |
-| Native capture storage | `cmd/host/record_spool.go`, `capture_writer.go`, `capture_snapshots.go` | Record acknowledgement, disk spooling, snapshot limits and sealing |
+| Native capture storage | `cmd/rep-host/record_spool.go`, `capture_writer.go`, `capture_snapshots.go` | Record acknowledgement, disk spooling, snapshot limits and sealing |
 | Task archives | `internal/store` | Saved captures, exact archive selection, body/stream records and offset indexes |
-| Run evidence | `internal/evidence`, `cmd/operation_evidence.go` | Durable operation records, artifact bytes, declared provenance and evidence references |
+| Run evidence | `internal/evidence`, `internal/commands/operation_evidence.go` | Durable operation records, artifact bytes, declared provenance and evidence references |
 
 The interaction executor takes a selection callback and does not import Jev.
 Exact selectors and names need no model call. The native host owns a bounded
@@ -209,9 +209,9 @@ volume was higher: 38.93 MB versus 27.22 MB; that does not measure retained RAM.
 The change avoids whole-capture body retention and repeated live-file rewrites.
 
 ```sh
-go test ./cmd/host -run '^$' -bench BenchmarkCaptureRecordIngestion -benchtime=3x -benchmem
+go test ./cmd/rep-host -run '^$' -bench BenchmarkCaptureRecordIngestion -benchtime=3x -benchmem
 REP_BINARY=/tmp/rep/rep REP_HOST_BINARY=/tmp/rep/rep-host \
-  python3 scripts/verify_protocol_evidence.py --stress --output /tmp/protocol-results.json
+  python3 scripts/verify/verify_protocol_evidence.py --stress --output /tmp/protocol-results.json
 ```
 
 ```sh

@@ -59,9 +59,9 @@ COMMIT_VALUE="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo "n
 BUILD_DATE_VALUE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 LDFLAGS=(
-  "-X" "github.com/repplus/rep-cli/cmd.Version=${VERSION_VALUE}"
-  "-X" "github.com/repplus/rep-cli/cmd.Commit=${COMMIT_VALUE}"
-  "-X" "github.com/repplus/rep-cli/cmd.BuildDate=${BUILD_DATE_VALUE}"
+  "-X" "github.com/repplus/rep-cli/internal/commands.Version=${VERSION_VALUE}"
+  "-X" "github.com/repplus/rep-cli/internal/commands.Commit=${COMMIT_VALUE}"
+  "-X" "github.com/repplus/rep-cli/internal/commands.BuildDate=${BUILD_DATE_VALUE}"
 )
 
 # Fail the build when the agent-UX contracts regress.
@@ -77,6 +77,6 @@ go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" "$ROOT_DIR"
 echo "Installed: $INSTALL_DIR/rep"
 
 if [[ "$BUILD_HOST" == "true" ]]; then
-  go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep-host" "$ROOT_DIR/cmd/host"
+  go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep-host" "$ROOT_DIR/cmd/rep-host"
   echo "Installed: $INSTALL_DIR/rep-host"
 fi
