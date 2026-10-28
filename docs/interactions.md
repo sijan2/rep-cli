@@ -180,7 +180,7 @@ use `browser action` when an archived network trace is required.
 
 ```sh
 go test ./...
-go build -o /tmp/rep-jev-interaction .
+go build -o /tmp/rep-jev-interaction ./cmd/rep
 node scripts/verify/verify_interaction.mjs
 ```
 

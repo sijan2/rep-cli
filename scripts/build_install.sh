@@ -70,7 +70,7 @@ if [[ -z "${REP_SKIP_TESTS:-}" ]]; then
   (cd "$ROOT_DIR" && go test ./...)
 fi
 
-go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" "$ROOT_DIR"
+go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" "$ROOT_DIR/cmd/rep"
 # Verify the new executable now so the agent's first browser command does not
 # also pay macOS's first-execution validation cost.
 "$INSTALL_DIR/rep" --version >/dev/null

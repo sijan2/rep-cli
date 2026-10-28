@@ -14,7 +14,7 @@ or an external capture process.
 
 ```sh
 go test ./...
-CGO_ENABLED=1 go build -o /tmp/rep-native .
+CGO_ENABLED=1 go build -o /tmp/rep-native ./cmd/rep
 /tmp/rep-native packets interfaces
 ```
 

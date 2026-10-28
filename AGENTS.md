@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `main.go` wires the CLI entrypoint.
+- `cmd/rep/main.go` is the CLI entry point; `cmd/rep-host/` is the native messaging host binary.
 - `internal/commands/` holds the Cobra command tree (one file per command) with its embedded `descriptions/` contracts.
 - `cmd/rep-host/` is the native messaging host binary.
 - `internal/` contains shared packages (`internal/store`, `internal/output`, `internal/noise`).
@@ -20,7 +20,7 @@
 ## Build, Test, and Development Commands
 - `scripts/build_install.sh --host --install-dir ~/.local/bin`: build and install
 - `go build ./...`: quick compile check
-- `go run . --help`: run CLI directly
+- `go run ./cmd/rep --help`: run CLI directly
 
 ## Coding Style & Naming Conventions
 - Go formatting is standard `gofmt`; use tabs for indentation

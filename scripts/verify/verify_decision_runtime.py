@@ -638,7 +638,7 @@ def main():
             directory = Path(temporary)
             if options.build:
                 binary, host = directory / "rep", directory / "rep-host"
-                for destination, package in [(binary, "."), (host, "./cmd/rep-host")]:
+                for destination, package in [(binary, "./cmd/rep"), (host, "./cmd/rep-host")]:
                     built = subprocess.run(["go", "build", "-o", str(destination), package], cwd=ROOT, capture_output=True, timeout=180)
                     require(built.returncode == 0, f"build failed for {package}")
             elif not options.baseline_only:

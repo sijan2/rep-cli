@@ -116,7 +116,7 @@ workflow above. Authentication requirements remain the site's own.
 Build the CLI and host together, then run the real-browser fixture:
 
 ```sh
-go build -o /tmp/rep-body-cli .
+go build -o /tmp/rep-body-cli ./cmd/rep
 go build -o /tmp/rep-body-host ./cmd/rep-host
 REP_BINARY=/tmp/rep-body-cli REP_HOST_BINARY=/tmp/rep-body-host \
   python3 scripts/verify/verify_body_capture.py
