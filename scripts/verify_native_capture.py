@@ -101,7 +101,12 @@ def media_case(runner, origin, data_dir, run_id, mode, ffprobe, ffmpeg, progress
     memory = OwnedHostRSS(runner)
     memory.start()
     try:
-        captured, elapsed, _ = runner.cli("browser", "action", "window.startMediaFixture()", "--tab", str(tab), "--browser", "headless",
+        action = "window.startMediaFixture()"
+        if mode == "sender_stopped":
+            # Keep enough synthetic media for independent decoding, then stop
+            # only the video sender while capture and original tracks stay live.
+            action = "(async()=>{await window.startMediaFixture();await new Promise(resolve=>setTimeout(resolve,1500));return window.stopVideoSenderFixture();})()"
+        captured, elapsed, _ = runner.cli("browser", "action", action, "--tab", str(tab), "--browser", "headless",
                                           "--webrtc-media", "--user-gesture", "--timeout", "4s", "--settle", "1s", "--idle", "400ms", *options)
     finally:
         progress["owned_host_rss"] = memory.finish()
@@ -117,9 +122,14 @@ def media_case(runner, origin, data_dir, run_id, mode, ffprobe, ffmpeg, progress
         require(len(state.get("tracks", [])) == 2 and len(state.get("received_tracks", [])) == 2
                 and all(track["ready_state"] == "live" and track["enabled"] for track in state["tracks"] + state["received_tracks"]),
                 "capture stop ended or disabled an original media track")
-    require(all(after[key] > before[key] for key in ("audio_outbound_bytes", "audio_inbound_bytes", "video_outbound_bytes", "video_inbound_bytes"))
-            and after["frames_decoded"] > before["frames_decoded"] and after["received_audio_rms"] > 0.001,
+    flowing = ("audio_outbound_bytes", "audio_inbound_bytes") if mode == "sender_stopped" else ("audio_outbound_bytes", "audio_inbound_bytes", "video_outbound_bytes", "video_inbound_bytes")
+    require(all(after[key] > before[key] for key in flowing)
+            and (mode == "sender_stopped" or after["frames_decoded"] > before["frames_decoded"]) and after["received_audio_rms"] > 0.001,
             "original media flow did not continue after recorder cleanup")
+    if mode == "sender_stopped":
+        stopped_sender, _ = runner.evaluate(tab, "window.senderStopFixtureState()")
+        require(stopped_sender and stopped_sender["ready_state"] == "live" and stopped_sender["enabled"], "stopping the video transceiver ended its original source track")
+        progress["stopped_sender"] = stopped_sender
     session = saved_session(data_dir, captured)
     records = [request for request in session["requests"] if request.get("record_kind") == "webrtc_media"]
     progress["observed_records"] = [{"id": record["id"], "metadata": record["stream"].get("metadata"), "coverage": record["stream"]["capture"],
@@ -146,11 +156,14 @@ def media_case(runner, origin, data_dir, run_id, mode, ffprobe, ffmpeg, progress
         require(len(payload) == coverage["captured_bytes"], "media captured byte count differs from exact archived chunks")
         complete = coverage["state"] == "complete"
         incomplete += not complete
-        if mode == "full":
+        if mode != "bounded":
             require(complete and events[-1]["kind"] == "closed" and not any(event.get("truncated") for event in chunks), "normal capture stop did not finalize a complete recorded interval")
             final = events[-1].get("metadata", {})
             require(final.get("recorder_finalized") is True and final.get("chunk_count") == len(chunks)
                     and final.get("observed_media_bytes") == len(payload), "complete interval lost the native recorder's final counts")
+            if mode == "sender_stopped" and metadata.get("direction") == "sent" and metadata.get("media_kind") == "video":
+                require(metadata["track_id"] == stopped_sender["track_id"] and final.get("stop_reason") == "transceiver_stopped",
+                        "stopped sender recording continued until collector shutdown")
         info, _, _ = runner.cli("media", request["id"], "--saved", "latest")
         require(info.get("saved") == captured["saved_hash_id"], "media inspection retained a mutable archive alias")
         target = runner.directory / (mode + "-" + request["id"] + ".webm")
@@ -392,7 +405,7 @@ def main():
                     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler);server.daemon_threads = True
                     threading.Thread(target=server.serve_forever, daemon=True).start()
                     report["media"] = []
-                    for mode in ("full", "bounded"):
+                    for mode in ("full", "bounded", "sender_stopped"):
                         progress = {"mode": mode};report["media"].append(progress)
                         media_case(runner, f"http://127.0.0.1:{server.server_port}", Path(scope["data_dir"]), run["id"], mode, options.ffprobe, options.ffmpeg, progress)
                 report["live_packet_capture_verified"] = report.get("packets", {}).get("live", {}).get("state") == "verified"

@@ -16,6 +16,7 @@ import (
 	"github.com/repplus/rep-cli/internal/noise"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/store"
+	"github.com/repplus/rep-cli/internal/surface"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +25,7 @@ var (
 	auditTop         int
 	auditPrimaryOnly bool
 	auditForce       bool
+	auditLegacyScore bool
 )
 
 // auditCmd is the one-shot "what should I investigate" primitive — folds
@@ -55,6 +57,7 @@ func init() {
 	auditCmd.Flags().IntVar(&auditTop, "top", 20, "Number of findings to return")
 	auditCmd.Flags().BoolVar(&auditPrimaryOnly, "primary-only", false, "Restrict to primary-domain requests")
 	auditCmd.Flags().BoolVar(&auditForce, "force", false, "Bypass cache and recompute")
+	auditCmd.Flags().BoolVar(&auditLegacyScore, "legacy-score", false, "Use the superseded per-request boolean scoring")
 }
 
 // Finding is the per-request row the agent consumes.
@@ -137,6 +140,16 @@ func runAudit(cmd *cobra.Command, args []string) error {
 			continue
 		}
 		scoped = append(scoped, *r)
+	}
+
+	if !auditLegacyScore {
+		families := surface.Build(observationsFrom(scoped, primarySet))
+		top := auditTop
+		if top <= 0 {
+			top = 20
+		}
+		return emitSurfaceAudit(source, families, surface.Candidates(families, top),
+			len(scoped), getOutputMode() == "json" || !isTTY())
 	}
 
 	// Cache key must invalidate when the scope flag flips.

@@ -64,7 +64,7 @@ func pageRPCError(command string, err error, capability string) error {
 	if errorsAs(err, &rpcError) && rpcError.Code == "method_not_found" {
 		return output.EmitAgentError(os.Stdout, output.NewAgentError("extension_outdated", command,
 			"the connected rep+ extension does not support "+capability+"; reload the extension from this checkout",
-			"rep browser reload-extension --browser arc", "rep browser headless stop && rep browser headless start"), getOutputMode() == "json")
+			"rep browser reload-extension --browser dia", "rep browser headless stop && rep browser headless start"), getOutputMode() == "json")
 	}
 	return emitBrowserCallError(command, err)
 }
@@ -395,6 +395,7 @@ only its path, size, dimensions, and SHA-256, never the image data.`,
 	screenshotCmd.Flags().StringVar(&shot.Out, "out", "", "Output file (default: private task artifact)")
 	screenshotCmd.Flags().StringVar(&shot.Format, "format", "png", "png, jpeg, or webp")
 	screenshotCmd.Flags().IntVar(&shot.Quality, "quality", 0, "jpeg/webp quality 1-100 (default 80)")
+	advancedFlags(screenshotCmd, "quality")
 	screenshotCmd.Flags().BoolVar(&shot.FullPage, "full-page", false, "Capture the full scrollable page")
 	screenshotCmd.Flags().StringVar(&shot.Selector, "selector", "", "Capture only the first element matching this CSS selector")
 	browserCmd.AddCommand(navigateCmd, screenshotCmd)

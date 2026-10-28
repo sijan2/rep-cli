@@ -779,6 +779,7 @@ func init() {
 	downloadCmd.Flags().BoolVar(&downloadKeepRange, "keep-range", false, "Preserve the captured Range header instead of downloading the full file")
 	downloadCmd.Flags().IntVar(&downloadRetries, "retries", 3, "Retry transient GET failures, including HTTP 429")
 	downloadCmd.Flags().DurationVar(&downloadRetryDelay, "retry-delay", time.Second, "Delay between retries")
+	advancedFlags(downloadCmd, "keep-range", "retries", "retry-delay")
 	downloadCmd.Flags().DurationVar(&downloadTimeout, "timeout", 2*time.Minute, "Maximum transfer duration")
 	bindArtifactValidationFlags(downloadCmd.Flags(), &downloadValidation)
 }

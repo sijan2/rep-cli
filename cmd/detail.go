@@ -28,12 +28,17 @@ Accepts any ID format:
 Examples:
   rep detail 6f2d0c_POST_201
   rep detail h_6f2d0c
-  rep detail 6f2d0c`,
+  rep detail 6f2d0c
+  rep detail h_6f2d0c --saved ARCHIVE_HASH --output meta --json`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		requestID := args[0]
 
-		req := findRequestByID(requestID)
+		saved, _ := cmd.Flags().GetString("saved")
+		req, err := findBodyWebRequest(requestID, saved)
+		if err != nil {
+			return err
+		}
 		if req == nil {
 			return fmt.Errorf("request not found: %s", requestID)
 		}
@@ -43,11 +48,11 @@ Examples:
 		mode := store.OutputFull
 		if outputMode == "meta" {
 			mode = store.OutputMeta
-		} else if outputMode == "compact" && jsonOutput {
+		} else if outputMode == "compact" && getOutputMode() == "json" {
 			mode = store.OutputCompact
 		}
 
-		if jsonOutput || outputMode == "json" {
+		if getOutputMode() == "json" {
 			formatted := output.FormatRequest(req, mode)
 			out, _ := sonic.MarshalIndent(formatted, "", "  ")
 			fmt.Println(string(out))
@@ -167,5 +172,6 @@ func getStatusText(code int) string {
 }
 
 func init() {
+	detailCmd.Flags().String("saved", "", "Read only one immutable saved archive (full hash recommended)")
 	rootCmd.AddCommand(detailCmd)
 }

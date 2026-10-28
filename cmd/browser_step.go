@@ -279,8 +279,13 @@ func observeAfter(ctx context.Context, browser jevdom.Browser, options jevdom.Op
 }
 
 func newBrowserStepCommand(deps jevDOMDependencies) *cobra.Command {
+	command := newInheritedBrowserStepCommand(deps)
+	addDecisionBrowserFlag(command)
+	return command
+}
+
+func newInheritedBrowserStepCommand(deps jevDOMDependencies) *cobra.Command {
 	options := jevdom.DefaultOptions()
-	browserName := "arc"
 	var apply, noText, resetHistory bool
 	var valuePairs []string
 	var text, valuesFile string
@@ -303,11 +308,12 @@ DONE is the model's claim; verify the outcome yourself. Applied steps are
 remembered per task and tab (without values) so later steps avoid repeats.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) (returnErr error) {
+			browserName := decisionBrowserName(command)
 			if len(args) == 1 {
 				options.Goal = args[0]
 			}
 			if !validDecisionBrowser(browserName) {
-				return reportJevError(command, errors.New("browser must be arc, chrome, any, or headless"))
+				return reportJevError(command, errors.New("browser must be dia, arc, chrome, any, or headless"))
 			}
 			values, err := parseStepValues(valuePairs, text, valuesFile)
 			if err != nil {
@@ -409,7 +415,6 @@ remembered per task and tab (without values) so later steps avoid repeats.`,
 		},
 	}
 	command.Flags().IntVar(&options.TabID, "tab", -1, "Existing task-owned browser tab")
-	command.Flags().StringVar(&browserName, "browser", "arc", "arc, chrome, any, or task-owned headless")
 	command.Flags().BoolVar(&apply, "apply", false, "Perform a selected decision through the verified executor")
 	command.Flags().StringArrayVar(&valuePairs, "value", nil, "Named value NAME=TEXT available to TYPE_TEXT (repeatable; names only reach Jev)")
 	command.Flags().StringVar(&text, "text", "", "Shorthand for --value text=TEXT")
@@ -457,7 +462,7 @@ func finishStepEvidence(record *browserOperationEvidence, result stepOutput, app
 // was attempted, or when the executor could not confirm the operation.
 func applyStep(ctx context.Context, browser jevdom.Browser, options jevdom.Options, input jevdom.StepOptions, decision jevdom.StepDecision, values stepValues) (*browserflow.StepResult, *bool, string, error) {
 	if decision.Status != "selected" {
-		return nil, nil, "", output.NewAgentError("step_not_selected", "browser step", "the decision is "+decision.Status+"; nothing was performed: "+decision.Reason, "rep browser observe --tab "+strconv.Itoa(options.TabID))
+		return nil, nil, "", output.NewAgentError("step_not_selected", "browser step", "the decision is "+decision.Status+"; nothing was performed: "+decision.Reason, "rep browser element observe --tab "+strconv.Itoa(options.TabID))
 	}
 	observeOptions := input.Options
 	result := &browserflow.StepResult{ID: "step", Status: "performed"}
@@ -500,7 +505,7 @@ func applyStep(ctx context.Context, browser jevdom.Browser, options jevdom.Optio
 			return result, nil, "", err
 		}
 		if executed.Status != "performed" && executed.Status != "verified" {
-			return result, nil, "", output.NewAgentError("step_not_performed", "browser step", "the executor reported "+executed.Status+" ("+executed.Code+"); unconfirmed actions are never retried", "rep browser observe --tab "+strconv.Itoa(options.TabID))
+			return result, nil, "", output.NewAgentError("step_not_performed", "browser step", "the executor reported "+executed.Status+" ("+executed.Code+"); unconfirmed actions are never retried", "rep browser element observe --tab "+strconv.Itoa(options.TabID))
 		}
 	case jevdom.OpScrollDown, jevdom.OpScrollUp:
 		direction := "1"
@@ -526,5 +531,5 @@ func applyStep(ctx context.Context, browser jevdom.Browser, options jevdom.Optio
 }
 
 func init() {
-	browserCmd.AddCommand(newBrowserStepCommand(defaultJevDOMDependencies()))
+	browserCmd.AddCommand(newInheritedBrowserStepCommand(defaultJevDOMDependencies()))
 }

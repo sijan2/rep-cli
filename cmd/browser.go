@@ -3,8 +3,10 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +23,7 @@ type browserOpenFlags struct {
 	Referrer         string
 	Active           bool
 	KeepTab          bool
+	WaitWebSocket    string
 	Timeout          time.Duration
 	Idle             time.Duration
 	MaxBodyBytes     int
@@ -50,25 +53,28 @@ type browserFetchFlags struct {
 	WebRTCMedia      bool
 }
 
+const defaultBrowser = "dia"
+
 var (
 	browserSelector string
-	openFlags       browserOpenFlags
-	browseFlags     browserOpenFlags
-	fetchFlags      browserFetchFlags
 	closeTabID      int
+	browserOpenCmd  = newLegacyBrowserOpenCommand(false, runBrowserOpen)
+	browseCmd       = newLegacyBrowserOpenCommand(true, runBrowserOpen)
 )
 
 var browserCmd = &cobra.Command{
 	Use:   "browser",
-	Short: "Control a connected Arc/Chrome session through rep+",
+	Short: "Control a connected Dia/Arc/Chrome session through rep+",
 	Long: `Run verified workflows through the connected browser profile.
 
-  rep browser create <url>
-  rep browser select "Save button" --tab ID
+  rep browser page <url>
+  rep browser reference <url>
+  rep browser do REF --tab ID --click
+  rep browser chat <url> --message TEXT
   rep browser interact flow.json --tab ID --apply
-  rep browser open <url> --keep-tab
+  rep browser capture open <url> --keep-tab
 
-Use --raw-json for plain JSON; Arc is the default. Capture, raw protocol controls,
+Use --raw-json for plain JSON; Dia is the default. Capture, raw protocol controls,
 and browser management have separate groups. Advanced tuning flags remain
 available through 'rep describe browser' and 'rep describe interact'.`,
 }
@@ -151,62 +157,15 @@ var browserTabsCmd = &cobra.Command{
 	},
 }
 
-var browserOpenCmd = &cobra.Command{
-	Use:   "open <url-or-@file>",
-	Short: "Navigate in a background tab and capture the full network session",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		openFlags.RedactOutput = browserURLArgumentIsSensitive(args[0])
-		rawURL, err := readBrowserURLArgument(args[0])
-		if err != nil {
-			return emitBrowserArgumentError("browser open", err)
-		}
-		openFlags.Browser = browserSelector
-		return runBrowserOpen(cmd, rawURL, openFlags)
-	},
-}
-
-var browseCmd = &cobra.Command{
-	Use:   "browse <url-or-@file>",
-	Short: "Background browser navigation with sessioned network capture",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		browseFlags.RedactOutput = browserURLArgumentIsSensitive(args[0])
-		rawURL, err := readBrowserURLArgument(args[0])
-		if err != nil {
-			return emitBrowserArgumentError("browse", err)
-		}
-		return runBrowserOpen(cmd, rawURL, browseFlags)
-	},
-}
-
-var browserFetchCmd = &cobra.Command{
-	Use:   "fetch <url-or-@file>",
-	Short: "Run fetch inside the target origin using the browser session",
-	Long: `Execute fetch() inside a matching browser tab with credentials included.
-
-If no matching-origin tab exists, rep creates an inactive temporary tab,
-loads the origin, performs the request, captures it, then closes the tab.
-HttpOnly cookies remain browser-managed and are sent normally.`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fetchFlags.RedactOutput = browserURLArgumentIsSensitive(args[0])
-		rawURL, err := readBrowserURLArgument(args[0])
-		if err != nil {
-			return emitBrowserArgumentError("browser fetch", err)
-		}
-		fetchFlags.Browser = browserSelector
-		return runBrowserFetch(cmd, rawURL, fetchFlags)
-	},
-}
-
 var browserCloseCmd = &cobra.Command{
-	Use:   "close <tab-id>",
+	Use:   "close [tab-id] --tab ID",
 	Short: "Close a browser tab by ID",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (returnErr error) {
-		if _, err := fmt.Sscanf(args[0], "%d", &closeTabID); err != nil || closeTabID < 0 {
-			return output.EmitAgentError(os.Stdout, output.NewAgentError(output.ErrCodeInvalidArgument, "browser close", "tab-id must be a non-negative integer", "rep browser tabs"), getOutputMode() == "json")
+		var err error
+		closeTabID, err = resolveCloseTabID(args, closeTabID, cmd.Flags().Changed("tab"))
+		if err != nil {
+			return output.EmitAgentError(os.Stdout, output.NewAgentError(output.ErrCodeInvalidArgument, "browser close", err.Error(), "rep browser close --tab <owned-tab-id>"), getOutputMode() == "json")
 		}
 		record, err := beginBrowserEvidence("browser.close", map[string]any{"intent": "close the owned tab"}, browserSelector, closeTabID)
 		if err != nil {
@@ -220,16 +179,39 @@ var browserCloseCmd = &cobra.Command{
 			return err
 		}
 		var result map[string]interface{}
-		record.dispatch()
-		if err := client.Call(ctx, "browser.close", map[string]interface{}{"tab_id": closeTabID}, &result); err != nil {
+		alreadyClosed, err := referenceAlreadyClosed(ctx, client, closeTabID, decisionBrowserName(cmd))
+		if err != nil {
 			return emitBrowserCallError("browser close", err)
 		}
-		if err := record.finish(result, "completed", "unverified", "", nil); err != nil {
+		verification := "unverified"
+		if alreadyClosed {
+			result = map[string]interface{}{"closed": true, "tab_id": closeTabID, "already_closed": true}
+			verification = "verified"
+		} else {
+			record.dispatch()
+			if err := client.Call(ctx, "browser.close", map[string]interface{}{"tab_id": closeTabID}, &result); err != nil {
+				return emitBrowserCallError("browser close", err)
+			}
+		}
+		if err := record.finish(result, "completed", verification, "", nil); err != nil {
 			return emitBrowserCallError("browser close", err)
 		}
 		attachOperationEvidence(result, record)
 		return emitBrowserResult(result, func() { fmt.Printf("closed tab %d\n", closeTabID) })
 	},
+}
+
+func resolveCloseTabID(args []string, flag int, set bool) (int, error) {
+	if len(args) == 1 && !set {
+		id, err := strconv.Atoi(args[0])
+		if err == nil && id >= 0 {
+			return id, nil
+		}
+	}
+	if len(args) == 0 && set && flag >= 0 {
+		return flag, nil
+	}
+	return -1, errors.New("provide exactly one non-negative tab ID, as --tab ID or a positional argument")
 }
 
 var browserWatchCmd = &cobra.Command{
@@ -289,6 +271,7 @@ func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) (
 		"max_body_bytes": flags.MaxBodyBytes, "redact_output": flags.RedactOutput,
 		"protocol_payloads": flags.ProtocolPayloads,
 		"webrtc_media":      flags.WebRTCMedia,
+		"wait_websocket":    strings.TrimSpace(flags.WaitWebSocket),
 	}
 	if strings.TrimSpace(flags.Referrer) != "" {
 		params["referrer"] = flags.Referrer
@@ -298,6 +281,9 @@ func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) (
 	}
 	handoff.applyLimits(params)
 	if err := requireBrowserCollectors(ctx, client, flags.ProtocolPayloads, flags.WebRTCMedia); err != nil {
+		return emitBrowserCallErrorWithPrivacy("browser open", err, flags.RedactOutput)
+	}
+	if err := requireWebSocketWait(ctx, client, strings.TrimSpace(flags.WaitWebSocket) != ""); err != nil {
 		return emitBrowserCallErrorWithPrivacy("browser open", err, flags.RedactOutput)
 	}
 	var result map[string]interface{}
@@ -458,9 +444,9 @@ func selectBrowserBridge(ctx context.Context, selector, command string) (*bridge
 		output.ErrCodeBrowserUnavailable,
 		command,
 		err.Error(),
-		"reload rep+ in arc://extensions or chrome://extensions",
+		"reload rep+ in dia://extensions or the selected browser's extension manager",
 		"verify com.repplus.host.json points to the installed rep-host",
-		"rep browser status --browser arc",
+		"rep browser status --browser dia",
 	), getOutputMode() == "json")
 }
 
@@ -811,48 +797,15 @@ func errorsAs(err error, target interface{}) bool {
 	return false
 }
 
-func bindOpenFlags(command *cobra.Command, flags *browserOpenFlags, includeBrowser bool) {
-	if includeBrowser {
-		command.Flags().StringVar(&flags.Browser, "browser", "arc", "Browser bridge to use: arc, chrome, headless, or any")
-	}
-	command.Flags().IntVar(&flags.TabID, "tab", -1, "Reuse a specific tab ID instead of creating a temporary tab")
-	command.Flags().StringVar(&flags.Referrer, "referrer", "", "Optional HTTP(S) referrer for Page.navigate")
-	command.Flags().BoolVar(&flags.Active, "active", false, "Activate the navigation tab")
-	command.Flags().BoolVar(&flags.KeepTab, "keep-tab", false, "Keep a newly created tab after capture")
-	command.Flags().BoolVar(&flags.ProtocolPayloads, "protocol-payloads", false, "Instrument page WebTransport and WebRTC data-channel APIs during capture")
-	command.Flags().BoolVar(&flags.WebRTCMedia, "webrtc-media", false, "Record clones of observed WebRTC audio/video tracks with native browser codecs")
-	command.Flags().DurationVar(&flags.Timeout, "timeout", 30*time.Second, "Maximum navigation/capture duration")
-	command.Flags().DurationVar(&flags.Idle, "idle", 800*time.Millisecond, "Required network-idle interval")
-	command.Flags().IntVar(&flags.MaxBodyBytes, "max-body", 8*1024*1024, "Maximum captured response-body bytes per request")
-	command.Flags().BoolVar(&flags.Save, "save", false, "Legacy global mode: archive capture (task captures already archive automatically)")
-	command.Flags().StringVar(&flags.Note, "note", "", "Archive note")
-	advancedFlags(command, "referrer", "idle", "save")
-}
-
 func init() {
+	browserCloseCmd.Flags().IntVar(&closeTabID, "tab", -1, "Explicit task-owned tab to close (also accepts a positional ID)")
 	rootCmd.AddCommand(browserCmd)
-	rootCmd.AddCommand(browseCmd)
-	browserCmd.AddCommand(browserStatusCmd, browserTabsCmd, browserOpenCmd, browserFetchCmd, browserCloseCmd, browserWatchCmd)
+	browserCmd.AddCommand(browserStatusCmd, browserTabsCmd, browserCloseCmd, browserWatchCmd)
 	browserWatchCmd.AddCommand(browserWatchStartCmd, browserWatchStopCmd, browserWatchStatusCmd)
-	browserCmd.PersistentFlags().StringVar(&browserSelector, "browser", "arc", "Browser bridge to use: arc, chrome, headless, or any")
-	bindOpenFlags(browserOpenCmd, &openFlags, false)
-	bindOpenFlags(browseCmd, &browseFlags, true)
-
-	browserFetchCmd.Flags().IntVar(&fetchFlags.TabID, "tab", -1, "Use a specific matching-origin tab")
-	browserFetchCmd.Flags().StringVarP(&fetchFlags.Method, "method", "X", "GET", "HTTP method")
-	browserFetchCmd.Flags().StringArrayVarP(&fetchFlags.Headers, "header", "H", nil, "Request header 'Name: value' (repeatable)")
-	browserFetchCmd.Flags().StringVarP(&fetchFlags.Body, "data", "d", "", "Request body or @path")
-	browserFetchCmd.Flags().StringVar(&fetchFlags.Credentials, "credentials", "include", "Fetch credentials mode: include, same-origin, omit")
-	browserFetchCmd.Flags().StringVar(&fetchFlags.Cache, "cache", "default", "Fetch cache mode (default preserves normal browser behavior)")
-	browserFetchCmd.Flags().BoolVar(&fetchFlags.HeadersOnly, "headers-only", false, "Cancel the response body after headers while retaining the captured request")
-	browserFetchCmd.Flags().BoolVar(&fetchFlags.KeepTab, "keep-tab", false, "Keep a temporary origin tab")
-	browserFetchCmd.Flags().BoolVar(&fetchFlags.ProtocolPayloads, "protocol-payloads", false, "Instrument page WebTransport and WebRTC data-channel APIs during capture")
-	browserFetchCmd.Flags().BoolVar(&fetchFlags.WebRTCMedia, "webrtc-media", false, "Record clones of observed WebRTC audio/video tracks with native browser codecs")
-	browserFetchCmd.Flags().DurationVar(&fetchFlags.Timeout, "timeout", 30*time.Second, "Maximum fetch/capture duration")
-	browserFetchCmd.Flags().IntVar(&fetchFlags.MaxBodyBytes, "max-body", 8*1024*1024, "Maximum captured/returned response-body bytes")
-	browserFetchCmd.Flags().BoolVar(&fetchFlags.Save, "save", false, "Legacy global mode: archive capture (task captures already archive automatically)")
-	browserFetchCmd.Flags().StringVar(&fetchFlags.Note, "note", "", "Archive note")
-	advancedFlags(browserFetchCmd, "credentials", "cache", "save")
+	browserCmd.PersistentFlags().StringVar(&browserSelector, "browser", defaultBrowser, "Browser bridge to use: dia, arc, chrome, headless, or any")
+	browserCmd.AddCommand(newBrowserCaptureCommand(runBrowserOpen, runBrowserFetch, callBrowserRPC))
+	browserCmd.AddCommand(browserOpenCmd, newLegacyBrowserFetchCommand(runBrowserFetch), newLegacyBrowserActionCommand(callBrowserRPC))
+	rootCmd.AddCommand(browseCmd)
 }
 
 var _ = json.RawMessage{}

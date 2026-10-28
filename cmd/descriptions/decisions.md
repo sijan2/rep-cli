@@ -6,9 +6,9 @@ They perform no browser mutation. Model selection requires configured Jev
 credentials; observation and validation do not.
 
 ```sh
-rep browser observe --tab ID --raw-json
-rep browser select-batch goals.json --tab ID --raw-json
-rep browser validate --tab ID --generation ID --fingerprint HASH --raw-json
+rep browser element observe --tab ID --raw-json
+rep browser element select-batch goals.json --tab ID --raw-json
+rep browser element validate --tab ID --generation ID --fingerprint HASH --raw-json
 rep browser runtime --raw-json
 ```
 

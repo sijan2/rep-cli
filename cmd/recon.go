@@ -20,14 +20,16 @@ var (
 
 // ReconOutput is the structured output for agent consumption
 type ReconOutput struct {
-	Target           string            `json:"target"`
-	TotalRequests    int               `json:"total_requests"`
-	FirstParty       DomainBreakdown   `json:"first_party"`
-	ThirdParty       DomainBreakdown   `json:"third_party"`
-	NoiseDetected    []NoiseDomain     `json:"noise_detected"`
-	SuggestedIgnore  string            `json:"suggested_ignore_command,omitempty"`
-	CrossDomainFlows []CrossDomainFlow `json:"cross_domain_flows,omitempty"`
-	NextSteps        []string          `json:"next_steps"`
+	Provenance       observedCaptureProvenance `json:"provenance"`
+	Coverage         CaptureCoverageReport     `json:"coverage"`
+	Target           string                    `json:"target"`
+	TotalRequests    int                       `json:"total_requests"`
+	FirstParty       DomainBreakdown           `json:"first_party"`
+	ThirdParty       DomainBreakdown           `json:"third_party"`
+	NoiseDetected    []NoiseDomain             `json:"noise_detected"`
+	SuggestedIgnore  string                    `json:"suggested_ignore_command,omitempty"`
+	CrossDomainFlows []CrossDomainFlow         `json:"cross_domain_flows,omitempty"`
+	NextSteps        []string                  `json:"next_steps"`
 }
 
 // DomainBreakdown groups domains by category
@@ -65,8 +67,8 @@ type CrossDomainFlow struct {
 
 var reconCmd = &cobra.Command{
 	Use:   "recon <target-domain>",
-	Short: "Agent-optimized reconnaissance entry point",
-	Long: `Single entry point for AI agent bug bounty reconnaissance.
+	Short: "Organize observed traffic and report capture coverage",
+	Long: `Organize captured traffic for a target domain.
 
 Default: Analyzes LIVE session traffic (real-time).
 Use --saved to analyze archived sessions.
@@ -78,8 +80,8 @@ Analyzes captured traffic for a target domain:
   - Shows cross-domain request flows (using PageURL)
   - Provides suggested next commands
 
-Output is optimized for AI agents to understand the attack surface
-with minimal round-trips.
+Coverage reports describe retained traffic and known capture gaps.
+Unvisited features and uncaptured traffic remain unknown.
 
 Examples:
   rep recon example.com               Interactive recon overview
@@ -91,57 +93,30 @@ Examples:
 }
 
 func runRecon(cmd *cobra.Command, args []string) error {
-	targetDomain := args[0]
+	targetDomain := strings.ToLower(strings.TrimSpace(args[0]))
+	if !validSummaryDomain(targetDomain) {
+		return fmt.Errorf("target must be a hostname without a scheme, port, path, or wildcard")
+	}
+	capture, err := loadObservedCapture(reconSaved)
+	if err != nil {
+		return err
+	}
 
-	var tempStore *store.Store
 	var persistentStore *store.Store
 
 	// Load persistent store for ignore/primary lists
-	var err error
 	persistentStore, err = store.Get()
 	if err != nil {
 		return fmt.Errorf("failed to load store: %w", err)
 	}
 
-	if reconSaved != "" {
-		// Load from saved session
-		var session *store.Session
-		if reconSaved == "latest" || reconSaved == "last" {
-			session = persistentStore.GetLatestSession()
-		} else {
-			session = persistentStore.GetSession(reconSaved)
-		}
-
-		if session == nil {
-			pterm.Warning.Printf("Session not found: %s\n", reconSaved)
-			pterm.Info.Println("Use 'rep sessions' to list available sessions")
-			return nil
-		}
-
-		tempStore = store.NewTempStore(session.Requests)
-	} else {
-		// Default: Load from live.json
-		livePath, err := store.GetLiveFilePath()
-		if err != nil {
-			return fmt.Errorf("failed to get live path: %w", err)
-		}
-		export, err := loadLiveExport(livePath)
-		if err != nil {
-			return emitLiveUnavailable("recon", err)
-		}
-		if len(export.Requests) == 0 {
-			emitLiveEmpty("recon")
-			return nil
-		}
-
-		tempStore = store.NewTempStore(export.Requests)
-	}
+	tempStore := store.NewTempStore(capture.Export.Requests)
 
 	// Apply ignore/primary lists
 	tempStore.PrimaryDomains = persistentStore.PrimaryDomains
 	tempStore.IgnoredDomains = persistentStore.IgnoredDomains
 
-	// Set target as primary (helps with future filtering)
+	// Set target as primary (helps with future filtering).
 	persistentStore.SetPrimary(targetDomain)
 	if err := persistentStore.Save(); err != nil {
 		pterm.Warning.Printf("Could not save primary domain: %v\n", err)
@@ -154,6 +129,8 @@ func runRecon(cmd *cobra.Command, args []string) error {
 
 	// Build recon output
 	output := buildReconOutput(targetDomain, allRequests, tempStore)
+	output.Provenance = capture.Provenance
+	output.Coverage = capture.coverage()
 
 	// Add cross-domain flows if requested
 	if reconFlows {
@@ -161,9 +138,12 @@ func runRecon(cmd *cobra.Command, args []string) error {
 	}
 
 	if getOutputMode() == "json" {
-		out, _ := sonic.MarshalIndent(output, "", "  ")
-		fmt.Println(string(out))
-		return nil
+		out, err := sonic.MarshalIndent(output, "", "  ")
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+		return err
 	}
 
 	// Interactive display
@@ -260,12 +240,21 @@ func buildReconOutput(target string, requests []store.Request, s *store.Store) R
 
 	// Sort domains by request count
 	sort.Slice(output.FirstParty.Domains, func(i, j int) bool {
+		if output.FirstParty.Domains[i].Requests == output.FirstParty.Domains[j].Requests {
+			return output.FirstParty.Domains[i].Domain < output.FirstParty.Domains[j].Domain
+		}
 		return output.FirstParty.Domains[i].Requests > output.FirstParty.Domains[j].Requests
 	})
 	sort.Slice(output.ThirdParty.Domains, func(i, j int) bool {
+		if output.ThirdParty.Domains[i].Requests == output.ThirdParty.Domains[j].Requests {
+			return output.ThirdParty.Domains[i].Domain < output.ThirdParty.Domains[j].Domain
+		}
 		return output.ThirdParty.Domains[i].Requests > output.ThirdParty.Domains[j].Requests
 	})
 	sort.Slice(output.NoiseDetected, func(i, j int) bool {
+		if output.NoiseDetected[i].Requests == output.NoiseDetected[j].Requests {
+			return output.NoiseDetected[i].Domain < output.NoiseDetected[j].Domain
+		}
 		return output.NoiseDetected[i].Requests > output.NoiseDetected[j].Requests
 	})
 
@@ -352,6 +341,9 @@ func buildCrossDomainFlows(requests []store.Request, target string) []CrossDomai
 
 	// Sort by request count descending
 	sort.Slice(result, func(i, j int) bool {
+		if result[i].RequestCount == result[j].RequestCount {
+			return result[i].PageURL < result[j].PageURL
+		}
 		return result[i].RequestCount > result[j].RequestCount
 	})
 
@@ -369,8 +361,8 @@ func buildNextSteps(output ReconOutput, target string, noiseToIgnore []string) [
 	// Step 2: List API calls for primary domains
 	steps = append(steps, "rep list --api --primary -o json")
 
-	// Step 3: Get JS for static analysis
-	steps = append(steps, "rep js --urls | xargs -I{} curl -sLO {}")
+	// Inspect captured script evidence before choosing any separate source work.
+	steps = append(steps, "rep js -o json", "rep coverage")
 
 	// Step 4: Find interesting responses
 	steps = append(steps, "rep list --interesting -o json")
@@ -387,8 +379,9 @@ func buildNextSteps(output ReconOutput, target string, noiseToIgnore []string) [
 }
 
 func printReconOutput(output ReconOutput, target string) {
+	fmt.Printf("Source: %s; capture: %s; unvisited features: unknown\n", output.Provenance.SourceStatus, output.Coverage.Capture.State)
 	// Header
-	pterm.DefaultBox.WithTitle("Recon: "+target).WithTitleTopCenter().Println(
+	pterm.DefaultBox.WithTitle("Recon: " + target).WithTitleTopCenter().Println(
 		fmt.Sprintf("Total Requests: %d\nFirst-Party Domains: %d (%d requests)\nThird-Party Domains: %d (%d requests)\nNoise Domains: %d",
 			output.TotalRequests,
 			len(output.FirstParty.Domains), output.FirstParty.Requests,

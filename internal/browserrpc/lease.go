@@ -2,6 +2,8 @@ package browserrpc
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 )
 
@@ -18,7 +20,18 @@ func Acquire(ctx context.Context, caller Caller, tab int, owner, purpose string)
 	if owner == "" || (purpose != "observe" && purpose != "execute") {
 		return lease, errors.New("valid lease owner and purpose required")
 	}
-	if err := caller.Call(ctx, "browser.lease.acquire", map[string]any{"tab_id": tab, "owner": owner, "purpose": purpose}, &lease); err != nil {
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return lease, err
+	}
+	// Knowing the acquisition ID before dispatch lets cleanup cancel an acquire
+	// whose reply was lost. The extension also checks the deadline after attach.
+	lease.LeaseID = "l_" + hex.EncodeToString(nonce[:])
+	params := map[string]any{"tab_id": tab, "owner": owner, "purpose": purpose, "request_id": lease.LeaseID}
+	if deadline, ok := ctx.Deadline(); ok {
+		params["deadline_ms"] = deadline.UnixMilli()
+	}
+	if err := caller.Call(ctx, "browser.lease.acquire", params, &lease); err != nil {
 		return lease, err
 	}
 	lease.Owner = owner

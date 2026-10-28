@@ -165,7 +165,7 @@ func TestScopedCapturePreflightRejectsOldHostBeforeNavigation(t *testing.T) {
 	})
 	command := &cobra.Command{}
 	command.SetContext(context.Background())
-	err := runBrowserOpen(command, "https://example.test", browserOpenFlags{Browser: "arc", TabID: -1, Timeout: time.Second})
+	err := runBrowserOpen(command, "https://example.test", browserOpenFlags{Browser: defaultBrowser, TabID: -1, Timeout: time.Second})
 	if err == nil {
 		t.Fatal("old host accepted scoped capture")
 	}

@@ -68,3 +68,7 @@ budget truncation never skips a descriptor. `output_omitted_packets` counts
 descriptors deferred to the next page by the JSON budget. Supplied offsets are
 presumed record boundaries. `has_more:false` means this file page ended, not that the
 original capture was complete. See `docs/packet-capture.md` for details.
+
+## Advanced flags
+
+These flags stay accepted with their existing behavior and are hidden from `--help` to keep the everyday surface small: `capture --snaplen` (bytes retained per packet) and `--buffer-bytes` (requested kernel buffer).

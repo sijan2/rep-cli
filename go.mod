@@ -7,7 +7,9 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/pterm/pterm v0.12.82
 	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.9
 	golang.org/x/sys v0.33.0
+	golang.org/x/term v0.32.0
 )
 
 require (
@@ -25,10 +27,8 @@ require (
 	github.com/mattn/go-isatty v0.0.21 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
-	golang.org/x/term v0.32.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 )

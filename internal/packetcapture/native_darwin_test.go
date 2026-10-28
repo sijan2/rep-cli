@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -236,6 +237,32 @@ func TestNativeFlushFailureIsInvalidAndDoesNotCloseCallerDescriptor(t *testing.T
 	}
 	if _, err := readonly.Stat(); err != nil {
 		t.Fatalf("native cleanup closed caller's descriptor: %v", err)
+	}
+}
+
+func TestNativeHeaderFlushFailureDoesNotSignalReadyOrStartObservation(t *testing.T) {
+	packet := loopbackPacket(binary.LittleEndian, rtpShape())
+	input := fixtureFile(t, fixtureBytes(binary.LittleEndian, false, 0, []fixturePacket{{packet, uint32(len(packet)), 1, 0}}))
+	for _, notify := range []bool{false, true} {
+		t.Run(fmt.Sprintf("ready_%t", notify), func(t *testing.T) {
+			readonly, err := os.Open(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer readonly.Close()
+			options := captureOptions(t)
+			calls := 0
+			if notify {
+				options.Ready = func() { calls++ }
+			}
+			result, err := replayNative(context.Background(), options, readonly, input)
+			if err == nil || result.StopReason != "write_error" || result.PCAPValid || result.ObservationStartedAt != nil || result.Packets != 0 || calls != 0 {
+				t.Fatalf("failed header flush appears ready or observed: %+v, calls=%d, err=%v", result, calls, err)
+			}
+			if _, err := readonly.Stat(); err != nil {
+				t.Fatalf("native cleanup closed caller's descriptor: %v", err)
+			}
+		})
 	}
 }
 

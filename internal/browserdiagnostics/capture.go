@@ -165,6 +165,12 @@ func Run(ctx context.Context, options Options) (result Result, runErr error) {
 	logWriter := &boundedWriter{file: logFile, limit: options.MaxLogBytes, stop: stop, notify: signalStop}
 	defer func() {
 		if !browserStopped {
+			// An inherited pipe can outlive the browser launcher. Preserve the
+			// unfinalized evidence state, but release our descriptor even when
+			// descendant shutdown could not be confirmed. The writer mutex also
+			// makes this safe if output is still being drained.
+			_, closeErr := logWriter.finish()
+			runErr = errors.Join(runErr, closeErr)
 			return
 		}
 		result.Log, err = logWriter.finish()

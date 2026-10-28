@@ -6,7 +6,7 @@ normal-profile cookie import occurs.
 
 ```sh
 rep --workspace PROJECT --task TASK browser headless start --extension /path/to/rep
-rep --workspace PROJECT --task TASK browser open https://example.com --browser headless --keep-tab
+rep --workspace PROJECT --task TASK browser capture open https://example.com --browser headless --keep-tab
 rep --workspace PROJECT --task TASK jev select --browser headless --tab ID --goal 'Find the next page control'
 rep --workspace PROJECT --task TASK browser headless status
 rep --workspace PROJECT --task TASK browser headless stop
@@ -27,3 +27,7 @@ Chromium/Chrome-for-Testing on PATH. Regular branded Chrome, Arc, and the legacy
 headless shell do not support this unpacked-extension launch path. The current
 native implementation supports macOS/Linux. The extension and native host remain
 the same capture/control implementation as graphical Rep browsing.
+
+## Advanced flags
+
+These flags stay accepted with their existing behavior and are hidden from `--help` to keep the everyday surface small: `start --binary` (explicit Chrome for Testing or Chromium executable), `--host` (native host executable), `--window-size WIDTHxHEIGHT` (kept across restarts).

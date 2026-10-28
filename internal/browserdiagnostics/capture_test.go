@@ -9,8 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -258,5 +260,61 @@ func TestRunHonorsCancellationBeforeReadiness(t *testing.T) {
 	result, err := Run(ctx, o)
 	if err != nil || result.Status != "cancelled" || result.StopReason != "cancelled" || !result.Browser.ProfileRemoved {
 		t.Fatalf("wrong cancellation %+v %v", result, err)
+	}
+}
+
+func TestRunClosesLogWhenInheritedWritersDoNotExit(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "fake-browser")
+	// The launcher exits while its owned child keeps stdout/stderr open. This
+	// exercises exec.ErrWaitDelay without any browser or network activity.
+	script := "#!/bin/sh\n/bin/sleep 30 &\nprintf '%s\\n' \"$!\" > \"$0.child\"\nexit 0\n"
+	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		data, err := os.ReadFile(binary + ".child")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		if err != nil || pid <= 0 {
+			t.Errorf("invalid fixture child PID: %q", data)
+			return
+		}
+		child, err := os.FindProcess(pid)
+		if err == nil {
+			_ = child.Kill()
+			_ = child.Release()
+		}
+	})
+	o := DefaultOptions()
+	o.Binary, o.Output, o.WebRTCRTP = binary, filepath.Join(dir, "capture"), true
+	result, err := Run(context.Background(), o)
+	if err == nil || result.Status != "failed" || result.Browser.ProfileRemoved {
+		t.Fatalf("unconfirmed child exit was hidden: %+v %v", result, err)
+	}
+	if !strings.Contains(strings.Join(result.Limitations, " "), "browser_exit_unconfirmed_profile_and_artifacts_unfinalized") || len(result.Artifacts) != 0 {
+		t.Fatalf("unconfirmed artifacts were finalized: %+v", result)
+	}
+	info, err := os.Stat(filepath.Join(o.Output, "browser.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logStat := info.Sys().(*syscall.Stat_t)
+	descriptors, err := os.ReadDir("/dev/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, descriptor := range descriptors {
+		fd, err := strconv.Atoi(descriptor.Name())
+		if err != nil {
+			continue
+		}
+		var stat syscall.Stat_t
+		if syscall.Fstat(fd, &stat) == nil && stat.Dev == logStat.Dev && stat.Ino == logStat.Ino {
+			t.Fatalf("browser.log descriptor %d remained open after Run returned", fd)
+		}
 	}
 }

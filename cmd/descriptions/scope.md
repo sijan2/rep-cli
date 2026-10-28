@@ -30,7 +30,7 @@ inside task scopes; legacy access to these requires `--global`.
 
 ## Browser capture ownership
 
-The browser bridge stays shared. Before scoped browse/fetch/action, the CLI
+The default extension browser bridge stays shared. Before scoped browser capture open/fetch/action, the CLI
 checks that the native host supports immutable capture handoff. Unsupported
 hosts fail before browser operations. A successful operation retrieves its
 exact sealed capture by host/session identity, verifies digest/count/provenance,
@@ -41,11 +41,48 @@ Large scoped capture responses return at most 16 request descriptors with
 explicit omitted counts; the complete capture remains in its archive.
 Use a returned saved hash ID to revisit an earlier operation after a later one.
 
-Dataset isolation is not browser isolation or an OS access-control boundary.
-Tabs, signed-in accounts, cookies, and browser control are shared in one profile.
-Use task-owned tabs and explicit tab IDs; close only the tabs the task created.
-Use separate browser profiles for independent login/account state. Scoped
-all-tab ambient watching is unsupported.
+Dataset namespaces do not establish account isolation or an OS access-control
+boundary. The `arc`, `chrome`, and `any` browser selectors use profiles whose
+tabs, signed-in accounts, cookies, and browser control remain shared across
+tasks. Use task-owned tabs and explicit tab IDs; close only the tabs the task
+created. Scoped all-tab ambient watching is unsupported.
+
+`scope -j` reports both browser options under `browser_profiles`:
+
+- `extension.shared_across_tasks: true` describes the shared extension browsers.
+  The existing top-level `shared_browser_profile: true` field retains this
+  meaning for compatibility; it does not describe the task headless browser.
+- `task_headless` describes the selected workspace/task's independent persistent
+  profile. `available` means the scope supports that profile, not that a browser
+  is running. `profile_path` is its assigned location and `start_command` starts
+  or reuses it. `status` is `not_started`, `stopped`, `disconnected`, `ready`,
+  `unknown`, or `requires_explicit_task`. Failed status checks report `unknown`
+  and omit the running/connection/mode fields instead of claiming the browser
+  is stopped. A running browser with an unavailable connection is `disconnected`.
+- `archive_account_identity: "not_verified"` makes the evidence boundary
+  explicit: selecting a task or inspecting its current browser does not verify
+  which account produced a captured request or an earlier archive.
+
+Scope inspection only reads lifecycle status, with a two-second connection
+deadline. It does not start a browser, create a profile, switch a browser
+selector, or expose debugging connection details. Use the full lifecycle status
+command for diagnostics: `rep --workspace PROJECT --task TASK browser headless status`.
+
+For independent account state, start each task's profile and pass
+`--browser headless` on every supported browser operation:
+
+```sh
+rep --workspace comparison --task account-a browser headless start --headed
+rep --workspace comparison --task account-b browser headless start --headed
+# Sign in to each account manually in its own dedicated window.
+rep --workspace comparison --task account-a browser tabs --browser headless
+rep --workspace comparison --task account-b browser tabs --browser headless
+```
+
+The private profile persists after stop/start. Each task must use a different
+task identity; selecting `--browser arc`, `chrome`, or `any` still uses the
+shared extension profile even while a task headless browser is running. See
+[headless.md](../../docs/headless.md) for setup and switching display modes.
 
 No task implicitly imports old global captures or another task's history.
 Primary domains filter display; they do not claim ownership of a website.

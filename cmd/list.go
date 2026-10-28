@@ -8,32 +8,23 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/pterm/pterm"
+	"github.com/repplus/rep-cli/internal/cli"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/store"
 	"github.com/spf13/cobra"
 )
 
 var (
-	listDomain         string
+	listFilter         store.FilterOptions
+	listViewFlags      requestViewFlags
 	listMethod         string
-	listStatus         int
-	listStatusRange    string
 	listPattern        string
-	listLimit          int
-	listOffset         int
-	listPrimary        bool
 	listIncludeIgnored bool
-	listLine           bool
-	listDetail         bool
 	listBudget         string // Token budget mode: minimal, compact, standard, full
 	listSince          string // Time filter
 	// New flags for agent-optimized filtering
-	listType        string // Comma-separated resource types: script,xhr,fetch,document
-	listAPI         bool   // Preset: API calls only (xmlhttprequest,fetch)
-	listInteresting bool   // Preset: Error responses + state-changing methods
-	listErrors      bool   // Preset: Only error responses (4xx/5xx)
-	listMutations   bool   // Preset: Only state-changing methods
-	listSaved       string // Session ID to read from saved sessions
+	listType  string // Comma-separated resource types: script,xhr,fetch,document
+	listSaved string // Session ID to read from saved sessions
 )
 
 var listCmd = &cobra.Command{
@@ -51,10 +42,11 @@ Output modes (controlled by --output flag):
   json      Raw JSON output
 
 Presets (agent-optimized shortcuts):
-  --api          API calls only (xmlhttprequest, fetch)
-  --errors       Only error responses (4xx/5xx)
-  --mutations    Only state-changing methods (POST/PUT/DELETE/PATCH)
-  --interesting  Errors + mutations combined
+  --select api          API calls only (xmlhttprequest, fetch)
+  --select errors       Only error responses (4xx/5xx)
+  --select mutations    Only state-changing methods (POST/PUT/DELETE/PATCH)
+  --select interesting  Error responses from state-changing methods
+  --select api,errors   Intersect presets; normal filters still apply
 
 Data sources:
   (default)              Show live.json (real-time, same as extension)
@@ -66,10 +58,10 @@ Examples:
   rep list --primary=false          List ALL requests (bypass primary filter)
   rep list --saved latest           List most recent saved session
   rep list --saved 20231227         List session starting with 20231227
-  rep list --api                    Only API calls (xhr/fetch)
-  rep list --interesting            Errors + state-changing methods
+  rep list --select api            Only API calls (xhr/fetch)
+  rep list --select interesting    Error responses from state-changing methods
   rep list --type script            Only JavaScript files
-  rep list --detail                 Multi-line request output
+  rep list --view detail           Multi-line request output
   rep list -d api.example.com       Filter by domain
   rep list -m POST                  Filter by method
   rep list --status 200             Filter by exact status
@@ -77,9 +69,13 @@ Examples:
   rep list -p "api/v1"              Filter by URL pattern (regex)
   rep list --limit 10               Limit results
   rep list -o full                  Show full response bodies
-  rep list --line | rg "Login"      Grep-friendly one-line output with IDs
+  rep list | rg "Login"            Grep-friendly one-line output with IDs
   rep body <id>                     Fetch full response body by ID`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		view, err := listViewFlags.resolve(cmd)
+		if err != nil {
+			return err
+		}
 		// Apply presets before building filter
 		resourceTypes := parseCommaSeparated(listType)
 		methods := parseCommaSeparated(listMethod)
@@ -89,12 +85,12 @@ Examples:
 		}
 		statusRanges := []string{}
 
-		if listAPI {
+		if view.api {
 			// Preset: API calls only (xhr/fetch)
 			resourceTypes = []string{"xmlhttprequest", "fetch"}
 		}
 
-		if listInteresting {
+		if view.interesting {
 			// Preset: Error responses + state-changing methods
 			statusRanges = []string{"4xx", "5xx"}
 			if len(methods) == 0 {
@@ -102,12 +98,12 @@ Examples:
 			}
 		}
 
-		if listErrors {
+		if view.errors {
 			// Preset: Only error responses
 			statusRanges = []string{"4xx", "5xx"}
 		}
 
-		if listMutations {
+		if view.mutations {
 			// Preset: Only state-changing methods
 			if len(methods) == 0 {
 				methods = []string{"POST", "PUT", "DELETE", "PATCH"}
@@ -116,17 +112,17 @@ Examples:
 
 		// Build filter options
 		opts := store.FilterOptions{
-			Domain:         listDomain,
+			Domain:         listFilter.Domain,
 			Method:         method,
 			Methods:        methods,
-			Status:         listStatus,
-			StatusRange:    listStatusRange,
+			Status:         listFilter.Status,
+			StatusRange:    listFilter.StatusRange,
 			StatusRanges:   statusRanges,
 			ResourceTypes:  resourceTypes,
 			Pattern:        listPattern,
-			Limit:          listLimit,
-			Offset:         listOffset,
-			PrimaryOnly:    listPrimary,
+			Limit:          listFilter.Limit,
+			Offset:         listFilter.Offset,
+			PrimaryOnly:    listFilter.PrimaryOnly,
 			ExcludeIgnored: !listIncludeIgnored,
 			Since:          parseSinceTime(listSince),
 		}
@@ -170,7 +166,7 @@ Examples:
 			candidates = session.Requests
 			primaryCount = len(s.GetPrimaryDomains())
 
-			if listPrimary && primaryCount == 0 {
+			if listFilter.PrimaryOnly && primaryCount == 0 {
 				return emitListNoPrimary(os.Stdout, source, getOutputMode() == "json", useEnvelope())
 			}
 
@@ -208,7 +204,7 @@ Examples:
 				tempStore.MutedPaths = s.MutedPaths
 				primaryCount = len(s.GetPrimaryDomains())
 			}
-			if listPrimary && len(tempStore.GetPrimaryDomains()) == 0 {
+			if listFilter.PrimaryOnly && len(tempStore.GetPrimaryDomains()) == 0 {
 				return emitListNoPrimary(os.Stdout, source, getOutputMode() == "json", useEnvelope())
 			}
 
@@ -267,7 +263,7 @@ Examples:
 		// Disclose data source on the first non-JSON line.
 		fmt.Println(output.FormatSourceLine(source))
 
-		useLine := listLine && !listDetail && mode == store.OutputCompact
+		useLine := view.line && !view.detail && mode == store.OutputCompact
 		if useLine {
 			printRequestsLine(requests, totalCount, opts.Limit, opts.Offset)
 		} else {
@@ -602,25 +598,15 @@ func parseCommaSeparated(input string) []string {
 
 func init() {
 	rootCmd.AddCommand(listCmd)
-	listCmd.Flags().StringVarP(&listDomain, "domain", "d", "", "Filter by domain")
+	listViewFlags.bind(listCmd, true)
+	cli.RegisterFilterFlags(listCmd, &listFilter, cli.FilterFlagConfig{
+		DefaultPrimary: true, SkipMethod: true, SkipURLPattern: true, TypeVar: &listType,
+	})
 	listCmd.Flags().StringVarP(&listMethod, "method", "m", "", "Filter by HTTP method (or comma-separated list)")
-	listCmd.Flags().IntVar(&listStatus, "status", 0, "Filter by exact status code")
-	listCmd.Flags().StringVar(&listStatusRange, "status-range", "", "Filter by status range (2xx, 3xx, 4xx, 5xx)")
 	listCmd.Flags().StringVarP(&listPattern, "pattern", "p", "", "Filter by URL pattern (regex)")
-	listCmd.Flags().IntVarP(&listLimit, "limit", "l", 0, "Limit number of results")
-	listCmd.Flags().IntVar(&listOffset, "offset", 0, "Skip first N results")
-	listCmd.Flags().BoolVar(&listPrimary, "primary", true, "Only show requests to primary domains (default)")
 	listCmd.Flags().BoolVar(&listIncludeIgnored, "include-ignored", false, "Include requests to ignored domains")
-	listCmd.Flags().BoolVar(&listLine, "line", true, "One-line output with request ID (default)")
-	listCmd.Flags().BoolVar(&listDetail, "detail", false, "Show multi-line request details")
 	listCmd.Flags().StringVar(&listBudget, "budget", "compact", "Token budget: minimal (~15/req), compact (~30/req), standard (~100/req), full")
+	advancedFlags(listCmd, "budget", "include-ignored")
 	listCmd.Flags().StringVar(&listSince, "since", "", "Only requests since duration (e.g., 5m, 1h, 30s)")
-	// New agent-optimized flags
-	listCmd.Flags().StringVar(&listType, "type", "", "Filter by resource type (script,xmlhttprequest,fetch,document)")
-	listCmd.Flags().BoolVar(&listAPI, "api", false, "Preset: API calls only (xmlhttprequest, fetch)")
-	listCmd.Flags().BoolVar(&listInteresting, "interesting", false, "Preset: Error responses (4xx/5xx) + state-changing methods")
-	listCmd.Flags().BoolVar(&listErrors, "errors", false, "Preset: Only error responses (4xx/5xx)")
-	listCmd.Flags().BoolVar(&listMutations, "mutations", false, "Preset: Only state-changing methods (POST/PUT/DELETE/PATCH)")
-	// Data source
 	listCmd.Flags().StringVar(&listSaved, "saved", "", "Read from saved session (ID, prefix, or 'latest')")
 }

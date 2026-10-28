@@ -53,7 +53,7 @@ func newFakeBrowserBridgeServer(t *testing.T, handler func(bridge.RPCRequest) fa
 	}
 	registry := bridge.Registry{
 		PID:       os.Getpid(),
-		Browser:   "arc",
+		Browser:   defaultBrowser,
 		Socket:    socket,
 		StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		LastSeen:  time.Now().UTC().Format(time.RFC3339Nano),

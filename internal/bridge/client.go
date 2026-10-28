@@ -232,6 +232,8 @@ func normalizeBrowser(browser string) string {
 		return ""
 	case "the browser company", "arc browser":
 		return "arc"
+	case "dia browser":
+		return "dia"
 	case "google chrome":
 		return "chrome"
 	default:

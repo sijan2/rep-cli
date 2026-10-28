@@ -15,11 +15,18 @@ import (
 )
 
 func newBrowserInteractCommand(deps jevDOMDependencies) *cobra.Command {
+	command := newInheritedBrowserInteractCommand(deps)
+	addDecisionBrowserFlag(command)
+	return command
+}
+
+func newInheritedBrowserInteractCommand(deps jevDOMDependencies) *cobra.Command {
 	var tab int
-	var path, browserName string
+	var path string
 	var apply, noCache bool
 	command := &cobra.Command{Use: "interact [plan.json] --tab ID", Short: "Run explicit, verified UI interactions with optional Jev target selection", Args: cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) (returnErr error) {
+			browserName := decisionBrowserName(command)
 			if len(args) == 1 {
 				if path != "" {
 					return reportJevError(command, errors.New("provide a positional plan or --plan, not both"))
@@ -29,7 +36,7 @@ func newBrowserInteractCommand(deps jevDOMDependencies) *cobra.Command {
 			if tab < 0 || path == "" {
 				return reportJevError(command, errors.New("tab and plan are required"))
 			}
-			if browserName != "arc" && browserName != "chrome" && browserName != "headless" && browserName != "any" {
+			if !validDecisionBrowser(browserName) {
 				return reportJevError(command, errors.New("unsupported browser"))
 			}
 			file, err := os.Open(path)
@@ -157,7 +164,6 @@ func newBrowserInteractCommand(deps jevDOMDependencies) *cobra.Command {
 		}}
 	command.Flags().IntVar(&tab, "tab", -1, "Existing task-owned browser tab")
 	command.Flags().StringVar(&path, "plan", "", "Versioned JSON interaction plan (values remain local)")
-	command.Flags().StringVar(&browserName, "browser", "arc", "arc, chrome, any, or task-owned headless")
 	command.Flags().BoolVar(&apply, "apply", false, "Execute the explicit plan; default validates and previews first target")
 	command.Flags().BoolVar(&noCache, "no-cache", false, "Bypass the Jev decision cache for semantic targets")
 	_ = command.MarkFlagRequired("tab")
@@ -185,7 +191,7 @@ func interactionSelection(decision jevdom.Result) browserflow.Selection {
 	return resolved
 }
 func init() {
-	browserCmd.AddCommand(newBrowserInteractCommand(defaultJevDOMDependencies()))
+	browserCmd.AddCommand(newInheritedBrowserInteractCommand(defaultJevDOMDependencies()))
 	legacy := newBrowserInteractCommand(defaultJevDOMDependencies())
 	legacy.Use = "act [plan.json] --tab ID"
 	legacy.Hidden = true

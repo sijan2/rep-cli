@@ -493,5 +493,6 @@ private profile instead of your everyday browser.`,
 	command.Flags().DurationVar(&flags.Timeout, "timeout", 30*time.Second, "Per-URL readiness timeout")
 	command.Flags().DurationVar(&flags.Delay, "delay", 0, "Extra wait after readiness, before each screenshot")
 	command.Flags().BoolVar(&flags.Report, "report", false, "Also write an HTML gallery (index.html) in the output directory")
+	advancedFlags(command, "delay", "quality", "report")
 	browserCmd.AddCommand(command)
 }

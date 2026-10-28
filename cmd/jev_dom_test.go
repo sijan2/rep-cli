@@ -126,7 +126,7 @@ func TestJevSelectReturnsObservedHandleWithoutActionsOrCredentialExposure(t *tes
 					return jev.Config{APIKey: "unit-test-command-key", Model: "jev-1.13.0"}, nil
 				},
 				browser: func(_ context.Context, name string) (jevdom.Browser, error) {
-					if name != "arc" {
+					if name != defaultBrowser {
 						t.Fatalf("unexpected browser: %s", name)
 					}
 					return browser, nil

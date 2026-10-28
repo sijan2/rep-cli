@@ -74,6 +74,7 @@ func init() {
 	restart.Flags().StringVar(&restartOptions.Host, "host", "", "Native host executable (default: the saved host)")
 	restart.Flags().BoolVar(&restartOptions.Headed, "headed", false, "Restart in a visible window for manual login")
 	restart.Flags().StringVar(&restartOptions.WindowSize, "window-size", "", "Browser window WIDTHxHEIGHT (default: the saved size)")
+	advancedFlags(start, "window-size", "host", "binary")
 	restart.Flags().DurationVar(&restartTimeout, "timeout", 25*time.Second, "Stop and startup deadline")
 	parent.AddCommand(restart)
 	for _, operation := range []string{"status", "stop"} {

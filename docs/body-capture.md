@@ -179,6 +179,13 @@ manual-redirect rules remain part of the Canvas adapter's contract.
 
 ## Budgets and storage costs
 
+`rep coverage --saved HASH` aggregates the selected capture's body states,
+retained-byte declarations, dropped records, stream gaps and negotiated limits.
+It distinguishes collector gaps from unknown metadata and from an incomplete
+report projection. This metadata view does not validate body hashes; use
+`body ID --saved HASH --info --require-complete` for a selected payload.
+`rep describe coverage` defines the output fields.
+
 The system cannot make a finite browser, disk, or Native Messaging channel
 unlimited. Budgets are now visible and failures are explicit.
 

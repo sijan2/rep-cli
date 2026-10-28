@@ -2,6 +2,7 @@ package packetcapture
 
 import (
 	"encoding/binary"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -151,6 +152,32 @@ func TestInspectFragmentsAndUnsupportedLinkDoNotGuessPayload(t *testing.T) {
 	}
 	if len(page.Packets[0].Notes) != 1 || page.Packets[0].Notes[0] != "unsupported_link_type" {
 		t.Fatalf("missing unsupported link disclosure: %+v", page)
+	}
+}
+
+func TestInspectRTPCandidateRequiresCapturedExtensionHeader(t *testing.T) {
+	payload := make([]byte, 24)
+	copy(payload, rtpShape())
+	payload[0] |= 0x10 // RTP extension follows the fixed twelve-byte header.
+	binary.BigEndian.PutUint16(payload[12:14], 0xbede)
+	binary.BigEndian.PutUint16(payload[14:16], 2) // Eight bytes of extension data.
+	data := ipv4UDP(payload)
+	for _, capturedPayload := range []int{12, 15, 16, 20, 23, 24} {
+		t.Run(fmt.Sprintf("captured_payload_%d", capturedPayload), func(t *testing.T) {
+			retained := data[:28+capturedPayload]
+			page, err := Inspect(fixtureFile(t, fixtureBytes(binary.LittleEndian, false, 101, []fixturePacket{{retained, uint32(len(data)), 1, 0}})), InspectOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			packet := page.Packets[0]
+			want := 0
+			if capturedPayload == len(payload) {
+				want = 1
+			}
+			if len(packet.Candidates) != want || packet.UDP == nil || packet.UDP.CapturedPayloadBytes != int64(capturedPayload) {
+				t.Fatalf("candidate relied on missing extension bytes: %+v", packet)
+			}
+		})
 	}
 }
 

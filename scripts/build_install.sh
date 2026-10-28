@@ -71,6 +71,9 @@ if [[ -z "${REP_SKIP_TESTS:-}" ]]; then
 fi
 
 go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" "$ROOT_DIR"
+# Verify the new executable now so the agent's first browser command does not
+# also pay macOS's first-execution validation cost.
+"$INSTALL_DIR/rep" --version >/dev/null
 echo "Installed: $INSTALL_DIR/rep"
 
 if [[ "$BUILD_HOST" == "true" ]]; then

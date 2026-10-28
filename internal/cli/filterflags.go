@@ -62,9 +62,9 @@ func RegisterFilterFlags(cmd *cobra.Command, opts *store.FilterOptions, cfg Filt
 	}
 	if !cfg.SkipResourceType {
 		if cfg.TypeVar != nil {
-			cmd.Flags().StringVar(cfg.TypeVar, "type", "", "Filter by resource type (comma-separated: script,xhr,fetch,document)")
+			cmd.Flags().StringVar(cfg.TypeVar, "type", "", "Filter by resource type (comma-separated: script,xmlhttprequest,fetch,document)")
 		} else {
-			cmd.Flags().StringVar(&set.RawType, "type", "", "Filter by resource type (comma-separated: script,xhr,fetch,document)")
+			cmd.Flags().StringVar(&set.RawType, "type", "", "Filter by resource type (comma-separated: script,xmlhttprequest,fetch,document)")
 		}
 	}
 	if !cfg.SkipPrimary {

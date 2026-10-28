@@ -216,6 +216,20 @@ func (c *Client) Evaluate(ctx context.Context, state any, questions map[string]Q
 	if err != nil {
 		return Evaluation{}, err
 	}
+	data, timings, err := c.post(ctx, body, false)
+	if err != nil {
+		return Evaluation{}, err
+	}
+	result, err := decodeEvaluation(data, questions)
+	result.Timing = timings
+	return result, err
+}
+
+// post sends one encoded System One request with bounded retries and returns
+// the successful response body with the observed transport timings. A decision
+// request has no side effects, so transport loss and overload are retried.
+// images adds the documented danger-zone header for image assets and box questions.
+func (c *Client) post(ctx context.Context, body []byte, images bool) ([]byte, []RequestTiming, error) {
 	ctx, cancel := context.WithTimeout(ctx, RequestTimeout)
 	defer cancel()
 	var timings []RequestTiming
@@ -224,16 +238,19 @@ func (c *Client) Evaluate(ctx context.Context, state any, questions map[string]Q
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
 			if err := waitRetry(ctx, delay, last); err != nil {
-				return Evaluation{}, err
+				return nil, timings, err
 			}
 		}
 		delay = time.Duration(1<<attempt) * retryBaseDelay
 		request, err := http.NewRequestWithContext(ctx, http.MethodPost, Endpoint, bytes.NewReader(body))
 		if err != nil {
-			return Evaluation{}, &Error{Code: CodeInvalidRequest, Message: "cannot construct Jev request"}
+			return nil, timings, &Error{Code: CodeInvalidRequest, Message: "cannot construct Jev request"}
 		}
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Authorization", "Bearer "+c.key)
+		if images {
+			request.Header.Set(ImagesHeader, "true")
+		}
 		started := time.Now()
 		var mu sync.Mutex
 		timing := RequestTiming{Attempt: attempt + 1}
@@ -254,9 +271,8 @@ func (c *Client) Evaluate(ctx context.Context, state any, questions map[string]Q
 		response, err := c.httpClient.Do(request)
 		if err != nil {
 			if ctx.Err() != nil {
-				return Evaluation{}, contextError(ctx)
+				return nil, timings, contextError(ctx)
 			}
-			// A decision request has no side effects, so transport loss is retried.
 			last = &Error{Code: CodeConnection, Message: "Jev connection failed: " + transportSummary(err), Retryable: true}
 			continue
 		}
@@ -269,22 +285,20 @@ func (c *Client) Evaluate(ctx context.Context, state any, questions map[string]Q
 		mu.Unlock()
 		if readErr != nil {
 			if ctx.Err() != nil {
-				return Evaluation{}, contextError(ctx)
+				return nil, timings, contextError(ctx)
 			}
 			last = &Error{Code: CodeConnection, Message: "Jev connection failed while reading the response", Retryable: true}
 			continue
 		}
 		if len(data) > maxResponseBytes {
-			return Evaluation{}, &Error{Code: CodeInvalidResponse, Status: response.StatusCode, Message: "Jev response exceeds 1 MiB"}
+			return nil, timings, &Error{Code: CodeInvalidResponse, Status: response.StatusCode, Message: "Jev response exceeds 1 MiB"}
 		}
 		if response.StatusCode == http.StatusOK {
-			result, err := decodeEvaluation(data, questions)
-			result.Timing = timings
-			return result, err
+			return data, timings, nil
 		}
 		last = statusError(response.StatusCode, providerErrorType(data))
 		if !last.Retryable {
-			return Evaluation{}, last
+			return nil, timings, last
 		}
 		if attempt == maxAttempts-1 {
 			break
@@ -292,7 +306,7 @@ func (c *Client) Evaluate(ctx context.Context, state any, questions map[string]Q
 		retry := response.Header.Get("Retry-After")
 		if seconds, err := strconv.ParseInt(retry, 10, 64); err == nil && seconds >= 0 {
 			if seconds > int64(RequestTimeout/time.Second) {
-				return Evaluation{}, retryLater(last)
+				return nil, timings, retryLater(last)
 			}
 			delay = max(delay, time.Duration(seconds)*time.Second)
 		} else if when, err := http.ParseTime(retry); err == nil {
@@ -301,7 +315,7 @@ func (c *Client) Evaluate(ctx context.Context, state any, questions map[string]Q
 	}
 	failure := *last
 	failure.Message += fmt.Sprintf(" after %d attempts; retry after a short wait", maxAttempts)
-	return Evaluation{}, &failure
+	return nil, timings, &failure
 }
 
 func statusError(status int, providerType string) *Error {

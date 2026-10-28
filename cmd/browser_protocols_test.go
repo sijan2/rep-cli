@@ -34,6 +34,20 @@ func TestProtocolPayloadPreflightRejectsOldExtensionAndLeavesOrdinaryCaptureFast
 	}
 }
 
+func TestWebSocketWaitPreflightRejectsOldExtensionAndSkipsOrdinaryCapture(t *testing.T) {
+	c := &protocolCaptureCaller{}
+	if err := requireWebSocketWait(context.Background(), c, false); err != nil || c.calls != 0 {
+		t.Fatalf("ordinary capture added a WebSocket preflight: %v", err)
+	}
+	if err := requireWebSocketWait(context.Background(), c, true); err == nil || c.calls != 1 {
+		t.Fatalf("old extension accepted WebSocket completion wait: %v", err)
+	}
+	c.capabilities = []string{"websocket_wait_close_v1"}
+	if err := requireWebSocketWait(context.Background(), c, true); err != nil || c.calls != 2 {
+		t.Fatalf("updated extension rejected WebSocket completion wait: %v", err)
+	}
+}
+
 func TestProtocolPayloadFlagOnlyAppliesToCapturedAction(t *testing.T) {
 	var sent map[string]interface{}
 	run := func(_ *cobra.Command, _, _ string, params map[string]interface{}, _ time.Duration) error {

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/bytedance/sonic"
@@ -11,77 +12,166 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	statsCountBy      string
-	statsUnique       string
-	statsDistribution string
-	statsTop          int
-)
+var statsCmd = newStatsCommand()
 
-var statsCmd = &cobra.Command{
-	Use:   "stats",
-	Short: "Aggregate statistics from traffic data",
-	Long: `Compute aggregations and statistics from captured traffic.
+func newStatsCommand() *cobra.Command {
+	var countBy, unique, distribution string
+	var limit int
+	command := &cobra.Command{
+		Use:   "stats <operation>",
+		Short: "Aggregate statistics from traffic data",
+		Long: `Compute aggregations from captured traffic.
 
-AI agent primitive for understanding traffic patterns.
-
-Options:
-  --count-by <field>      Count requests by field value
-  --unique <field>        Count unique values for a field
-  --distribution <field>  Show percentage distribution
-  --top N                 Show only top N results
-
-Fields:
-  method                  HTTP method
-  status                  Response status code
-  domain                  Request domain
-  path                    URL path
-  path:segment:N          Nth path segment (0-indexed)
-  header:<name>           Request header value
-  body-type               Request body content type
-
-Examples:
-  rep stats --count-by method
-  rep stats --count-by status
-  rep stats --count-by domain --top 10
-  rep stats --unique header:authorization
-  rep stats --distribution status
-  rep stats --count-by 'path:segment:1'`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if statsCountBy == "" && statsUnique == "" && statsDistribution == "" {
-			return fmt.Errorf("one of --count-by, --unique, or --distribution is required")
+Choose count, unique, or distribution, then give one field.
+Fields: method, status, domain, path, path:segment:N, header:<name>, body-type.
+Use rep describe stats for source and output contracts.`,
+	}
+	legacyMode := func() (string, string, error) {
+		mode, field := "", ""
+		for _, option := range []struct{ flag, mode, value string }{
+			{"count-by", "count", countBy}, {"unique", "unique", unique}, {"distribution", "distribution", distribution},
+		} {
+			if !command.PersistentFlags().Changed(option.flag) {
+				continue
+			}
+			if mode != "" {
+				return "", "", fmt.Errorf("choose exactly one stats operation")
+			}
+			mode, field = option.mode, option.value
 		}
-
-		// Load requests
-		requests, err := loadRequestsForExtract()
+		return mode, field, nil
+	}
+	validateOptions := func(cmd *cobra.Command) error {
+		// Cobra's built-in flag deprecation notes go to stdout; keep legacy
+		// spellings usable without contaminating an agent's JSON result.
+		for _, option := range []struct{ flag, replacement string }{
+			{"count-by", "rep stats count FIELD"}, {"unique", "rep stats unique FIELD"},
+			{"distribution", "rep stats distribution FIELD"}, {"top", "--limit"},
+		} {
+			if command.PersistentFlags().Changed(option.flag) {
+				legacy, _, _ := legacyMode()
+				if option.flag == "top" && (cmd.Name() == "unique" || legacy == "unique") {
+					fmt.Fprintln(cmd.ErrOrStderr(), "Flag --top is deprecated and has no effect for unique; omit it")
+				} else {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Flag --%s is deprecated; use %s\n", option.flag, option.replacement)
+				}
+			}
+		}
+		if command.PersistentFlags().Changed("top") && cmd.Flags().Changed("limit") {
+			return fmt.Errorf("do not combine --limit with legacy --top")
+		}
+		return nil
+	}
+	command.Args = func(cmd *cobra.Command, args []string) error {
+		if err := validateOptions(cmd); err != nil {
+			return err
+		}
+		if err := cobra.NoArgs(cmd, args); err != nil {
+			return err
+		}
+		mode, field, err := legacyMode()
 		if err != nil {
 			return err
 		}
+		if mode == "" {
+			return fmt.Errorf("choose stats count, unique, or distribution and one field")
+		}
+		return validateStatsField(field)
+	}
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		mode, field, _ := legacyMode()
+		return runStats(cmd, mode, field, limit)
+	}
+	command.PersistentFlags().IntVar(&limit, "top", 0, "Legacy limit on results")
+	_ = command.PersistentFlags().MarkHidden("top")
+	for _, option := range []struct {
+		flag  string
+		value *string
+	}{
+		{"count-by", &countBy}, {"unique", &unique}, {"distribution", &distribution},
+	} {
+		command.PersistentFlags().StringVar(option.value, option.flag, "", "Legacy statistics operation")
+		_ = command.PersistentFlags().MarkHidden(option.flag)
+	}
+	for _, mode := range []string{"count", "unique", "distribution"} {
+		operation := mode
+		child := &cobra.Command{
+			Use:   operation + " <field>",
+			Short: map[string]string{"count": "Count requests by field value", "unique": "Count distinct field values", "distribution": "Show field-value percentages"}[operation],
+			Args: func(cmd *cobra.Command, args []string) error {
+				if err := validateOptions(cmd); err != nil {
+					return err
+				}
+				if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+					return err
+				}
+				legacy, _, err := legacyMode()
+				if err != nil {
+					return err
+				}
+				if legacy != "" {
+					return fmt.Errorf("do not combine a stats operation with legacy --count-by, --unique, or --distribution")
+				}
+				return validateStatsField(args[0])
+			},
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return runStats(cmd, operation, args[0], limit)
+			},
+		}
+		// Unique has never truncated values: advertise a limit only where it
+		// is consumed, while the hidden --top adapter keeps old calls valid.
+		if operation != "unique" {
+			child.Flags().IntVar(&limit, "limit", 0, "Show only the first N results")
+		}
+		command.AddCommand(child)
+	}
+	return command
+}
 
-		if len(requests) == 0 {
-			pterm.Info.Println("No requests to analyze")
+// Field names are data, not commands. Validate them before reading traffic so
+// a misspelling cannot quietly turn every request into an empty aggregation.
+func validateStatsField(field string) error {
+	switch field {
+	case "method", "status", "domain", "path", "body-type":
+		return nil
+	}
+	if strings.HasPrefix(field, "header:") && strings.TrimSpace(strings.TrimPrefix(field, "header:")) != "" {
+		return nil
+	}
+	if strings.HasPrefix(field, "path:segment:") {
+		n, err := strconv.Atoi(strings.TrimPrefix(field, "path:segment:"))
+		if err == nil && n >= 0 {
 			return nil
 		}
+	}
+	return fmt.Errorf("unsupported stats field %q; use method, status, domain, path, path:segment:N, header:<name>, or body-type", field)
+}
 
-		var result interface{}
-
-		if statsCountBy != "" {
-			result = computeCountBy(requests, statsCountBy, statsTop)
-		} else if statsUnique != "" {
-			result = computeUnique(requests, statsUnique)
-		} else if statsDistribution != "" {
-			result = computeDistribution(requests, statsDistribution, statsTop)
-		}
-
-		if getOutputMode() == "json" {
-			out, _ := sonic.MarshalIndent(result, "", "  ")
-			fmt.Println(string(out))
-		} else {
-			printStats(result)
-		}
-
+func runStats(cmd *cobra.Command, mode, field string, top int) error {
+	requests, err := loadRequestsForExtract()
+	if err != nil {
+		return err
+	}
+	if len(requests) == 0 {
+		pterm.Info.Println("No requests to analyze")
 		return nil
-	},
+	}
+	var result interface{}
+	switch mode {
+	case "count":
+		result = computeCountBy(requests, field, top)
+	case "unique":
+		result = computeUnique(requests, field)
+	case "distribution":
+		result = computeDistribution(requests, field, top)
+	}
+	if getOutputMode() == "json" {
+		out, _ := sonic.MarshalIndent(result, "", "  ")
+		fmt.Fprintln(cmd.OutOrStdout(), string(out))
+	} else {
+		printStats(result)
+	}
+	return nil
 }
 
 // CountResult represents a count aggregation
@@ -284,8 +374,4 @@ func printStats(result interface{}) {
 
 func init() {
 	rootCmd.AddCommand(statsCmd)
-	statsCmd.Flags().StringVar(&statsCountBy, "count-by", "", "Count requests by field value")
-	statsCmd.Flags().StringVar(&statsUnique, "unique", "", "Count unique values for field")
-	statsCmd.Flags().StringVar(&statsDistribution, "distribution", "", "Show percentage distribution")
-	statsCmd.Flags().IntVar(&statsTop, "top", 0, "Show only top N results")
 }

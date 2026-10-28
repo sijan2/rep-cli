@@ -19,22 +19,22 @@ var androidCmd = &cobra.Command{
 	Long: `View captured Android traffic grouped by app package.
 
 Output modes match 'rep list':
-  --line        One-line per request with ID (default, grep-friendly)
-  --detail      Multi-line with headers/body preview
+  --view line   One-line per request with ID (default, grep-friendly)
+  --view detail Multi-line with headers/body preview
   -o json       Raw JSON for piping
 
 Filters:
   --domain      Filter by domain (partial match)
   --method      Filter by HTTP method
-  --errors      Only 4xx/5xx responses
-  --mutations   Only POST/PUT/DELETE/PATCH
+  --select errors    Only 4xx/5xx responses
+  --select mutations Only POST/PUT/DELETE/PATCH
   --since       Only requests since duration (5m, 1h)
 
 Examples:
   rep android -p                           List all packages
   rep android com.spotify.music            Show requests for Spotify
   rep android spotify --domain api         Only requests to *api* domains
-  rep android spotify --errors             Only error responses
+  rep android spotify --select errors           Only error responses
   rep android spotify --since 5m           Last 5 minutes only
   rep android spotify -o json              JSON output for piping
   rep body <id>                            Get full body for any request ID`,
@@ -42,17 +42,13 @@ Examples:
 }
 
 var (
+	androidViewFlags    requestViewFlags
 	androidListPackages bool
 	androidLimit        int
 	androidShowDomains  bool
-	androidLine         bool
-	androidDetail       bool
-	androidErrors       bool
-	androidMutations    bool
 	androidDomain       string
 	androidMethod       string
 	androidAll          bool   // Show all including what would be skipped
-	androidBudget       string // Token budget mode
 	androidSince        string // Time filter
 )
 
@@ -102,17 +98,15 @@ var (
 
 func init() {
 	rootCmd.AddCommand(androidCmd)
+	androidViewFlags.bind(androidCmd, false)
 	androidCmd.Flags().BoolVarP(&androidListPackages, "packages", "p", false, "List packages only")
 	androidCmd.Flags().IntVarP(&androidLimit, "limit", "n", 50, "Max requests to show")
 	androidCmd.Flags().BoolVarP(&androidShowDomains, "domains", "d", false, "Show domains per package")
-	androidCmd.Flags().BoolVar(&androidLine, "line", true, "One-line output with ID (default)")
-	androidCmd.Flags().BoolVar(&androidDetail, "detail", false, "Show request details")
-	androidCmd.Flags().BoolVar(&androidErrors, "errors", false, "Only 4xx/5xx responses")
-	androidCmd.Flags().BoolVar(&androidMutations, "mutations", false, "Only POST/PUT/DELETE/PATCH")
 	androidCmd.Flags().StringVar(&androidDomain, "domain", "", "Filter by domain")
 	androidCmd.Flags().StringVarP(&androidMethod, "method", "m", "", "Filter by method")
 	androidCmd.Flags().BoolVar(&androidAll, "all", false, "Show all requests (ignore skip/keep config)")
-	androidCmd.Flags().StringVar(&androidBudget, "budget", "compact", "Token budget: minimal, compact, standard, full")
+	androidCmd.Flags().String("budget", "compact", "Legacy no-op; retained for compatibility")
+	_ = androidCmd.Flags().MarkHidden("budget")
 	androidCmd.Flags().StringVar(&androidSince, "since", "", "Only requests since duration (e.g., 5m, 1h, 30s)")
 
 	// Add primitive subcommands
@@ -123,6 +117,14 @@ func init() {
 }
 
 func runAndroid(cmd *cobra.Command, args []string) error {
+	if cmd.Flags().Changed("budget") {
+		fmt.Fprintln(cmd.ErrOrStderr(), "deprecated: --budget has no effect on Android output; omit it")
+	}
+	view, err := androidViewFlags.resolve(cmd)
+	if err != nil {
+		return err
+	}
+
 	data, err := store.LoadAndroidData()
 	if err != nil {
 		return err
@@ -139,7 +141,7 @@ func runAndroid(cmd *cobra.Command, args []string) error {
 	}
 
 	pkg := args[0]
-	return showPackageRequests(data, pkg)
+	return showPackageRequests(data, pkg, view)
 }
 
 func listAndroidPackages(data *store.AndroidData) error {
@@ -168,7 +170,7 @@ func listAndroidPackages(data *store.AndroidData) error {
 	return nil
 }
 
-func showPackageRequests(data *store.AndroidData, pkgQuery string) error {
+func showPackageRequests(data *store.AndroidData, pkgQuery string, view requestView) error {
 	// Find package (partial match)
 	var pkg *store.AndroidPackage
 	var pkgName string
@@ -187,7 +189,7 @@ func showPackageRequests(data *store.AndroidData, pkgQuery string) error {
 	// Filter requests
 	var filtered []store.AndroidRequest
 	for _, r := range pkg.Requests {
-		if !matchAndroidFilters(&r) {
+		if !matchAndroidFilters(&r, view) {
 			continue
 		}
 		filtered = append(filtered, r)
@@ -207,7 +209,7 @@ func showPackageRequests(data *store.AndroidData, pkgQuery string) error {
 		filtered = filtered[len(filtered)-androidLimit:]
 	}
 
-	if androidDetail {
+	if view.detail {
 		printAndroidDetail(filtered)
 	} else {
 		printAndroidLine(filtered)
@@ -217,7 +219,7 @@ func showPackageRequests(data *store.AndroidData, pkgQuery string) error {
 	return nil
 }
 
-func matchAndroidFilters(r *store.AndroidRequest) bool {
+func matchAndroidFilters(r *store.AndroidRequest, view requestView) bool {
 	// Skip filtered requests unless --all is set
 	if r.Skipped && !androidAll {
 		return false
@@ -238,7 +240,7 @@ func matchAndroidFilters(r *store.AndroidRequest) bool {
 		return false
 	}
 	// Errors preset - check both formats
-	if androidErrors {
+	if view.errors {
 		status := r.Status
 		if status == 0 && r.Response != nil {
 			status = r.Response.Status
@@ -248,7 +250,7 @@ func matchAndroidFilters(r *store.AndroidRequest) bool {
 		}
 	}
 	// Mutations preset
-	if androidMutations {
+	if view.mutations {
 		m := strings.ToUpper(r.Method)
 		if m != "POST" && m != "PUT" && m != "DELETE" && m != "PATCH" {
 			return false

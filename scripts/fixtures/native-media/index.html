@@ -77,6 +77,16 @@ window.startMediaFixture=async()=>{
 };
 
 window.fixtureStats=fixtureStats;
+window.stopVideoSenderFixture=()=>{
+  if(!current||current.closed)throw new Error('fixture is not active');
+  const transceiver=current.left.getTransceivers().find(item=>item.sender.track?.kind==='video');
+  if(!transceiver)throw new Error('video sender is missing');
+  const track=transceiver.sender.track;
+  transceiver.stop();
+  current.senderStop={track_id:track.id,ready_state:track.readyState,enabled:track.enabled,at_ms:performance.now()};
+  return current.senderStop;
+};
+window.senderStopFixtureState=()=>current?.senderStop||null;
 window.stopMediaFixture=async()=>{
   if(!current||current.closed)return fixtureStats();
   current.closed=true;clearInterval(current.timer);current.oscillator.stop();

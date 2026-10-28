@@ -107,6 +107,7 @@ func newPacketsCommandWith(backend packetCommandBackend, open evidenceOpener) *c
 	capture.Flags().Uint64Var(&options.MaxBytes, "max-bytes", options.MaxBytes, "Maximum pcap bytes including file and record headers (24 to 1073741824)")
 	capture.Flags().IntVar(&options.Snaplen, "snaplen", options.Snaplen, "Maximum captured bytes per packet (1 to 262144)")
 	capture.Flags().IntVar(&options.BufferBytes, "buffer-bytes", options.BufferBytes, "Requested kernel capture buffer bytes (65536 to 67108864)")
+	advancedFlags(capture, "buffer-bytes", "snaplen")
 	command.AddCommand(capture)
 	inspectOptions := packetcapture.InspectOptions{Offset: 24, Limit: 20, MaxScanBytes: 1 << 20}
 	maxBytes := 8192

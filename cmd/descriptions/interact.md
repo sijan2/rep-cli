@@ -56,7 +56,7 @@ observers. Concurrent executors are rejected; active capture ownership is
 preserved. Target geometry, iframe ancestry, occlusion, and document identity
 are checked before dispatch. Unsupported transformed frames stop explicitly.
 No extension reload or page installation is needed for each run.
-No network capture is started; use `browser action` for archived network evidence.
+No network capture is started; use `browser capture action` for archived network evidence.
 
 Limits: version 1, HTTP(S) URLs without credentials, plan <=256 KiB, 1–100 steps,
 values <=32 KiB, 16 conditions, 32 keys, per-step timeout_ms 0–30000 (0/default

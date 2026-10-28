@@ -1,5 +1,5 @@
 // rep-host is both the rep+ native-messaging host and the local RPC relay used
-// by `rep browser`. Chrome/Arc owns this process; the CLI reaches it through a
+// by `rep browser`. The browser owns this process; the CLI reaches it through a
 // per-process Unix socket registered under the rep data directory.
 package main
 
@@ -1072,6 +1072,8 @@ func detectBrowserFromParents() (string, string) {
 		parentPID, _ := strconv.Atoi(parts[0])
 		command := strings.ToLower(strings.Join(parts[1:], " "))
 		switch {
+		case strings.Contains(command, "/dia.app/"):
+			return "dia", "Dia"
 		case strings.Contains(command, "/arc.app/"):
 			return "arc", "Arc"
 		case strings.Contains(command, "/google chrome.app/"):

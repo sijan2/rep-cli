@@ -86,3 +86,7 @@ attach to unrelated browser processes or guarantee that diagnostics are
 unobservable. Use `rep packets capture` for passive interface observation without
 browser diagnostics. See `docs/native-capture.md` for source references and
 local validation results.
+
+## Advanced flags
+
+These flags stay accepted with their existing behavior and are hidden from `--help` to keep the everyday surface small: `--binary` (explicit Chromium executable), `--max-log-bytes`, `--max-key-log-bytes`, `--max-packet-bytes` (retention thresholds for the diagnostic log, TLS key log and pcap).

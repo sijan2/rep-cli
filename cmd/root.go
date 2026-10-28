@@ -32,15 +32,17 @@ var rootCmd = &cobra.Command{
 	Long: `Rep drives browser workflows and preserves captured network evidence.
 
 Start with:
-  rep browser create <url>             Open a task-owned tab
-  rep browser select "Save button" --tab ID
-  rep browser interact flow.json --tab ID --apply
-  rep browser open <url> --keep-tab    Navigate and capture
+  rep browser page <url>               Open, read, and get control references
+  rep browser reference <url>          Save content, CSS, fonts, assets and timings
+  rep browser do REF --tab ID --text TEXT  Fill an observed control
+  rep browser chat <url> --message TEXT   Send once and observe its reply
+  rep browser interact flow.json --tab ID --apply  Run a declared UI plan
+  rep browser capture open <url> --keep-tab  Navigate and capture
   rep summary                         Inspect the current capture
   rep describe browser                Full browser options and contracts
 
 Choose --workspace/--task or set REP_WORKSPACE/REP_TASK in the calling process.
-Arc is the default browser. --raw-json selects plain JSON by itself.
+Dia is the default browser. --raw-json selects plain JSON by itself.
 Low-level controls and specialized tools remain available in the groups below.`,
 }
 
@@ -76,7 +78,7 @@ func init() {
 			if !ok {
 				ae = output.NewAgentError(output.ErrCodeInvalidArgument, cmd.CommandPath(), err.Error(), "rep scope")
 			}
-			return output.EmitAgentError(cmd.OutOrStdout(), ae, getOutputMode() == "json" || cmd.Name() == "summary" || cmd.Name() == "context")
+			return output.EmitAgentError(cmd.OutOrStdout(), ae, getOutputMode() == "json" || cmd.Name() == "summary" || cmd.Name() == "context" || cmd.Name() == "coverage")
 		}
 		return nil
 	}
@@ -135,11 +137,11 @@ func commandRequiresScope(cmd *cobra.Command) bool {
 		return true
 	case "packets":
 		return cmd.Name() != "interfaces"
-	case "summary", "context", "list", "body", "detail", "get", "search", "stats", "group", "compare", "diff", "chain", "domains", "js", "save", "sessions", "import", "note", "findings", "primary", "ignore", "mute", "clear", "setup", "recon", "auth", "curl", "download", "replay", "extract", "audit", "browse":
+	case "summary", "context", "coverage", "list", "body", "detail", "get", "search", "stats", "group", "compare", "diff", "chain", "domains", "js", "save", "sessions", "import", "note", "findings", "primary", "ignore", "mute", "clear", "setup", "recon", "auth", "curl", "download", "replay", "extract", "audit", "browse":
 		return true
 	case "browser":
 		switch cmd.Name() {
-		case "open", "fetch", "action", "download", "native-capture":
+		case "open", "fetch", "action", "download", "native-capture", "page", "do", "chat", "reference":
 			return true
 		}
 		return cmd.Parent() != nil && cmd.Parent().Name() == "watch"

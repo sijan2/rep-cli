@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
-	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/pterm/pterm"
@@ -22,12 +21,15 @@ var (
 
 // JSFile represents a JavaScript file for output
 type JSFile struct {
-	URL      string `json:"url"`
-	Domain   string `json:"domain"`
-	PageURL  string `json:"page_url,omitempty"`
-	Size     int    `json:"size,omitempty"`
-	Status   int    `json:"status"`
-	Category string `json:"category,omitempty"` // first_party, third_party, cdn
+	RequestID         string            `json:"request_id"`
+	BodyCapture       store.BodyCapture `json:"body_capture"`
+	PayloadValidation string            `json:"payload_validation"`
+	URL               string            `json:"url"`
+	Domain            string            `json:"domain"`
+	PageURL           string            `json:"page_url,omitempty"`
+	Size              int               `json:"size,omitempty"`
+	Status            int               `json:"status"`
+	Category          string            `json:"category,omitempty"` // first_party, third_party, cdn
 }
 
 // JSPageDeps represents JavaScript dependencies for a page
@@ -38,36 +40,39 @@ type JSPageDeps struct {
 
 // JSOutput is the full JSON output structure
 type JSOutput struct {
-	FirstPartyJS    []JSFile     `json:"first_party_js"`
-	ThirdPartyJS    []JSFile     `json:"third_party_js"`
-	CDNScripts      []JSFile     `json:"cdn_scripts"`
-	DependencyGraph []JSPageDeps `json:"dependency_graph,omitempty"`
-	CurlCommands    []string     `json:"curl_commands,omitempty"`
-	Summary         JSSummary    `json:"summary"`
+	Provenance      observedCaptureProvenance `json:"provenance"`
+	Coverage        CaptureCoverageReport     `json:"coverage"`
+	SourceAnalysis  string                    `json:"source_analysis"`
+	FirstPartyJS    []JSFile                  `json:"first_party_js"`
+	ThirdPartyJS    []JSFile                  `json:"third_party_js"`
+	CDNScripts      []JSFile                  `json:"cdn_scripts"`
+	DependencyGraph []JSPageDeps              `json:"dependency_graph,omitempty"`
+	CurlCommands    []string                  `json:"curl_commands,omitempty"`
+	Summary         JSSummary                 `json:"summary"`
 }
 
 // JSSummary provides counts for quick overview
 type JSSummary struct {
-	TotalScripts    int `json:"total_scripts"`
-	FirstPartyCount int `json:"first_party_count"`
-	ThirdPartyCount int `json:"third_party_count"`
-	CDNCount        int `json:"cdn_count"`
-	UniquePages     int `json:"unique_pages"`
+	ObservedRequests  int `json:"observed_requests"`
+	DuplicateRequests int `json:"duplicate_requests"`
+	TotalScripts      int `json:"total_scripts"`
+	FirstPartyCount   int `json:"first_party_count"`
+	ThirdPartyCount   int `json:"third_party_count"`
+	CDNCount          int `json:"cdn_count"`
+	UniquePages       int `json:"unique_pages"`
 }
 
 var jsCmd = &cobra.Command{
 	Use:   "js",
-	Short: "List JavaScript files for static analysis",
+	Short: "Inventory captured JavaScript and its body evidence",
 	Long: `List all JavaScript URLs captured in traffic.
 
 Default: Analyzes LIVE session traffic (real-time).
 Use --saved to analyze archived sessions.
 
-Designed for AI agents to download JS files for:
-  - Secrets detection (API keys, tokens, endpoints)
-  - Endpoint discovery
-  - Source map analysis
-  - Dependency vulnerability scanning
+Each script includes its captured request ID, decoded body size and evidence
+state. This command inventories observed scripts; source analysis is separate.
+Use body REQUEST_ID --saved HASH to retrieve the original captured evidence.
 
 Includes both first-party and third-party/CDN scripts.
 Categorizes scripts as:
@@ -86,64 +91,20 @@ Examples:
 }
 
 func runJS(cmd *cobra.Command, args []string) error {
-	var tempStore *store.Store
-	var persistentStore *store.Store
-
-	// Load persistent store for ignore/primary lists
-	var err error
-	persistentStore, err = store.Get()
+	capture, err := loadObservedCapture(jsSaved)
 	if err != nil {
-		return fmt.Errorf("failed to load store: %w", err)
+		return err
 	}
-
-	if jsSaved != "" {
-		// Load from saved session
-		var session *store.Session
-		if jsSaved == "latest" || jsSaved == "last" {
-			session = persistentStore.GetLatestSession()
-		} else {
-			session = persistentStore.GetSession(jsSaved)
-		}
-
-		if session == nil {
-			pterm.Warning.Printf("Session not found: %s\n", jsSaved)
-			pterm.Info.Println("Use 'rep sessions' to list available sessions")
-			return nil
-		}
-
-		tempStore = store.NewTempStore(session.Requests)
-	} else {
-		// Default: Load from live.json
-		livePath, err := store.GetLiveFilePath()
-		if err != nil {
-			return fmt.Errorf("failed to get live path: %w", err)
-		}
-		export, err := loadLiveExport(livePath)
-		if err != nil {
-			return emitLiveUnavailable("js", err)
-		}
-		if len(export.Requests) == 0 {
-			emitLiveEmpty("js")
-			return nil
-		}
-
-		tempStore = store.NewTempStore(export.Requests)
-	}
-
-	// Apply ignore/primary lists
-	tempStore.PrimaryDomains = persistentStore.PrimaryDomains
-	tempStore.IgnoredDomains = persistentStore.IgnoredDomains
+	tempStore := store.NewTempStore(capture.Export.Requests)
 
 	// Get all JavaScript requests
 	jsRequests := getJSRequests(tempStore)
 
-	if len(jsRequests) == 0 {
-		pterm.Info.Println("No JavaScript files found in captured traffic")
-		return nil
-	}
-
 	// Categorize scripts
 	output := categorizeJS(jsRequests)
+	output.Provenance = capture.Provenance
+	output.Coverage = capture.coverage()
+	output.SourceAnalysis = "not_performed"
 
 	// Handle different output modes
 	if jsURLs {
@@ -167,9 +128,12 @@ func runJS(cmd *cobra.Command, args []string) error {
 		if jsCurl {
 			output.CurlCommands = generateCurlCommands(output)
 		}
-		out, _ := sonic.MarshalIndent(output, "", "  ")
-		fmt.Println(string(out))
-		return nil
+		out, err := sonic.MarshalIndent(output, "", "  ")
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+		return err
 	}
 
 	// Default: summary view
@@ -197,29 +161,7 @@ func getJSRequests(s *store.Store) []store.Request {
 
 // isJavaScript checks if a request is a JavaScript file
 func isJavaScript(req *store.Request) bool {
-	// Check resource type
-	if strings.EqualFold(req.ResourceType, "script") {
-		return true
-	}
-
-	// Check URL extension
-	urlLower := strings.ToLower(req.URL)
-	if strings.HasSuffix(urlLower, ".js") ||
-		strings.Contains(urlLower, ".js?") ||
-		strings.Contains(urlLower, ".mjs") {
-		return true
-	}
-
-	// Check content-type header
-	if req.Response != nil {
-		contentType := store.HeaderFirst(req.Response.Headers, "content-type")
-		if strings.Contains(strings.ToLower(contentType), "javascript") ||
-			strings.Contains(strings.ToLower(contentType), "ecmascript") {
-			return true
-		}
-	}
-
-	return false
+	return captureIsScript(req)
 }
 
 // categorizeJS categorizes JavaScript files by first-party/third-party/CDN
@@ -234,28 +176,39 @@ func categorizeJS(requests []store.Request) JSOutput {
 	pageSet := make(map[string]bool)
 
 	for _, req := range requests {
+		if req.PageURL != "" {
+			pageSet[req.PageURL] = true
+		}
 		if seen[req.URL] {
 			continue
 		}
 		seen[req.URL] = true
 
 		status := 0
-		size := 0
 		if req.Response != nil {
 			status = req.Response.Status
-			size = len(req.Response.Body)
+		}
+		body, _, capture, bodyErr := bodyEvidence(&req, false)
+		metadataCheck := captureBodyCounts{States: map[string]int{}}
+		captureAccumulateBody(&metadataCheck, &req, false)
+		validation := "validated"
+		if bodyErr != nil || metadataCheck.MetadataInvalid > 0 {
+			validation = "invalid"
+			capture.State = "unavailable"
+			capture.Reason = "invalid_retained_payload"
+		} else {
+			capture.State = browserBodyState(capture.State)
 		}
 
 		jsFile := JSFile{
-			URL:     req.URL,
-			Domain:  req.Domain,
-			PageURL: req.PageURL,
-			Size:    size,
-			Status:  status,
-		}
-
-		if req.PageURL != "" {
-			pageSet[req.PageURL] = true
+			URL:               req.URL,
+			Domain:            req.Domain,
+			PageURL:           req.PageURL,
+			Size:              len(body),
+			Status:            status,
+			RequestID:         req.ID,
+			BodyCapture:       capture,
+			PayloadValidation: validation,
 		}
 
 		// Categorize
@@ -274,11 +227,13 @@ func categorizeJS(requests []store.Request) JSOutput {
 
 	// Build summary
 	output.Summary = JSSummary{
-		TotalScripts:    len(output.FirstPartyJS) + len(output.ThirdPartyJS) + len(output.CDNScripts),
-		FirstPartyCount: len(output.FirstPartyJS),
-		ThirdPartyCount: len(output.ThirdPartyJS),
-		CDNCount:        len(output.CDNScripts),
-		UniquePages:     len(pageSet),
+		ObservedRequests:  len(requests),
+		DuplicateRequests: len(requests) - len(seen),
+		TotalScripts:      len(output.FirstPartyJS) + len(output.ThirdPartyJS) + len(output.CDNScripts),
+		FirstPartyCount:   len(output.FirstPartyJS),
+		ThirdPartyCount:   len(output.ThirdPartyJS),
+		CDNCount:          len(output.CDNScripts),
+		UniquePages:       len(pageSet),
 	}
 
 	return output
@@ -388,6 +343,7 @@ func generateCurlCommands(output JSOutput) []string {
 
 // printJSSummary prints a human-readable summary
 func printJSSummary(output JSOutput) {
+	fmt.Printf("Source: %s; capture: %s; source analysis: %s\n", output.Provenance.SourceStatus, output.Coverage.Capture.State, output.SourceAnalysis)
 	// Summary box
 	pterm.DefaultBox.WithTitle("JavaScript Analysis").WithTitleTopCenter().Println(
 		fmt.Sprintf("Total Scripts: %d\nFirst-Party: %d\nThird-Party: %d\nCDN: %d\nUnique Pages: %d",

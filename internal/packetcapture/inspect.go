@@ -345,7 +345,7 @@ func describeCandidates(packet *Packet, payload []byte, declared int) {
 				return
 			}
 			header += 4 + int(binary.BigEndian.Uint16(payload[header+2:header+4]))*4
-			if header > declared {
+			if header > declared || header > len(payload) {
 				return
 			}
 		}

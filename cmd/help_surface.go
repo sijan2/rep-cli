@@ -31,7 +31,7 @@ func configureCommandGroups() {
 	)
 	rootGroups := map[string][]string{
 		"browser": {"browser", "browse"},
-		"traffic": {"body", "chain", "compare", "context", "detail", "diff", "domains", "extract", "findings", "get", "group", "js", "list", "media", "packets", "search", "stats", "stream", "summary"},
+		"traffic": {"body", "chain", "compare", "context", "coverage", "detail", "diff", "domains", "extract", "findings", "get", "group", "js", "list", "media", "packets", "search", "stats", "stream", "summary"},
 		"data":    {"clear", "evidence", "ignore", "import", "mute", "note", "primary", "save", "scope", "sessions", "workspace"},
 		"help":    {"agent-prompt", "describe", "version", "jev", "completion", "help"},
 	}
@@ -56,9 +56,12 @@ func configureCommandGroups() {
 		&cobra.Group{ID: "raw", Title: "Low-level control:"},
 		&cobra.Group{ID: "manage", Title: "Browser management:"},
 	)
-	browserGroups := map[string]string{"create": "work", "tabs": "work", "close": "work", "interact": "work", "select": "work", "select-batch": "work", "observe": "work", "validate": "work", "navigate": "work", "screenshot": "work", "shots": "work", "step": "work", "open": "capture", "fetch": "capture", "action": "capture", "watch": "capture", "download": "capture", "native-capture": "capture", "eval": "raw", "cdp": "raw", "attach": "raw", "detach": "raw", "targets": "raw", "probe": "raw"}
+	browserGroups := map[string]string{"create": "work", "tabs": "work", "close": "work", "interact": "work", "element": "work", "select": "work", "select-batch": "work", "observe": "work", "validate": "work", "navigate": "work", "screenshot": "work", "shots": "work", "step": "work", "capture": "capture", "open": "capture", "fetch": "capture", "action": "capture", "watch": "capture", "download": "capture", "native-capture": "capture", "eval": "raw", "cdp": "raw", "attach": "raw", "detach": "raw", "targets": "raw", "probe": "raw"}
 	for _, command := range browserCmd.Commands() {
 		group := browserGroups[command.Name()]
+		if command.Name() == "page" || command.Name() == "do" || command.Name() == "chat" || command.Name() == "reference" || command.Name() == "locate" || command.Name() == "state" {
+			group = "work"
+		}
 		if group == "" {
 			group = "manage"
 		}

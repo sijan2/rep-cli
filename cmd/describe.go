@@ -53,10 +53,31 @@ func newDescribeContext() describeContext {
 // knownDescriptions maps `rep describe <name>` → embedded file.
 // Adding a new command == add a file + one entry here.
 var knownDescriptions = map[string]string{
+	"page":           "descriptions/fast.md",
+	"reference":      "descriptions/reference.md",
+	"locate":         "descriptions/locate.md",
+	"state":          "descriptions/state.md",
+	"fanout":         "descriptions/fanout.md",
+	"do":             "descriptions/fast.md",
+	"chat":           "descriptions/fast.md",
+	"cli":            "descriptions/cli.md",
+	"stats":          "descriptions/stats.md",
+	"group":          "descriptions/group.md",
+	"element":        "descriptions/element.md",
+	"capture":        "descriptions/browser.md",
+	"android":        "descriptions/android.md",
 	"arc":            "descriptions/arc.md",
 	"list":           "descriptions/list.md",
+	"search":         "descriptions/search.md",
+	"read":           "descriptions/read.md",
+	"audit":          "descriptions/audit.md",
+	"gc":             "descriptions/gc.md",
+	"engine":         "descriptions/engine.md",
+	"probe":          "descriptions/probe.md",
+	"identity":       "descriptions/identity.md",
 	"body":           "descriptions/body.md",
 	"browser":        "descriptions/browser.md",
+	"sites":          "descriptions/sites.md",
 	"headless":       "descriptions/headless.md",
 	"curl":           "descriptions/curl.md",
 	"download":       "descriptions/download.md",
@@ -70,6 +91,10 @@ var knownDescriptions = map[string]string{
 	"interact":       "descriptions/interact.md",
 	"summary":        "descriptions/summary.md",
 	"context":        "descriptions/summary.md",
+	"coverage":       "descriptions/coverage.md",
+	"recon":          "descriptions/inventory.md",
+	"js":             "descriptions/inventory.md",
+	"replay":         "descriptions/replay.md",
 	"scope":          "descriptions/scope.md",
 	"workspace":      "descriptions/scope.md",
 	"setup":          "descriptions/setup.md",
@@ -99,7 +124,7 @@ Examples:
 				"describe",
 				fmt.Sprintf("no description for %q (available: %s)", name, strings.Join(describeNames(), ", ")),
 				"rep describe list  # one of the known commands",
-				"rep agent-prompt   # full paste-ready prompt",
+				"rep agent-prompt   # compact task-routing prompt",
 			)
 			return output.EmitAgentError(os.Stdout, ae, getOutputMode() == "json")
 		}
@@ -129,7 +154,12 @@ canonical workflow, output contracts, ID format, empty-result shape, and
 secret-handling rules. Paste into your agent's system prompt or inject via
 your harness's tool-description plumbing.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		rendered, err := renderDescription("descriptions/agent_prompt.md")
+		full, _ := cmd.Flags().GetBool("full")
+		path := "descriptions/agent_fast_prompt.md"
+		if full {
+			path = "descriptions/agent_prompt.md"
+		}
+		rendered, err := renderDescription(path)
 		if err != nil {
 			return err
 		}
@@ -166,6 +196,7 @@ func describeNames() []string {
 }
 
 func init() {
+	agentPromptCmd.Flags().Bool("full", false, "Include extended capture, evidence and specialized workflows")
 	rootCmd.AddCommand(describeCmd)
 	rootCmd.AddCommand(agentPromptCmd)
 }

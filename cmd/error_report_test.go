@@ -62,7 +62,7 @@ func runEntryPoint(t *testing.T, args ...string) (string, string, int) {
 
 func TestUsageErrorsAreNeverSilent(t *testing.T) {
 	stdout, stderr, code := runEntryPoint(t, "browser", "open", "https://example.test/", "--settle", "2s")
-	if code != 1 || stdout != "" || !strings.Contains(stderr, "error: unknown flag: --settle") || !strings.Contains(stderr, "--settle is accepted by: rep browser action") || !strings.Contains(stderr, "command: rep browser open") {
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "error: unknown flag: --settle") || !strings.Contains(stderr, "--settle is accepted by: rep browser capture action") || !strings.Contains(stderr, "command: rep browser open") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	// -j after the failing flag is never parsed, but the caller still asked for JSON.
@@ -72,7 +72,7 @@ func TestUsageErrorsAreNeverSilent(t *testing.T) {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	for _, args := range [][]string{
-		{"browser", "select", "Find the seller"},                  // required --tab
+		{"browser", "select", "Find the seller"},                   // required --tab
 		{"browser", "select", "--tab", "3", "one", "two"},          // argument count
 		{"browser", "action", "1", "--tab", "3", "--settle", "no"}, // invalid value
 		{"no-such-command"},

@@ -195,6 +195,14 @@ results here come from this repository's implementation, not those articles.
 
 ## Verification and practical limits
 
+`rep coverage` provides an offline report for the selected capture, including
+collector limits, drops, body states, stream gaps and protocol trust. Use
+`--saved HASH` to keep that report pinned to the same evidence as a body read.
+Recon and JS JSON include this report and source provenance. An empty inventory
+does not establish an empty response or coverage of unvisited application
+features. `rep describe coverage`, `rep describe recon` and `rep describe js`
+define these contracts.
+
 Tests cover two tasks with unrelated global eBay data, empty-task behavior,
 late/foreign session updates, active reset races, old-host preflight, malformed
 and expired snapshots, same-ID artifact isolation, changed archive/filter cursor

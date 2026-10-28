@@ -12,108 +12,120 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	groupBy       string
-	groupShow     string
-	groupPattern  string
-	groupReplace  string
-	groupLimit    int
-	groupMinCount int
-)
+var groupCmd = newGroupCommand()
 
-var groupCmd = &cobra.Command{
-	Use:   "group",
-	Short: "Group requests by field or pattern",
-	Long: `Group requests dynamically by any field or pattern.
+func newGroupCommand() *cobra.Command {
+	var groupBy, groupShow, groupPattern, groupReplace string
+	var groupLimit, groupMinCount int
+	command := &cobra.Command{
+		Use:   "group <field>",
+		Short: "Group requests by field or pattern",
+		Long: `Group captured requests by method, status, domain, path, or header:<name>.
 
-AI agent primitive for discovering patterns in traffic.
-AI defines the grouping criteria - no hardcoded normalization.
-
-Group by field:
-  --by method               Group by HTTP method
-  --by status               Group by response status
-  --by domain               Group by domain
-  --by path                 Group by exact path
-  --by header:<name>        Group by header value
-
-Group by pattern (AI-defined normalization):
-  --by path --pattern '\d+' --replace ':id'
-  This normalizes /users/123 and /users/456 into /users/:id
-
-Show options (--show):
-  count                     Request count per group
-  statuses                  Status code breakdown
-  methods                   Method breakdown
-  ids                       Request IDs in group
+A field is a single positional value, not a subcommand. Optional regex
+normalization combines matching values; --show selects text annotations.
 
 Examples:
-  rep group --by method
-  rep group --by path --pattern '\d+' --replace ':id'
-  rep group --by header:authorization --show count
-  rep group --by status --show methods,ids
-  rep group --by domain --min-count 5`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if groupBy == "" {
-			return fmt.Errorf("--by is required")
-		}
+  rep group method
+  rep group path --pattern '\d+' --replace ':id'
+  rep group status --show methods,ids
+  rep group domain --min-count 5
 
-		// Load requests
-		requests, err := loadRequestsForExtract()
-		if err != nil {
-			return err
-		}
-
-		if len(requests) == 0 {
-			pterm.Info.Println("No requests to group")
-			return nil
-		}
-
-		// Compile pattern if provided
-		var re *regexp.Regexp
-		if groupPattern != "" {
-			re, err = regexp.Compile(groupPattern)
-			if err != nil {
-				return fmt.Errorf("invalid pattern: %w", err)
+Use rep describe group for source and output contracts.`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("by") {
+				fmt.Fprintln(cmd.ErrOrStderr(), "Flag --by is deprecated; use rep group FIELD")
 			}
-		}
+			if err := cobra.MaximumNArgs(1)(cmd, args); err != nil {
+				return err
+			}
+			field := groupBy
+			if len(args) == 1 {
+				if cmd.Flags().Changed("by") {
+					return fmt.Errorf("do not combine a field argument with legacy --by")
+				}
+				field = args[0]
+			}
+			switch field {
+			case "method", "status", "domain", "path":
+				return nil
+			}
+			if strings.HasPrefix(field, "header:") && strings.TrimSpace(strings.TrimPrefix(field, "header:")) != "" {
+				return nil
+			}
+			return fmt.Errorf("choose one group field: method, status, domain, path, or header:<name>")
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			field := groupBy
+			if len(args) == 1 {
+				field = args[0]
+			}
+			// Load requests
+			requests, err := loadRequestsForExtract()
+			if err != nil {
+				return err
+			}
 
-		// Group requests
-		groups := groupRequests(requests, groupBy, re, groupReplace)
+			if len(requests) == 0 {
+				pterm.Info.Println("No requests to group")
+				return nil
+			}
 
-		// Filter by min count
-		if groupMinCount > 0 {
-			filtered := make([]RequestGroup, 0)
-			for _, g := range groups {
-				if g.Count >= groupMinCount {
-					filtered = append(filtered, g)
+			// Compile pattern if provided
+			var re *regexp.Regexp
+			if groupPattern != "" {
+				re, err = regexp.Compile(groupPattern)
+				if err != nil {
+					return fmt.Errorf("invalid pattern: %w", err)
 				}
 			}
-			groups = filtered
-		}
 
-		// Sort by count descending
-		sort.Slice(groups, func(i, j int) bool {
-			return groups[i].Count > groups[j].Count
-		})
+			// Group requests
+			groups := groupRequests(requests, field, re, groupReplace)
 
-		// Apply limit
-		if groupLimit > 0 && groupLimit < len(groups) {
-			groups = groups[:groupLimit]
-		}
+			// Filter by min count
+			if groupMinCount > 0 {
+				filtered := make([]RequestGroup, 0)
+				for _, g := range groups {
+					if g.Count >= groupMinCount {
+						filtered = append(filtered, g)
+					}
+				}
+				groups = filtered
+			}
 
-		// Parse show options
-		showOpts := parseShowOptions(groupShow)
+			// Sort by count descending
+			sort.Slice(groups, func(i, j int) bool {
+				return groups[i].Count > groups[j].Count
+			})
 
-		// Output
-		if getOutputMode() == "json" {
-			out, _ := sonic.MarshalIndent(groups, "", "  ")
-			fmt.Println(string(out))
-		} else {
-			printGroups(groups, showOpts)
-		}
+			// Apply limit
+			if groupLimit > 0 && groupLimit < len(groups) {
+				groups = groups[:groupLimit]
+			}
 
-		return nil
-	},
+			// Parse show options
+			showOpts := parseShowOptions(groupShow)
+
+			// Output
+			if getOutputMode() == "json" {
+				out, _ := sonic.MarshalIndent(groups, "", "  ")
+				fmt.Fprintln(cmd.OutOrStdout(), string(out))
+			} else {
+				printGroups(groups, showOpts)
+			}
+
+			return nil
+		},
+	}
+	command.Flags().StringVar(&groupBy, "by", "", "Legacy field to group by")
+	_ = command.Flags().MarkHidden("by")
+	command.Flags().StringVar(&groupShow, "show", "", "What to show per group (count,statuses,methods,ids)")
+	command.Flags().StringVar(&groupPattern, "pattern", "", "Regex pattern for normalization")
+	command.Flags().StringVar(&groupReplace, "replace", "", "Replacement string for pattern")
+	command.Flags().IntVar(&groupLimit, "limit", 0, "Limit number of groups shown")
+	command.Flags().IntVar(&groupMinCount, "min-count", 0, "Only show groups with at least N requests")
+	return command
 }
 
 // RequestGroup represents a group of requests
@@ -282,10 +294,4 @@ func printGroups(groups []RequestGroup, opts showOptions) {
 
 func init() {
 	rootCmd.AddCommand(groupCmd)
-	groupCmd.Flags().StringVar(&groupBy, "by", "", "Field to group by (method, status, domain, path, header:<name>)")
-	groupCmd.Flags().StringVar(&groupShow, "show", "", "What to show per group (count,statuses,methods,ids)")
-	groupCmd.Flags().StringVar(&groupPattern, "pattern", "", "Regex pattern for normalization")
-	groupCmd.Flags().StringVar(&groupReplace, "replace", "", "Replacement string for pattern")
-	groupCmd.Flags().IntVar(&groupLimit, "limit", 0, "Limit number of groups shown")
-	groupCmd.Flags().IntVar(&groupMinCount, "min-count", 0, "Only show groups with at least N requests")
 }

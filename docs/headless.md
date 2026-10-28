@@ -5,6 +5,15 @@ existing extension and native bridge. A running browser is reused between
 commands; each workspace/task has its own cookies, storage, tabs, capture staging,
 and private profile. This does not import accounts or cookies from Arc or Chrome.
 
+`rep --workspace PROJECT --task TASK scope -j` reports the private profile's
+assigned path, start command, and current lifecycle status under
+`browser_profiles.task_headless`. Inspection does not create or launch a profile.
+`available: true` means a task profile is supported; check `status`, `running`,
+and `connected` for current readiness. `unknown` means inspection failed and
+omits those booleans. `browser_profiles.extension` separately describes the
+shared account state used by `arc`, `chrome`, and `any`; the legacy top-level
+`shared_browser_profile` field refers to those extension browsers.
+
 ```sh
 rep --workspace research --task site-a browser headless start \
   --extension /absolute/path/to/rep
@@ -43,6 +52,28 @@ default for a later stopped browser. Changing modes while a browser is running
 returns a stop-first error. Status JSON reports `headed`, and `--browser headless`
 continues to select this same task-owned browser in either mode. Rep does not
 copy login data from another profile or perform the manual login.
+
+## Independent account sessions
+
+Use a different task identity for each account, start each task's profile with
+`--headed` for manual login, and use `--browser headless` for every subsequent
+browser command or Jev operation. A running task profile does not change the
+default browser selector. Returning to `arc`, `chrome`, or `any` uses the shared
+extension browser, even if the task profile is running.
+
+```sh
+rep --workspace comparison --task account-a scope -j
+rep --workspace comparison --task account-b scope -j
+rep --workspace comparison --task account-a browser headless start --headed
+rep --workspace comparison --task account-b browser headless start --headed
+```
+
+Each task retains its own login state across restarts. Sign in to the intended
+account in each profile and verify that account through the site's normal UI.
+Task metadata and current profile status do not prove the account that produced
+an earlier archive. Profiles isolate browser state; they do not isolate a site's
+server-side state or prevent another process with the same OS user from accessing
+the profile files.
 
 The browser listens on an automatically assigned loopback debugging port. Rep
 verifies its saved browser WebSocket identity before connecting. Native messaging

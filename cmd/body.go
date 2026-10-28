@@ -263,4 +263,5 @@ func init() {
 	bodyCmd.Flags().StringVar(&bodyView.Find, "find", "", "Find literal text with byte offsets and bounded context")
 	bodyCmd.Flags().IntVar(&bodyView.RecordOffset, "record-offset", 0, "Starting NDJSON/SSE record or search-match index")
 	bodyCmd.Flags().IntVar(&bodyView.Records, "records", 20, "Maximum NDJSON/SSE records or search matches")
+	advancedFlags(bodyCmd, "record-offset", "records")
 }

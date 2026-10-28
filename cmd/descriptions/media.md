@@ -8,7 +8,7 @@ rep media RECORD --saved ARCHIVE_HASH --info
 rep media RECORD --saved ARCHIVE_HASH --require-complete --save recording.webm
 ```
 
-Capture with `browser open`, `browse`, `browser fetch`, or `browser action`
+Capture with `browser capture open`, `browser capture fetch`, or `browser capture action`
 and `--webrtc-media`. Start observation before the application creates its peer
 connections. Each record contains one audio or video track and one direction.
 Use `rep stream RECORD --saved HASH` for bounded chunk descriptors or individual

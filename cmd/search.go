@@ -303,6 +303,7 @@ func init() {
 	searchCmd.Flags().BoolVarP(&searchInvert, "invert", "v", false, "Show requests that DON'T match")
 	searchCmd.Flags().IntVarP(&searchContext, "context", "c", 0, "Show N characters of context")
 	searchCmd.Flags().BoolVar(&searchShowMatches, "show-matches", false, "Show individual matches within requests")
+	advancedFlags(searchCmd, "ignore-case", "invert", "show-matches", "context")
 	// Shared request-selection flags (domain, method, status, primary, type, limit, offset).
 	cli.RegisterFilterFlags(searchCmd, &searchFilter, cli.FilterFlagConfig{
 		SkipURLPattern: true, // search uses positional arg; avoid flag collision

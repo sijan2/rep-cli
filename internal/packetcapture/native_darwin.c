@@ -110,12 +110,18 @@ static int rep_write_capture(pcap_t *capture, const struct rep_pcap_options *opt
         if (output.closed) file = NULL;
         snprintf(result->error, sizeof(result->error), "cannot write pcap header: %s", pcap_geterr(capture)); goto done;
     }
+    // Do not publish a valid capture or signal readiness until the header has
+    // actually reached the output descriptor. A buffered header can otherwise
+    // make a failed setup look like an observation, especially on the early
+    // readiness failure path that does not reach the final flush below.
+    if (pcap_dump_flush(dump) != 0) {
+        snprintf(result->error, sizeof(result->error), "flushing initial pcap header failed: %s", strerror(errno));
+        snprintf(result->stop_reason, sizeof(result->stop_reason), "%s", "write_error");
+        goto done;
+    }
     result->pcap_valid = 1;
     result->observation_started_ns = (int64_t)rep_now(CLOCK_REALTIME);
     if (options->ready_fd >= 0) {
-        if (pcap_dump_flush(dump) != 0) {
-            snprintf(result->error, sizeof(result->error), "flushing initial pcap header failed: %s", strerror(errno)); goto done;
-        }
         const unsigned char ready = 1;
         ssize_t written;
         do { written = write(options->ready_fd, &ready, 1); } while (written < 0 && errno == EINTR);

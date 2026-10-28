@@ -208,6 +208,12 @@ only its recorders and clones during cleanup. Application tracks and calls
 continue. Tracks created before observation or through bypassed native methods
 can remain unobserved.
 
+Stopping an outgoing transceiver closes its recording interval with
+`transceiver_stopped`; the original source track remains under application
+control. If multiple senders share that track, recording continues until its last
+sender releases it. Closing a peer removes collector listeners immediately and
+prevents an unfinished track replacement from starting another recorder.
+
 Each direction and track has a separate `webrtc_media` record. Metadata includes
 MIME type, track kind, track/peer IDs and the realm's time origin. The source is
 `browser_media_recorder`, semantics are `reencoded_media`, and completeness is

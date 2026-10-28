@@ -1,17 +1,21 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/bytedance/sonic"
 	"github.com/repplus/rep-cli/internal/output"
@@ -25,6 +29,8 @@ var (
 	replayTimeout     time.Duration
 	replayConcurrency int
 	replayIncludeBody bool
+	replayAs          []string
+	replayBaseline    int
 )
 
 var replayCmd = &cobra.Command{
@@ -41,7 +47,11 @@ Examples:
   rep replay c84a --set 'body.user.email=a@b.c'    # JSON dot-path
   rep replay c84a --matrix 'body.price=[0,-1,1e9]' # parallel sweep
 
-Use exactly one of --set or --matrix; they cannot be combined.`,
+Use exactly one of --set or --matrix; they cannot be combined.
+
+Replay uses Go's HTTP client, not a browser session. Body comparisons use all
+retained bytes exactly; incomplete or unknown evidence is inconclusive.
+Use rep describe replay for the comparison and transport fidelity contract.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runReplay,
 }
@@ -52,31 +62,61 @@ func init() {
 	replayCmd.Flags().StringArrayVar(&replayMatrix, "matrix", nil, "Matrix 'KEY=[v1,v2,v3]' — one replay per value")
 	replayCmd.Flags().DurationVar(&replayTimeout, "timeout", 10*time.Second, "Per-replay timeout")
 	replayCmd.Flags().IntVar(&replayConcurrency, "concurrency", 4, "Max parallel replays (matrix mode)")
-	replayCmd.Flags().BoolVar(&replayIncludeBody, "include-body", false, "Include full response bodies in output")
+	replayCmd.Flags().BoolVar(&replayIncludeBody, "include-body", false, "Include retained response bytes in output (up to 16 MiB per response)")
+	advancedFlags(replayCmd, "include-body")
+	replayCmd.Flags().StringSliceVar(&replayAs, "as", nil, "Replay as named principals, e.g. --as alice,bob,anon (see rep identity)")
+	replayCmd.Flags().IntVar(&replayBaseline, "baseline", 0, "Replay the unmutated request N times first to learn which fields vary on their own")
 }
 
+const maxReplayBodyBytes = 16 * 1024 * 1024
+
 type replaySummary struct {
-	Status            int    `json:"status"`
-	Size              int    `json:"size"`
-	ContentType       string `json:"content_type,omitempty"`
-	ResponseBodyPath  string `json:"response_body_path,omitempty"`
-	InlineBodyPreview string `json:"inline_body_preview,omitempty"`
+	Status                    int               `json:"status"`
+	Size                      int               `json:"size"`
+	ContentType               string            `json:"content_type,omitempty"`
+	BodyCapture               store.BodyCapture `json:"body_capture"`
+	BodyError                 string            `json:"body_error,omitempty"`
+	BodyTruncated             bool              `json:"body_truncated,omitempty"`
+	HTTPProtocol              string            `json:"http_protocol,omitempty"`
+	FinalURL                  string            `json:"final_url,omitempty"`
+	AutomaticallyDecompressed bool              `json:"automatically_decompressed,omitempty"`
+	ResponseBodyPath          string            `json:"response_body_path,omitempty"`
+	ArtifactError             string            `json:"artifact_error,omitempty"`
+	InlineBodyPreview         string            `json:"inline_body_preview,omitempty"`
+	InlineBodyEncoding        string            `json:"inline_body_encoding,omitempty"`
+}
+
+type replayBodyComparison struct {
+	State         string `json:"state"` // equal, different, or inconclusive
+	Method        string `json:"method"`
+	OriginalState string `json:"original_state"`
+	ReplayState   string `json:"replay_state"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 type diffReport struct {
-	StatusDelta   int      `json:"status_delta"`
-	SizeDelta     int      `json:"size_delta"`
-	BodyDistinct  bool     `json:"body_distinct"`
-	HeaderChanges []string `json:"header_changes"`
+	StatusDelta    int                  `json:"status_delta"`
+	SizeDelta      *int                 `json:"size_delta"`
+	BodyDistinct   *bool                `json:"body_distinct"`
+	BodyComparison replayBodyComparison `json:"body_comparison"`
+	HeaderChanges  []string             `json:"header_changes"`
 }
 
 type mutantResult struct {
-	Value        string            `json:"value"`
-	Status       int               `json:"status,omitempty"`
-	Size         int               `json:"size,omitempty"`
-	BodyDistinct bool              `json:"body_distinct,omitempty"`
-	SpillPath    string            `json:"spill_path,omitempty"`
-	Error        *output.AgentError `json:"error,omitempty"`
+	Value                     string                `json:"value"`
+	Status                    int                   `json:"status,omitempty"`
+	Size                      int                   `json:"size,omitempty"`
+	BodyDistinct              *bool                 `json:"body_distinct"`
+	BodyComparison            *replayBodyComparison `json:"body_comparison,omitempty"`
+	BodyCapture               *store.BodyCapture    `json:"body_capture,omitempty"`
+	BodyError                 string                `json:"body_error,omitempty"`
+	BodyTruncated             bool                  `json:"body_truncated,omitempty"`
+	HTTPProtocol              string                `json:"http_protocol,omitempty"`
+	FinalURL                  string                `json:"final_url,omitempty"`
+	AutomaticallyDecompressed bool                  `json:"automatically_decompressed,omitempty"`
+	SpillPath                 string                `json:"spill_path,omitempty"`
+	ArtifactError             string                `json:"artifact_error,omitempty"`
+	Error                     *output.AgentError    `json:"error,omitempty"`
 }
 
 func runReplay(cmd *cobra.Command, args []string) error {
@@ -114,6 +154,22 @@ func runReplay(cmd *cobra.Command, args []string) error {
 	}
 
 	originalSummary := summarizeOriginal(req)
+
+	// Differential path: identity comparison and/or baseline-masked judging.
+	if len(replayAs) > 0 || replayBaseline > 0 {
+		if len(replayMatrix) > 0 {
+			ae := output.NewAgentError(output.ErrCodeInvalidArgument, "replay",
+				"--matrix cannot be combined with --as or --baseline",
+				"run the matrix sweep separately, then re-test the interesting value with --baseline")
+			return output.EmitAgentError(os.Stdout, ae, jsonMode)
+		}
+		mutations, err := parseMutationSpecs(replaySet)
+		if err != nil {
+			ae := output.NewAgentError(output.ErrCodeInvalidArgument, "replay", err.Error())
+			return output.EmitAgentError(os.Stdout, ae, jsonMode)
+		}
+		return runDifferential(req, mutations, jsonMode)
+	}
 
 	// Matrix path
 	if len(replayMatrix) == 1 {
@@ -346,10 +402,16 @@ func setDotPath(root map[string]interface{}, path, value string) error {
 }
 
 type replayResult struct {
-	Status      int
-	Body        []byte
-	ContentType string
-	Headers     http.Header
+	Status                    int
+	Body                      []byte
+	ContentType               string
+	Headers                   http.Header
+	BodyCapture               store.BodyCapture
+	BodyError                 string
+	BodyTruncated             bool
+	HTTPProtocol              string
+	FinalURL                  string
+	AutomaticallyDecompressed bool
 }
 
 func executeReplay(ctx context.Context, req *store.Request) (*replayResult, error) {
@@ -366,17 +428,41 @@ func executeReplay(ctx context.Context, req *store.Request) (*replayResult, erro
 	}
 	defer resp.Body.Close()
 
-	// Cap read at 16MB to prevent a pathological response from blowing up the agent.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024*1024))
-	if err != nil {
-		return nil, err
+	// A sentinel byte distinguishes an exact-limit response from a truncated
+	// one. Keep bytes and headers even when the body ends with a read error.
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxReplayBodyBytes+1))
+	observedBytes := int64(len(body))
+	res := &replayResult{
+		Status:                    resp.StatusCode,
+		ContentType:               resp.Header.Get("Content-Type"),
+		Headers:                   resp.Header,
+		HTTPProtocol:              resp.Proto,
+		FinalURL:                  resp.Request.URL.String(),
+		AutomaticallyDecompressed: resp.Uncompressed,
+		BodyCapture: store.BodyCapture{
+			State:         "complete",
+			Source:        "go-http-client",
+			ObservedBytes: &observedBytes,
+		},
 	}
-	return &replayResult{
-		Status:      resp.StatusCode,
-		Body:        body,
-		ContentType: resp.Header.Get("Content-Type"),
-		Headers:     resp.Header,
-	}, nil
+	if len(body) > maxReplayBodyBytes {
+		body = body[:maxReplayBodyBytes]
+		res.BodyTruncated = true
+		res.BodyCapture.State = "partial"
+		res.BodyCapture.Reason = "replay_body_limit"
+	}
+	if readErr != nil {
+		res.BodyCapture.State = "partial"
+		if res.BodyCapture.Reason == "" {
+			res.BodyCapture.Reason = "response_body_read_failed"
+		}
+		res.BodyError = readErr.Error()
+	}
+	res.Body = body
+	res.BodyCapture.CapturedBytes = int64(len(body))
+	digest := sha256.Sum256(body)
+	res.BodyCapture.SHA256 = hex.EncodeToString(digest[:])
+	return res, nil
 }
 
 // copyHeadersToRequest writes stored headers onto the outbound request while
@@ -423,7 +509,7 @@ func runSingle(origReq *store.Request, orig replaySummary, muts []mutation, json
 		return output.EmitAgentError(os.Stdout, ae, jsonMode)
 	}
 
-	replay, spillPath := buildReplaySummary(origReq.ID, "base", res)
+	replay, spillPath := buildReplaySummary(res)
 	diff := computeReplayDiff(origReq, res)
 
 	data := map[string]interface{}{
@@ -431,9 +517,10 @@ func runSingle(origReq *store.Request, orig replaySummary, muts []mutation, json
 		"original":   orig,
 		"replay":     replay,
 		"diff":       diff,
+		"fidelity":   replayFidelity(),
 	}
 	if replayIncludeBody {
-		data["replay_body"] = string(res.Body)
+		data["replay_body"], data["replay_body_encoding"] = encodeReplayBody(res.Body)
 	}
 	if spillPath != "" {
 		data["spill_path"] = spillPath
@@ -469,6 +556,7 @@ func runMatrix(origReq *store.Request, orig replaySummary, key string, values []
 		"matrix_key": key,
 		"original":   orig,
 		"mutants":    results,
+		"fidelity":   replayFidelity(),
 	}
 	env := output.WrapData("replay", "live.json", data)
 	return emitReplayEnvelope(env, jsonMode)
@@ -501,11 +589,20 @@ func runOneMutant(origReq *store.Request, key, value string) mutantResult {
 		return mr
 	}
 
-	_, spillPath := buildReplaySummary(origReq.ID, value, res)
+	summary, spillPath := buildReplaySummary(res)
 	mr.Status = res.Status
 	mr.Size = len(res.Body)
-	mr.BodyDistinct = bodyDistinct(origRespBody(origReq), res.Body)
+	diff := computeReplayDiff(origReq, res)
+	mr.BodyDistinct = diff.BodyDistinct
+	mr.BodyComparison = &diff.BodyComparison
+	mr.BodyCapture = &res.BodyCapture
+	mr.BodyError = res.BodyError
+	mr.BodyTruncated = res.BodyTruncated
+	mr.HTTPProtocol = res.HTTPProtocol
+	mr.FinalURL = res.FinalURL
+	mr.AutomaticallyDecompressed = res.AutomaticallyDecompressed
 	mr.SpillPath = spillPath
+	mr.ArtifactError = summary.ArtifactError
 	return mr
 }
 
@@ -513,77 +610,87 @@ func summarizeOriginal(req *store.Request) replaySummary {
 	s := replaySummary{}
 	if req.Response != nil {
 		s.Status = req.Response.Status
-		s.Size = len(req.Response.Body)
 		s.ContentType = store.HeaderFirst(req.Response.Headers, "content-type")
+	}
+	body, evidence, err := originalReplayEvidence(req)
+	s.BodyCapture = evidence
+	s.Size = len(body)
+	s.BodyTruncated = req.ResponseBodyTruncated
+	if err != nil {
+		s.BodyError = err.Error()
 	}
 	return s
 }
 
-func origRespBody(req *store.Request) []byte {
+func originalReplayEvidence(req *store.Request) ([]byte, store.BodyCapture, error) {
 	if req.Response == nil {
-		return nil
+		return nil, store.BodyCapture{State: "unavailable", Reason: "response_not_captured"}, nil
 	}
-	return []byte(req.Response.Body)
+	var metadataCheck captureBodyCounts
+	captureAccumulateBody(&metadataCheck, req, false)
+	if metadataCheck.MetadataInvalid > 0 {
+		return nil, store.BodyCapture{State: "unknown", Reason: "invalid_body_evidence"}, fmt.Errorf("captured body metadata is inconsistent")
+	}
+	body, _, evidence, err := bodyEvidence(req, false)
+	if err != nil {
+		// Corrupt encodings or metadata must not become a verified empty body.
+		return nil, store.BodyCapture{State: "unknown", Reason: "invalid_body_evidence"}, err
+	}
+	return body, evidence, nil
+}
+
+func replayFidelity() map[string]interface{} {
+	return map[string]interface{}{
+		"client":                       "go-net-http",
+		"browser_equivalent":           false,
+		"body_read_limit_bytes":        maxReplayBodyBytes,
+		"response_body_representation": "go_http_response_body",
+	}
+}
+
+func encodeReplayBody(body []byte) (string, string) {
+	if utf8.Valid(body) {
+		return string(body), "utf8"
+	}
+	return base64.StdEncoding.EncodeToString(body), "base64"
 }
 
 // buildReplaySummary fills the inline preview + spill path given a response.
 // Always spills when body > OverflowPreviewSize so the envelope stays small.
-func buildReplaySummary(reqID, tag string, res *replayResult) (replaySummary, string) {
+func buildReplaySummary(res *replayResult) (replaySummary, string) {
 	s := replaySummary{
-		Status:      res.Status,
-		Size:        len(res.Body),
-		ContentType: res.ContentType,
+		Status:                    res.Status,
+		Size:                      len(res.Body),
+		ContentType:               res.ContentType,
+		BodyCapture:               res.BodyCapture,
+		BodyError:                 res.BodyError,
+		BodyTruncated:             res.BodyTruncated,
+		HTTPProtocol:              res.HTTPProtocol,
+		FinalURL:                  res.FinalURL,
+		AutomaticallyDecompressed: res.AutomaticallyDecompressed,
 	}
 	if len(res.Body) == 0 {
 		return s, ""
 	}
 	if len(res.Body) > output.OverflowPreviewSize {
-		spillPath := writeSpill(reqID, tag, res.ContentType, res.Body)
+		spillPath, err := writeSpill(res.ContentType, res.Body)
+		if err != nil {
+			s.ArtifactError = fmt.Sprintf("save replay body: %v", err)
+		}
 		s.ResponseBodyPath = spillPath
 		previewLen := output.OverflowPreviewSize
 		if previewLen > len(res.Body) {
 			previewLen = len(res.Body)
 		}
-		s.InlineBodyPreview = string(res.Body[:previewLen])
+		s.InlineBodyPreview, s.InlineBodyEncoding = encodeReplayBody(res.Body[:previewLen])
 		return s, spillPath
 	}
-	s.InlineBodyPreview = string(res.Body)
+	s.InlineBodyPreview, s.InlineBodyEncoding = encodeReplayBody(res.Body)
 	return s, ""
 }
 
-func writeSpill(reqID, tag, contentType string, body []byte) string {
-	dir := os.Getenv("REP_SPILL_DIR")
-	if dir == "" {
-		dir = os.TempDir()
-	}
-	ext := replayExtFor(contentType)
-	safeTag := sanitizeTag(tag)
-	name := fmt.Sprintf("rep-replay-%s-%s%s", sanitizeTag(reqID), safeTag, ext)
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, body, 0600); err != nil {
-		return ""
-	}
-	return path
-}
-
-func sanitizeTag(s string) string {
-	if s == "" {
-		return "x"
-	}
-	out := make([]rune, 0, len(s))
-	for _, r := range s {
-		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
-			r == '-' || r == '_' || r == '.'
-		if ok {
-			out = append(out, r)
-		} else {
-			out = append(out, '_')
-		}
-	}
-	if len(out) == 0 {
-		return "x"
-	}
-	return string(out)
+func writeSpill(contentType string, body []byte) (string, error) {
+	return saveTaskArtifact("replay-exports", "replay-*"+replayExtFor(contentType), body)
 }
 
 func replayExtFor(contentType string) string {
@@ -608,50 +715,55 @@ func replayExtFor(contentType string) string {
 
 // computeReplayDiff produces the shape documented in the replay envelope spec.
 func computeReplayDiff(origReq *store.Request, res *replayResult) diffReport {
-	var origStatus, origSize int
+	var origStatus int
 	var origHeaders store.HeaderMap
 	if origReq.Response != nil {
 		origStatus = origReq.Response.Status
-		origSize = len(origReq.Response.Body)
 		origHeaders = origReq.Response.Headers
 	}
-	return diffReport{
+	origBody, origEvidence, evidenceErr := originalReplayEvidence(origReq)
+	replayState := res.BodyCapture.State
+	if replayState == "" {
+		replayState = "unknown"
+	}
+	diff := diffReport{
 		StatusDelta:   res.Status - origStatus,
-		SizeDelta:     len(res.Body) - origSize,
-		BodyDistinct:  bodyDistinct(origRespBody(origReq), res.Body),
 		HeaderChanges: headerChanges(origHeaders, res.Headers),
+		BodyComparison: replayBodyComparison{
+			State:         "inconclusive",
+			Method:        "exact_bytes",
+			OriginalState: origEvidence.State,
+			ReplayState:   replayState,
+		},
 	}
-}
-
-// bodyDistinct compares the first 4KB of two bodies after whitespace
-// normalization. Small perf cost, big signal-to-noise win.
-func bodyDistinct(a, b []byte) bool {
-	const window = 4096
-	if len(a) > window {
-		a = a[:window]
+	if evidenceErr == nil && origReq.Response != nil {
+		delta := len(res.Body) - len(origBody)
+		diff.SizeDelta = &delta
 	}
-	if len(b) > window {
-		b = b[:window]
-	}
-	return normalizeWS(string(a)) != normalizeWS(string(b))
-}
-
-func normalizeWS(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	prevSpace := false
-	for _, r := range s {
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			if !prevSpace {
-				b.WriteByte(' ')
-				prevSpace = true
-			}
-			continue
+	switch {
+	case evidenceErr != nil:
+		diff.BodyComparison.Reason = "invalid_original_body_evidence"
+	case origEvidence.State != "complete":
+		diff.BodyComparison.Reason = "original_body_not_complete"
+	case replayState != "complete" || res.BodyError != "" || res.BodyTruncated:
+		diff.BodyComparison.Reason = "replay_body_not_complete"
+	case res.BodyCapture.CapturedBytes != int64(len(res.Body)):
+		diff.BodyComparison.Reason = "invalid_replay_body_evidence"
+	default:
+		distinct := bodyDistinct(origBody, res.Body)
+		diff.BodyDistinct = &distinct
+		diff.BodyComparison.State = "equal"
+		if distinct {
+			diff.BodyComparison.State = "different"
 		}
-		prevSpace = false
-		b.WriteRune(r)
 	}
-	return strings.TrimSpace(b.String())
+	return diff
+}
+
+// bodyDistinct preserves every retained byte, including whitespace and data
+// beyond the preview window. Completeness is checked by computeReplayDiff.
+func bodyDistinct(a, b []byte) bool {
+	return !bytes.Equal(a, b)
 }
 
 // headerChanges returns sorted "+name" for headers only in the replay and
@@ -709,6 +821,7 @@ func trimEnvelopePreviews(env output.AgentEnvelope, jsonMode bool) []byte {
 	if data, ok := env.Data.(map[string]interface{}); ok {
 		if r, ok := data["replay"].(replaySummary); ok {
 			r.InlineBodyPreview = ""
+			r.InlineBodyEncoding = ""
 			data["replay"] = r
 		}
 	}
@@ -724,18 +837,38 @@ func printReplayText(env output.AgentEnvelope) {
 		return
 	}
 	fmt.Printf("replay %v\n", data["request_id"])
+	fmt.Printf("  client:   Go net/http (browser_equivalent=false; body limit=%d bytes)\n", maxReplayBodyBytes)
 	if orig, ok := data["original"].(replaySummary); ok {
-		fmt.Printf("  original: %d %s (%d bytes)\n", orig.Status, orig.ContentType, orig.Size)
+		fmt.Printf("  original: %d %s (%d retained bytes; %s)\n", orig.Status, orig.ContentType, orig.Size, orig.BodyCapture.State)
+		if orig.BodyError != "" {
+			fmt.Printf("  original body error: %s\n", orig.BodyError)
+		}
 	}
 	if r, ok := data["replay"].(replaySummary); ok {
-		fmt.Printf("  replay:   %d %s (%d bytes)\n", r.Status, r.ContentType, r.Size)
+		fmt.Printf("  replay:   %d %s (%d retained bytes; %s)\n", r.Status, r.ContentType, r.Size, r.BodyCapture.State)
+		if r.BodyCapture.Reason != "" {
+			fmt.Printf("  body capture: %s\n", r.BodyCapture.Reason)
+		}
+		if r.BodyError != "" {
+			fmt.Printf("  replay body error: %s\n", r.BodyError)
+		}
+		if r.ArtifactError != "" {
+			fmt.Printf("  artifact error: %s\n", r.ArtifactError)
+		}
 		if r.ResponseBodyPath != "" {
 			fmt.Printf("  body:     %s\n", r.ResponseBodyPath)
 		}
 	}
 	if d, ok := data["diff"].(diffReport); ok {
-		fmt.Printf("  diff:     status=%+d size=%+d body_distinct=%v headers=%v\n",
-			d.StatusDelta, d.SizeDelta, d.BodyDistinct, d.HeaderChanges)
+		sizeDelta := "unknown"
+		if d.SizeDelta != nil {
+			sizeDelta = fmt.Sprintf("%+d", *d.SizeDelta)
+		}
+		fmt.Printf("  diff:     status=%+d retained_size=%s body=%s headers=%v\n",
+			d.StatusDelta, sizeDelta, d.BodyComparison.State, d.HeaderChanges)
+		if d.BodyComparison.Reason != "" {
+			fmt.Printf("  comparison: %s\n", d.BodyComparison.Reason)
+		}
 	}
 	if muts, ok := data["mutants"].([]mutantResult); ok {
 		fmt.Printf("  mutants (%d):\n", len(muts))
@@ -744,8 +877,18 @@ func printReplayText(env output.AgentEnvelope) {
 				fmt.Printf("    %q: ERROR %s: %s\n", m.Value, m.Error.Code, m.Error.Message)
 				continue
 			}
-			fmt.Printf("    %q: %d (%d bytes, distinct=%v) %s\n",
-				m.Value, m.Status, m.Size, m.BodyDistinct, m.SpillPath)
+			comparison := "inconclusive"
+			if m.BodyComparison != nil {
+				comparison = m.BodyComparison.State
+			}
+			fmt.Printf("    %q: %d (%d retained bytes, body=%s) %s\n",
+				m.Value, m.Status, m.Size, comparison, m.SpillPath)
+			if m.BodyError != "" {
+				fmt.Printf("      body error: %s\n", m.BodyError)
+			}
+			if m.ArtifactError != "" {
+				fmt.Printf("      artifact error: %s\n", m.ArtifactError)
+			}
 		}
 	}
 }

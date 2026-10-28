@@ -52,19 +52,33 @@ var browserDoctorCmd = &cobra.Command{
 			return output.EmitAgentError(os.Stdout, output.WrapError(err, output.ErrCodeInternal, "browser doctor"), getOutputMode() == "json")
 		}
 		registries, discoverErr := bridge.Discover()
+		var connectionErr error
+		if discoverErr == nil {
+			_, connectionErr = bridge.Select(cmd.Context(), browserSelector)
+		}
 		result := map[string]interface{}{
 			"platform":  runtime.GOOS,
 			"manifests": checks,
 			"bridges":   registries,
-			"healthy":   discoverErr == nil && len(registries) > 0,
+			"healthy":   discoverErr == nil && connectionErr == nil,
 		}
-		if version := arcVersion(); version != "" {
-			result["arc_version"] = version
+		for _, browser := range []string{"dia", "arc"} {
+			if browserSelector != browser && browserSelector != "any" {
+				continue
+			}
+			if version := browserAppVersion(browser); version != "" {
+				result[browser+"_version"] = version
+			}
 		}
 		if discoverErr != nil {
 			result["bridge_error"] = discoverErr.Error()
+		} else if connectionErr != nil {
+			result["bridge_error"] = connectionErr.Error()
 		}
 		return emitBrowserResult(result, func() {
+			if version := result["dia_version"]; version != nil {
+				fmt.Printf("Dia: %v\n", version)
+			}
 			if version := result["arc_version"]; version != nil {
 				fmt.Printf("Arc: %v\n", version)
 			}
@@ -82,7 +96,7 @@ var browserDoctorCmd = &cobra.Command{
 			}
 			fmt.Printf("live bridges: %d\n", len(registries))
 			if len(registries) == 0 {
-				fmt.Println("next: rep browser install --extension-path /path/to/rep && reload rep+ in arc://extensions")
+				fmt.Println("next: rep browser install --extension-path /path/to/rep && reload rep+ in dia://extensions")
 			}
 		})
 	},
@@ -90,7 +104,7 @@ var browserDoctorCmd = &cobra.Command{
 
 var browserInstallCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install the rep-host manifest for Arc/Chrome",
+	Short: "Install the rep-host manifest for Dia/Arc/Chrome",
 	Long: `Write a native-messaging manifest for the selected browser.
 
 For an unpacked extension, --extension-path derives the stable Chrome
@@ -144,12 +158,17 @@ extension ID from its canonical path. --extension-id accepts an explicit
 			Name: "com.repplus.host", Description: "rep+ Native Messaging Host for CLI browser control",
 			Path: hostPath, Type: "stdio", AllowedOrigins: []string{"chrome-extension://" + extensionID + "/"},
 		}
-		content, _ := json.MarshalIndent(manifest, "", "  ")
 		installed := make([]string, 0, len(targets))
 		for _, path := range targets {
 			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 				return err
 			}
+			// Browsers can share one manifest (Dia reads Chrome's), so keep the
+			// origins already allowed. The new origin goes first so
+			// extensionIDFromExistingManifest prefers the latest install.
+			target := manifest
+			target.AllowedOrigins = mergeAllowedOrigins(manifest.AllowedOrigins[0], path)
+			content, _ := json.MarshalIndent(target, "", "  ")
 			if err := atomicWriteSetupFile(path, append(content, '\n'), 0644); err != nil {
 				return err
 			}
@@ -167,7 +186,7 @@ extension ID from its canonical path. --extension-id accepts an explicit
 			for _, path := range installed {
 				fmt.Printf("installed: %s\n", path)
 			}
-			fmt.Println("next: reload rep+ in arc://extensions, then run rep browser status")
+			fmt.Println("next: reload rep+ in dia://extensions, then run rep browser status")
 		})
 	},
 }
@@ -180,6 +199,9 @@ func inspectNativeManifests(selector string) ([]browserManifestCheck, error) {
 	checks := make([]browserManifestCheck, 0, len(paths))
 	for _, path := range paths {
 		browser := browserForManifestPath(path)
+		if len(paths) == 1 && selector != "" {
+			browser = strings.ToLower(strings.TrimSpace(selector))
+		}
 		check := browserManifestCheck{Browser: browser, ManifestPath: path}
 		content, readErr := os.ReadFile(path)
 		if readErr != nil {
@@ -216,6 +238,9 @@ func nativeManifestPaths(selector string) ([]string, error) {
 	}
 	base := filepath.Join(home, "Library", "Application Support")
 	paths := map[string]string{
+		// Dia keeps Chrome's branding paths and reads Chrome's user-level native
+		// hosts, so it shares this manifest with Chrome.
+		"dia":      filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", "com.repplus.host.json"),
 		"arc":      filepath.Join(base, "Arc", "NativeMessagingHosts", "com.repplus.host.json"),
 		"chrome":   filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", "com.repplus.host.json"),
 		"chromium": filepath.Join(base, "Chromium", "NativeMessagingHosts", "com.repplus.host.json"),
@@ -224,18 +249,38 @@ func nativeManifestPaths(selector string) ([]string, error) {
 	}
 	selector = strings.ToLower(strings.TrimSpace(selector))
 	if selector == "" || selector == "any" || selector == "all" {
-		return []string{paths["arc"], paths["chrome"], paths["chromium"]}, nil
+		return []string{paths["dia"], paths["arc"], paths["chromium"]}, nil
 	}
 	path, ok := paths[selector]
 	if !ok {
-		return nil, fmt.Errorf("unsupported browser %q (want arc, chrome, chromium, edge, brave, or any)", selector)
+		return nil, fmt.Errorf("unsupported browser %q (want dia, arc, chrome, chromium, edge, brave, or any)", selector)
 	}
 	return []string{path}, nil
+}
+
+func mergeAllowedOrigins(origin, path string) []string {
+	origins := []string{origin}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return origins
+	}
+	var existing nativeHostManifest
+	if json.Unmarshal(content, &existing) != nil || existing.Name != "com.repplus.host" {
+		return origins
+	}
+	for _, other := range existing.AllowedOrigins {
+		if other != origin {
+			origins = append(origins, other)
+		}
+	}
+	return origins
 }
 
 func browserForManifestPath(path string) string {
 	lower := strings.ToLower(path)
 	switch {
+	case strings.Contains(lower, "/dia/"):
+		return "dia"
 	case strings.Contains(lower, "/arc/"):
 		return "arc"
 	case strings.Contains(lower, "/google/chrome/"):
@@ -319,11 +364,15 @@ func atomicWriteSetupFile(path string, content []byte, mode os.FileMode) error {
 	return os.Rename(tempPath, path)
 }
 
-func arcVersion() string {
+func browserAppVersion(browser string) string {
 	if runtime.GOOS != "darwin" {
 		return ""
 	}
-	output, err := exec.Command("/usr/bin/plutil", "-extract", "CFBundleShortVersionString", "raw", "-o", "-", "/Applications/Arc.app/Contents/Info.plist").Output()
+	app := "Dia"
+	if browser == "arc" {
+		app = "Arc"
+	}
+	output, err := exec.Command("/usr/bin/plutil", "-extract", "CFBundleShortVersionString", "raw", "-o", "-", filepath.Join("/Applications", app+".app", "Contents", "Info.plist")).Output()
 	if err != nil {
 		return ""
 	}

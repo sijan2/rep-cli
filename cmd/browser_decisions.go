@@ -50,9 +50,16 @@ func readGoalBatch(path string) (goalBatch, error) {
 }
 
 func newBrowserSelectBatchCommand(deps jevDOMDependencies) *cobra.Command {
+	command := newElementSelectBatchCommand(deps, nil)
+	addDecisionBrowserFlag(command)
+	return command
+}
+
+func newElementSelectBatchCommand(deps jevDOMDependencies, shared *elementFlags) *cobra.Command {
 	options := jevdom.DefaultOptions()
-	browserName := "arc"
 	command := &cobra.Command{Use: "select-batch goals.json --tab ID", Short: "Resolve independent goals from one observation with shared Jev requests", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+		shared.apply(&options)
+		browserName := decisionBrowserName(command)
 		batch, err := readGoalBatch(args[0])
 		if err != nil {
 			return reportJevError(command, err)
@@ -112,36 +119,35 @@ func newBrowserSelectBatchCommand(deps jevDOMDependencies) *cobra.Command {
 		}
 		return emitJev(command, command.CommandPath(), output)
 	}}
-	command.Flags().IntVar(&options.TabID, "tab", -1, "Existing browser tab id")
-	command.Flags().StringVar(&browserName, "browser", "arc", "arc, chrome, any, or task-owned headless")
-	command.Flags().StringVar(&options.Kind, "kind", "controls", "Candidate roles: controls, text, or all")
+	shared = elementCommandFlags(command, shared)
 	command.Flags().IntVar(&options.Limit, "limit", 240, "Maximum candidates per goal (1 to 480)")
 	command.Flags().Float64Var(&options.Confidence, "confidence", 0.8, "Minimum decision confidence")
 	command.Flags().BoolVar(&options.NoCache, "no-cache", false, "Bypass decision reuse")
-	command.Flags().StringVar(&options.Origin, "origin", "", "Require and restrict to this origin")
-	command.Flags().StringVar(&options.FrameID, "frame", "", "Restrict observation to this frame")
-	command.Flags().StringVar(&options.FrameURL, "frame-url", "", "Restrict to the unique frame at this exact URL")
-	command.Flags().Int64Var(&options.ScopeBackendDOMNodeID, "root-node", 0, "Restrict candidates to this backend node subtree; requires a frame")
 	command.Flags().StringVar(&options.Strategy, "strategy", "auto", "auto or legacy")
 	command.Flags().StringVar(&options.ObservationMode, "observation", "auto", "auto or legacy")
-	_ = command.MarkFlagRequired("tab")
 	return command
 }
 
 func validDecisionBrowser(name string) bool {
-	return name == "arc" || name == "chrome" || name == "any" || name == "headless"
+	return name == "dia" || name == "arc" || name == "chrome" || name == "any" || name == "headless"
 }
 
 func newBrowserObservationCommand(validate bool, deps jevDOMDependencies) *cobra.Command {
-	var tab, limit int
-	var rootNode int64
-	var name, kind, origin, frame, frameURL, fingerprint, generation, since string
+	command := newElementObservationCommand(validate, deps, nil)
+	addDecisionBrowserFlag(command)
+	return command
+}
+
+func newElementObservationCommand(validate bool, deps jevDOMDependencies, shared *elementFlags) *cobra.Command {
+	var limit int
+	var fingerprint, generation, since string
 	use, description := "observe --tab ID", "Read a compact, relational browser observation without model inference"
 	if validate {
 		use, description = "validate --tab ID --fingerprint HASH --generation ID", "Refresh evidence and validate an earlier semantic observation"
 	}
 	command := &cobra.Command{Use: use, Short: description, Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		if tab < 0 || !validDecisionBrowser(name) || (kind != "controls" && kind != "text" && kind != "all") || limit < 1 || limit > 4096 || rootNode < 0 || (rootNode > 0 && frame == "" && frameURL == "") {
+		name := decisionBrowserName(command)
+		if shared.TabID < 0 || !validDecisionBrowser(name) || (shared.Kind != "controls" && shared.Kind != "text" && shared.Kind != "all") || limit < 1 || limit > 4096 || shared.RootNode < 0 || (shared.RootNode > 0 && shared.FrameID == "" && shared.FrameURL == "") {
 			return reportJevError(command, errors.New("invalid tab, browser, kind, candidate limit, or subtree scope"))
 		}
 		owner, err := decisionOwner()
@@ -154,7 +160,7 @@ func newBrowserObservationCommand(validate bool, deps jevDOMDependencies) *cobra
 		if err != nil {
 			return reportJevError(command, err)
 		}
-		params := map[string]any{"tab_id": tab, "owner": owner, "kind": kind, "origin": origin, "frame_id": frame, "frame_url": frameURL, "root_backend_dom_node_id": rootNode}
+		params := map[string]any{"tab_id": shared.TabID, "owner": owner, "kind": shared.Kind, "origin": shared.Origin, "frame_id": shared.FrameID, "frame_url": shared.FrameURL, "root_backend_dom_node_id": shared.RootNode}
 		method := "browser.observe"
 		if since != "" {
 			params["since"] = since
@@ -192,18 +198,11 @@ func newBrowserObservationCommand(validate bool, deps jevDOMDependencies) *cobra
 		}
 		return emitJev(command, command.CommandPath(), result)
 	}}
-	command.Flags().IntVar(&tab, "tab", -1, "Existing task-owned tab")
-	command.Flags().StringVar(&name, "browser", "arc", "arc, chrome, any, or task-owned headless")
-	command.Flags().StringVar(&kind, "kind", "controls", "controls, text, or all")
-	command.Flags().StringVar(&origin, "origin", "", "Require and restrict to this origin")
-	command.Flags().StringVar(&frame, "frame", "", "Restrict observation to this frame")
-	command.Flags().StringVar(&frameURL, "frame-url", "", "Restrict to the unique frame at this exact URL")
-	command.Flags().Int64Var(&rootNode, "root-node", 0, "Restrict candidates to this backend node subtree; requires a frame")
+	shared = elementCommandFlags(command, shared)
 	if !validate {
 		command.Flags().StringVar(&since, "since", "", "Return changes from a retained observation fingerprint")
 	}
 	command.Flags().IntVar(&limit, "limit", 64, "Maximum candidates returned (1 to 4096); full fingerprint retained")
-	_ = command.MarkFlagRequired("tab")
 	if validate {
 		command.Flags().StringVar(&fingerprint, "fingerprint", "", "Prior full semantic fingerprint")
 		command.Flags().StringVar(&generation, "generation", "", "Prior browser session generation")
@@ -214,8 +213,14 @@ func newBrowserObservationCommand(validate bool, deps jevDOMDependencies) *cobra
 }
 
 func newBrowserRuntimeCommand(deps jevDOMDependencies) *cobra.Command {
-	name := "arc"
+	command := newInheritedBrowserRuntimeCommand(deps)
+	addDecisionBrowserFlag(command)
+	return command
+}
+
+func newInheritedBrowserRuntimeCommand(deps jevDOMDependencies) *cobra.Command {
 	command := &cobra.Command{Use: "runtime", Short: "Inspect persistent decision concurrency and reuse counters", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		name := decisionBrowserName(command)
 		if !validDecisionBrowser(name) {
 			return reportJevError(command, errors.New("unsupported browser"))
 		}
@@ -231,11 +236,5 @@ func newBrowserRuntimeCommand(deps jevDOMDependencies) *cobra.Command {
 		}
 		return emitJev(command, command.CommandPath(), status)
 	}}
-	command.Flags().StringVar(&name, "browser", "arc", "arc, chrome, any, or task-owned headless")
 	return command
-}
-
-func init() {
-	deps := defaultJevDOMDependencies()
-	browserCmd.AddCommand(newBrowserSelectBatchCommand(deps), newBrowserObservationCommand(false, deps), newBrowserObservationCommand(true, deps), newBrowserRuntimeCommand(deps))
 }

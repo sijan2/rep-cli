@@ -29,6 +29,35 @@ func TestDeriveExtensionID(t *testing.T) {
 	}
 }
 
+func TestDiaNativeManifestPath(t *testing.T) {
+	paths, err := nativeManifestPaths("dia")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chrome, err := nativeManifestPaths("chrome")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 1 || paths[0] != chrome[0] {
+		t.Fatalf("Dia should use Chrome's native host manifest, got %v", paths)
+	}
+}
+
+func TestMergeAllowedOriginsKeepsOtherBrowsers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "com.repplus.host.json")
+	existing := `{"name":"com.repplus.host","type":"stdio","allowed_origins":["chrome-extension://old/","chrome-extension://new/"]}`
+	if err := os.WriteFile(path, []byte(existing), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := mergeAllowedOrigins("chrome-extension://new/", path)
+	if len(got) != 2 || got[0] != "chrome-extension://new/" || got[1] != "chrome-extension://old/" {
+		t.Fatalf("unexpected merged origins: %v", got)
+	}
+	if got := mergeAllowedOrigins("chrome-extension://new/", filepath.Join(t.TempDir(), "missing.json")); len(got) != 1 {
+		t.Fatalf("missing manifest should yield only the new origin: %v", got)
+	}
+}
+
 func TestDeriveExtensionIDMatchesRepPath(t *testing.T) {
 	path := "/Users/sijan/code/projects/rep"
 	if _, err := os.Stat(path); err != nil {

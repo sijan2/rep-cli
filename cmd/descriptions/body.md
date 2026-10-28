@@ -57,3 +57,7 @@ has ended; capture completeness always comes from `body_capture`.
 HTTP chunked transfer, CDP data events, and native transport fragments are byte
 transport mechanisms. They are not SSE/NDJSON record boundaries. Parsing runs
 only after ordered captured bytes have been assembled.
+
+## Advanced flags
+
+These flags stay accepted with their existing behavior and are hidden from `--help` to keep the everyday surface small: `--record-offset` and `--records` page NDJSON/SSE records or search matches; defaults 0 and 20.

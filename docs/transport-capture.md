@@ -39,6 +39,12 @@ objects or earlier messages. For page startup traffic, use `browser open`.
 
 ## Evidence contract
 
+`rep coverage --saved HASH` summarizes protocol sources, declared capture states,
+open connections, dropped/truncated events and known gaps from one capture.
+Its protocol groups preserve `page_controlled` trust for `page_api` records,
+including records declared complete. Raw packet and native diagnostic artifacts
+still require separate review. Use `rep describe coverage` for the report contract.
+
 | Record | Source and contents |
 |---|---|
 | WebSocket | CDP application messages and connection lifecycle |

@@ -52,3 +52,7 @@ rep browser download <request-id> app.ipa \
 ```
 
 This bridge-native path does not require Arc's browser-process debugging port.
+
+## Advanced flags
+
+These flags stay accepted with their existing behavior and are hidden from `--help` to keep the everyday surface small: `browser download`: `--chunk-size` (IO.read chunk bytes), `--no-cache`, `--omit-credentials`. `download`: `--keep-range` (preserve a captured Range header), `--retries`, `--retry-delay`.

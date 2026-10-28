@@ -425,5 +425,6 @@ func init() {
 	browserDownloadCmd.Flags().IntVar(&browserDownloadChunkSize, "chunk-size", defaultBrowserDownloadChunk, "CDP IO.read chunk size in bytes")
 	browserDownloadCmd.Flags().BoolVar(&browserDownloadNoCache, "no-cache", false, "Disable browser cache for the resource load")
 	browserDownloadCmd.Flags().BoolVar(&browserDownloadOmitCredentials, "omit-credentials", false, "Do not include browser-managed credentials")
+	advancedFlags(browserDownloadCmd, "chunk-size", "no-cache", "omit-credentials")
 	bindArtifactValidationFlags(browserDownloadCmd.Flags(), &browserDownloadValidation)
 }

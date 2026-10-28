@@ -30,7 +30,7 @@ func hostSelectBatch(ctx context.Context, browser jevdom.Browser, config jev.Con
 	var capabilities jevrpc.Capabilities
 	if err := browser.Call(ctx, "jev.capabilities", nil, &capabilities); err != nil || capabilities.Version != jevrpc.Version || !capabilities.PersistentSelection || !capabilities.BatchSelection {
 		return nil, output.NewAgentError("host_outdated", "", "the connected rep-host predates this rep CLI and cannot run Jev decisions; install matching binaries and reconnect the browser",
-			"scripts/build_install.sh --host  # in the rep-cli checkout", "rep browser reload-extension --browser arc")
+			"scripts/build_install.sh --host  # in the rep-cli checkout", "rep browser reload-extension --browser dia")
 	}
 	// Credential negotiation is host-local, before any browser RPC. Older hosts
 	// receive only the capability query and never receive this credential.

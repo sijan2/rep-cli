@@ -9,8 +9,8 @@ synthetic API check.
 ## Semantic lookup
 
 ```sh
-rep browser select --tab TAB_ID 'Find the course materials link' --browser arc -j
-rep browser select --tab TAB_ID 'Instructions about the file format' --kind text -j
+rep browser element select --tab TAB_ID 'Find the course materials link' --browser arc -j
+rep browser element select --tab TAB_ID 'Instructions about the file format' --kind text -j
 ```
 
 Reads an already-open tab through the native host and compact extension
@@ -52,7 +52,7 @@ are excluded. Text can still contain personal information; scope the task.
 
 One question can include up to 254 candidates plus `none` if it fits the token
 budget (30k estimated tokens; documented model limit 32k). Independent goals can share observation and provider requests with
-`browser select-batch`. `browser observe` and `browser validate` need no model.
+`browser element select-batch`. `browser element observe` and `browser element validate` need no model.
 See `rep describe decisions` for their contracts.
 
 ## Failures
@@ -82,3 +82,16 @@ Exact targets skip the model; goal targets use the existing selector and cache.
 The runtime verifies input, scopes duplicate labels, and waits for explicit
 outcomes. It never retries a mutation after an uncertain response.
 See `rep describe interact` and [the interaction guide](../../docs/interactions.md).
+
+
+## Images and box questions
+
+`rep browser locate GOAL --tab ID` sends one viewport screenshot to Jev with a
+`box` question (where) and a `noul` question (is it visible), using TypeSafe's
+documented image contract: base64 JPEG assets referenced from the state, the
+`TypeSafe-Danger-Zone-Images: true` header, PNG or JPEG only, 280 to 1568 px
+per side and at most 2,458,624 pixels. Images count as input tokens. Box
+answers are fractions of the image (`top`, `bottom`, `left`, `right`) that Rep
+maps onto DOM layout boxes. TypeSafe marks these features as not
+production-ready, so results carry `needs_review` whenever presence, box
+confidence or geometric overlap is weak. See `rep describe locate`.

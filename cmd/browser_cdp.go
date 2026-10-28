@@ -25,9 +25,7 @@ type browserEvaluationOptions struct {
 	browserDebuggeeFlags
 	AwaitPromise, ReturnByValue, UserGesture, REPLMode, KeepAttached bool
 	Timeout, Idle, Settle                                            time.Duration
-	MaxBodyBytes, MaxResultBytes                                     int
-	ProtocolPayloads                                                 bool
-	WebRTCMedia                                                      bool
+	MaxResultBytes                                                   int
 }
 
 func newBrowserTargetCommand(name, short string, timeout time.Duration, run browserCommandRunner) *cobra.Command {
@@ -66,7 +64,20 @@ func newBrowserCDPCommand(run browserCommandRunner) *cobra.Command {
 	return command
 }
 func newBrowserEvaluationCommand(capture bool, run browserCommandRunner) *cobra.Command {
+	if !capture {
+		return newBrowserEvaluationCommandWithCapture(false, nil, run)
+	}
+	shared := newBrowserCaptureOptions()
+	command := newBrowserEvaluationCommandWithCapture(true, shared, run)
+	bindBrowserCaptureFlags(command.Flags(), shared)
+	return command
+}
+
+func newBrowserEvaluationCommandWithCapture(capture bool, shared *browserCaptureOptions, run browserCommandRunner) *cobra.Command {
 	options := browserEvaluationOptions{}
+	if capture && shared == nil {
+		shared = newBrowserCaptureOptions()
+	}
 	name, short := "eval", "Evaluate JavaScript in a real page renderer"
 	if capture {
 		name, short = "action", "Evaluate JavaScript and archive the resulting network capture"
@@ -84,10 +95,11 @@ func newBrowserEvaluationCommand(capture bool, run browserCommandRunner) *cobra.
 		params["user_gesture"], params["repl_mode"] = options.UserGesture, options.REPLMode
 		timeout := options.Timeout
 		if capture {
+			timeout = shared.Timeout
 			params["timeout_ms"], params["idle_ms"], params["settle_ms"] = timeout.Milliseconds(), options.Idle.Milliseconds(), options.Settle.Milliseconds()
-			params["max_body_bytes"], params["max_result_bytes"] = options.MaxBodyBytes, options.MaxResultBytes
-			params["protocol_payloads"] = options.ProtocolPayloads
-			params["webrtc_media"] = options.WebRTCMedia
+			params["max_body_bytes"], params["max_result_bytes"] = shared.MaxBodyBytes, options.MaxResultBytes
+			params["protocol_payloads"] = shared.ProtocolPayloads
+			params["webrtc_media"] = shared.WebRTCMedia
 			timeout += 10 * time.Second
 		} else {
 			params["keep_attached"] = options.KeepAttached
@@ -95,7 +107,9 @@ func newBrowserEvaluationCommand(capture bool, run browserCommandRunner) *cobra.
 		return run(cmd, "browser "+name, "browser."+name, params, timeout)
 	}}
 	bindDebuggeeFlags(command, &options.browserDebuggeeFlags)
-	command.Flags().DurationVar(&options.Timeout, "timeout", 30*time.Second, "Maximum operation duration")
+	if !capture {
+		command.Flags().DurationVar(&options.Timeout, "timeout", 30*time.Second, "Maximum operation duration")
+	}
 	command.Flags().BoolVar(&options.AwaitPromise, "await", true, "Await a returned Promise")
 	command.Flags().BoolVar(&options.ReturnByValue, "by-value", true, "Serialize the result by value")
 	command.Flags().BoolVar(&options.UserGesture, "user-gesture", false, "Evaluate with a browser user-gesture token")
@@ -103,10 +117,7 @@ func newBrowserEvaluationCommand(capture bool, run browserCommandRunner) *cobra.
 	if capture {
 		command.Flags().DurationVar(&options.Idle, "idle", 300*time.Millisecond, "Required network-idle interval after the action")
 		command.Flags().DurationVar(&options.Settle, "settle", 1500*time.Millisecond, "Minimum observation window for delayed callbacks")
-		command.Flags().IntVar(&options.MaxBodyBytes, "max-body", 8*1024*1024, "Maximum captured response bytes per request")
 		command.Flags().IntVar(&options.MaxResultBytes, "max-result", 64*1024, "Maximum serialized evaluation-result bytes")
-		command.Flags().BoolVar(&options.ProtocolPayloads, "protocol-payloads", false, "Instrument page WebTransport and WebRTC data-channel APIs during capture")
-		command.Flags().BoolVar(&options.WebRTCMedia, "webrtc-media", false, "Record clones of observed WebRTC audio/video tracks with native browser codecs")
 		advancedFlags(command, "idle", "settle", "max-result")
 	} else {
 		command.Flags().BoolVar(&options.KeepAttached, "keep-attached", false, "Keep the target attached for subsequent commands")
@@ -129,7 +140,7 @@ func init() {
 		newBrowserTargetCommand("attach", "Keep a debugger target attached", 10*time.Second, callBrowserRPC),
 		newBrowserTargetCommand("detach", "Release a persistent debugger attachment", 10*time.Second, callBrowserRPC),
 		newBrowserTargetCommand("probe", "Inspect browser identity and page lifecycle state", 15*time.Second, callBrowserRPC),
-		newBrowserCDPCommand(callBrowserRPC), newBrowserEvaluationCommand(false, callBrowserRPC), newBrowserEvaluationCommand(true, callBrowserRPC),
+		newBrowserCDPCommand(callBrowserRPC), newBrowserEvaluationCommand(false, callBrowserRPC),
 	)
 }
 

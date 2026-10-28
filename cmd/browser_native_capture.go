@@ -103,6 +103,7 @@ func newNativeBrowserCaptureCommandWith(run func(context.Context, browserdiagnos
 	command.Flags().Int64Var(&options.MaxLogBytes, "max-log-bytes", options.MaxLogBytes, "Maximum retained Chromium diagnostic log bytes")
 	command.Flags().Int64Var(&options.MaxKeyLogBytes, "max-key-log-bytes", options.MaxKeyLogBytes, "TLS key-log stop threshold; native writes may overshoot before shutdown")
 	command.Flags().Int64Var(&options.MaxPacketBytes, "max-packet-bytes", options.MaxPacketBytes, "Maximum retained wire pcap bytes")
+	advancedFlags(command, "max-key-log-bytes", "max-log-bytes", "max-packet-bytes", "binary")
 	return command
 }
 
