@@ -3,7 +3,6 @@
 ## Project Structure & Module Organization
 - `cmd/rep/main.go` is the CLI entry point; `cmd/rep-host/` is the native messaging host binary.
 - `internal/commands/` holds the Cobra command tree (one file per command) with its embedded `descriptions/` contracts.
-- `cmd/rep-host/` is the native messaging host binary.
 - `internal/` contains shared packages (`internal/store`, `internal/output`, `internal/noise`).
 - `scripts/` has build helpers (see `scripts/build_install.sh`).
 - `VERSION` defines the default CLI version.
