@@ -86,6 +86,9 @@ func commandContract(command *cobra.Command) string {
 }
 
 func configureContractHelp(root *cobra.Command) {
+	if !compactContractHelp {
+		return
+	}
 	root.SetHelpFunc(func(command *cobra.Command, _ []string) {
 		if command == root {
 			fmt.Fprint(command.OutOrStdout(), rootContract(root))
