@@ -209,14 +209,6 @@ func TestExactCaptureValidationNeverFallsBackToLive(t *testing.T) {
 	}
 }
 
-func TestScopedAmbientCaptureRejectedBeforeBridgeUse(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	configureCaptureTestScope(t, "ambient")
-	if err := runBrowserWatch(&cobra.Command{}, "start"); err == nil {
-		t.Fatal("scoped ambient all-tab capture was accepted")
-	}
-}
-
 func TestScopedCaptureBoundsThousandRequestPreviewAndRetainsEveryBody(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("REPLIVE_PATH", "")

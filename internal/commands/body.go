@@ -49,25 +49,8 @@ Examples:
 			return output.EmitAgentError(cmd.OutOrStdout(), output.NewAgentError(output.ErrCodeStoreRead, "body", err.Error(), "rep scope", "rep sessions"), getOutputMode() == "json")
 		}
 
-		// Legacy Android lookup is limited to a canonical ID and explicit global
-		// access. It never overrides a selected archive or an isolated web task.
-		selected, _ := scope.Current()
-		if req == nil && bodySaved == "" && !selected.Scoped {
-			if androidData, err := store.LoadAndroidData(); err == nil {
-				for _, pkg := range androidData.Packages {
-					for i := range pkg.Requests {
-						ar := &pkg.Requests[i]
-						if ar.ID == requestID {
-							req = &store.Request{ID: ar.ID, Method: ar.Method, URL: ar.URL, Headers: ar.Headers, Body: ar.GetReqBody(), Response: &store.Response{Status: ar.Status, Body: ar.GetResBody()}}
-							store.ComputeRequestFields(req)
-							break
-						}
-					}
-					if req != nil {
-						break
-					}
-				}
-			}
+		if req == nil && bodySaved == "" {
+			req = findLabBodyRequest(requestID)
 		}
 
 		if req == nil {

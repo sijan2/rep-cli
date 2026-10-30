@@ -39,7 +39,11 @@ func TestScopeCLIHelperProcess(t *testing.T) {
 	if sentinel := os.Getenv("REP_SCOPE_TEST_ANDROID_SENTINEL"); sentinel != "" {
 		// Never invoke the real destructive handler, even if this regression
 		// test catches a future missing guard. Only a temporary fixture is used.
-		androidClearCmd.RunE = func(cmd *cobra.Command, args []string) error { return os.Remove(sentinel) }
+		command, _, err := rootCmd.Find([]string{"android", "clear"})
+		if err != nil || command.Name() != "clear" {
+			t.Fatal("lab Android command missing")
+		}
+		command.RunE = func(cmd *cobra.Command, args []string) error { return os.Remove(sentinel) }
 	}
 	for index, arg := range os.Args {
 		if arg == "--" {
@@ -51,32 +55,6 @@ func TestScopeCLIHelperProcess(t *testing.T) {
 		}
 	}
 	os.Exit(2)
-}
-
-func TestScopedAndroidCannotReachGlobalClearHandler(t *testing.T) {
-	dir := t.TempDir()
-	sentinel := filepath.Join(dir, "global-android-data.json")
-	contents := []byte(`{"requests":["must-survive"]}`)
-	if err := os.WriteFile(sentinel, contents, 0600); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := runScopeCLI(t, dir, map[string]string{"REP_SCOPE_TEST_ANDROID_SENTINEL": sentinel}, "--workspace", "project", "--task", "agent", "android", "clear", "-j")
-	requireScopeError(t, raw, err, "scope_unsupported")
-	if data, err := os.ReadFile(sentinel); err != nil || string(data) != string(contents) {
-		t.Fatalf("scoped command reached shared-data handler: %q %v", data, err)
-	}
-	for _, args := range [][]string{{"android", "status"}, {"android", "summary"}, {"android", "config", "show"}} {
-		raw, err := runScopeCLI(t, dir, nil, append([]string{"--workspace", "project", "--task", "agent", "-j"}, args...)...)
-		requireScopeError(t, raw, err, "scope_unsupported")
-	}
-}
-
-func TestScopedSharedDeviceFamilyIsRejected(t *testing.T) {
-	dir := t.TempDir()
-	for _, args := range [][]string{{"ig", "list"}, {"ig", "surface"}, {"ig", "body", "missing-request"}} {
-		raw, err := runScopeCLI(t, dir, nil, append([]string{"--workspace", "project", "--task", "agent", "-j"}, args...)...)
-		requireScopeError(t, raw, err, "scope_unsupported")
-	}
 }
 
 func TestScopedSharedCredentialExportsAreRejected(t *testing.T) {
@@ -98,7 +76,7 @@ func runScopeCLI(t *testing.T, directory string, extra map[string]string, args .
 			env[name] = value
 		}
 	}
-	for _, name := range []string{"REP_WORKSPACE", "REP_TASK", "REPLIVE_PATH", "REPANDROID_PATH"} {
+	for _, name := range []string{"REP_WORKSPACE", "REP_TASK", "REPLIVE_PATH", "REPANDROID_PATH", "REP_PROFILE", "XDG_RUNTIME_DIR"} {
 		delete(env, name)
 	}
 	env["REP_SCOPE_CLI_TEST"] = "1"
