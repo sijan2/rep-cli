@@ -14,12 +14,16 @@ import (
 func labHelp(command *cobra.Command) string {
 	var out strings.Builder
 	usage := "rep-lab" + strings.TrimPrefix(command.UseLine(), command.Root().Name())
-	fmt.Fprintf(&out, "Usage:\n  %s\n\n%s\n", usage, command.Short)
+	// Match Cobra's boundary: prose precedes Usage, so field/example headings
+	// cannot be mistaken for generated command groups by inventory readers.
 	if command.Parent() == nil {
-		out.WriteString("\nExperimental forensic, mobile, research and vision tools. Core verbs are also available.\n")
+		out.WriteString("Experimental forensic, mobile, research and vision tools. Core verbs are also available.\n")
 	} else if command.Long != "" {
-		out.WriteString("\n" + command.Long + "\n")
+		out.WriteString(command.Long + "\n")
+	} else {
+		out.WriteString(command.Short + "\n")
 	}
+	fmt.Fprintf(&out, "\nUsage:\n  %s\n", usage)
 	if command.HasAvailableSubCommands() {
 		out.WriteString("\nCommands:\n")
 		for _, child := range command.Commands() {

@@ -9,7 +9,7 @@ import (
 
 func TestLabHelpShowsExperimentalAndCoreCommands(t *testing.T) {
 	help := labHelp(rootCmd)
-	if !strings.HasPrefix(help, "Usage:\n  rep-lab") {
+	if !strings.Contains(help, "Usage:\n  rep-lab") {
 		t.Fatal(help)
 	}
 	for _, name := range []string{"packets", "native-capture", "media", "watch", "android", "ig", "engine", "probe", "audit", "locate", "element", "step", "jev", "arc", "reference", "cdp"} {
