@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 )
 
 type coreCaptureContext struct{}
+type coreCapturePrevious struct{}
 type coreRecording struct {
 	client           *bridge.Client
 	tab              *agentstate.Tab
@@ -25,6 +27,7 @@ type coreRecording struct {
 	sessionID, token string
 	once             sync.Once
 	result           map[string]any
+	snapshot         store.Export
 	err              error
 }
 
@@ -37,7 +40,9 @@ func beginCoreCapture(ctx context.Context, command *cobra.Command, client *bridg
 		ID    string `json:"session_id"`
 		Token string `json:"capture_token"`
 	}
-	if err = session.Capture(ctx, url, &begun); err != nil {
+	limits := map[string]any{"max_body_bytes": 8 << 20}
+	handoff.applyLimits(limits)
+	if err = session.Capture(ctx, url, &begun, limits); err != nil {
 		return nil, err
 	}
 	recording := &coreRecording{client: client, tab: tab, handoff: handoff, sessionID: begun.ID, token: begun.Token}
@@ -58,7 +63,8 @@ func (r *coreRecording) finish() {
 		if r.err != nil {
 			return
 		}
-		r.result, r.err = saveCoreCapture(r.tab, snapshot)
+		r.snapshot = snapshot
+		r.result, r.err = saveCoreCapture(r.tab, r.snapshot)
 	})
 }
 func attachCoreCapture(command *cobra.Command, result *coreResult) {
@@ -82,11 +88,34 @@ func attachCoreCapture(command *cobra.Command, result *coreResult) {
 		return
 	}
 	meta["capture"] = recording.result
+	if previous, ok := command.Context().Value(coreCapturePrevious{}).(string); ok && previous != "" {
+		recording.result["extends"] = previous
+		recording.result["observation_gap"] = true
+		recording.result["complete"] = false
+	}
+	// The cursor extends recording without reloading or repeating an action.
+	if strings.HasPrefix(result.Next, "rep page ") {
+		for _, arg := range strings.Fields(result.Next) {
+			if agentstate.CursorPattern.MatchString(arg) {
+				index, err := coreStore()
+				if err == nil {
+					_ = index.Update(func(state *agentstate.State) error {
+						cursor, ok := state.Cursors[arg]
+						if ok {
+							cursor.Source = recording.result["id"].(string)
+							state.Cursors[arg] = cursor
+						}
+						return nil
+					})
+				}
+			}
+		}
+	}
 	if result.Next == "" {
 		requests, _ := recording.result["requests"].([]map[string]any)
 		apis := []string{}
 		for _, request := range requests {
-			if request["type"] == "xhr" {
+			if request["type"] == "xhr" || request["type"] == "api" {
 				apis = append(apis, request["id"].(string))
 			}
 		}

@@ -91,6 +91,13 @@ func corePage(command *cobra.Command, args []string, options corePageOptions) er
 	if cursor != nil && cursor.Kind == "reference-sections" {
 		return coreReferenceContinuation(command, store, *cursor)
 	}
+	if cursor != nil && strings.HasPrefix(cursor.Source, "s_") {
+		options.Capture = true
+		command.SetContext(context.WithValue(command.Context(), coreCapturePrevious{}, cursor.Source))
+	}
+	if options.Capture && rawURL == "" && cursor == nil {
+		options.Reload = true
+	}
 	var addressed *agentstate.Tab
 	if target != "" {
 		addressed, err = store.Tab(target)

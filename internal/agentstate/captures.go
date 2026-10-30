@@ -1,6 +1,8 @@
 package agentstate
 
 import (
+	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -57,4 +59,45 @@ func (s *Store) Capture(handle, owner string) (Capture, error) {
 		problem.Candidates = append(problem.Candidates, capture.ID)
 	}
 	return Capture{}, problem
+}
+
+// ReserveTransport allocates a background tab atomically, independently of the
+// task's foreground target. Its lease covers navigation, capture and transport.
+func (s *Store) ReserveTransport(browser Browser, owner, session, origin string, duration time.Duration) (*Tab, string, error) {
+	var result *Tab
+	lease := Token("l_")
+	err := s.Update(func(state *State) error {
+		parsed, err := url.Parse(origin)
+		if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || origin != parsed.Scheme+"://"+parsed.Host {
+			return Failure("invalid_argument", "transport requires an HTTP(S) origin", "rep fetch --help")
+		}
+		if browser.Profile == "" || browser.Epoch == "" {
+			return Failure("bridge_outdated", "bridge has no profile identity", "rep doctor")
+		}
+		count := 0
+		for _, tab := range state.Tabs {
+			if tab.Owner != owner || tab.Closed || !sameBrowser(tab.Browser, browser) {
+				continue
+			}
+			count++
+			if tab.TransportOrigin == origin {
+				result = tab
+			}
+		}
+		if result != nil && result.Busy(s.now()) {
+			return &Error{Code: "tab_busy", Message: "background transport has an active execute lease", Next: "rep tabs", Retry: "retryable"}
+		}
+		if result == nil {
+			if count >= TabCap {
+				return Failure("tab_cap", "task tab cap reached; close an idle tab", "rep tabs")
+			}
+			state.NextTab++
+			result = &Tab{Handle: fmt.Sprintf("t%d", state.NextTab), Browser: browser, ChromeID: -1, Owner: owner, Session: session, Created: s.now(), CreatedByRep: true, TransportOrigin: origin, Refs: map[string]Ref{}}
+			state.Tabs[result.Handle] = result
+		}
+		result.LastUsed = s.now()
+		result.Lease = &Lease{ID: lease, Until: s.now().Add(duration), Purpose: "execute"}
+		return nil
+	})
+	return result, lease, err
 }

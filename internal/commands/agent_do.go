@@ -11,6 +11,7 @@ import (
 	"github.com/repplus/rep-cli/internal/agentstate"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/browserflow"
+	"github.com/repplus/rep-cli/internal/browserrpc"
 	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/spf13/cobra"
 )
@@ -71,7 +72,7 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 	var plan *browserflow.Plan
 	target := args[0]
 	if strings.HasPrefix(args[0], "@") {
-		if key != "" || len(files) > 0 || capture {
+		if key != "" || len(files) > 0 {
 			return coreArgument("plans contain their own actions")
 		}
 		source, err := coreSource(command, args[0])
@@ -158,10 +159,15 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 	verified := false
 	observationError := ""
 	if plan != nil {
-		_ = session.Close()
-		session = &browserfast.Session{Browser: client, Tab: tab.ChromeID, Owner: tab.Owner}
-		defer session.Close()
-		engine := browserflow.Engine{Browser: client, Owner: tab.Owner}
+		var engineBrowser browserrpc.Caller = client
+		if capture {
+			engineBrowser = session.CaptureCaller()
+		} else {
+			_ = session.Close()
+			session = &browserfast.Session{Browser: client, Tab: tab.ChromeID, Owner: tab.Owner}
+			defer session.Close()
+		}
+		engine := browserflow.Engine{Browser: engineBrowser, Owner: tab.Owner}
 		report, runErr := engine.Run(ctx, tab.ChromeID, *plan, true)
 		attempted := false
 		for _, step := range report.Steps {
@@ -175,9 +181,11 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 		}
 		verified = report.Status == "verified" || report.Status == "complete"
 		operation = "plan"
-		if err = session.Acquire(ctx); err != nil {
-			outcome = "performed"
-			return coreDoUnobserved(command, tab, operation, "plan dispatched; observation unavailable")
+		if !capture {
+			if err = session.Acquire(ctx); err != nil {
+				outcome = "performed"
+				return coreDoUnobserved(command, tab, operation, "plan dispatched; observation unavailable")
+			}
 		}
 	} else {
 		if before.Generation != reference.Generation {
