@@ -53,6 +53,7 @@ func Execute() {
 		os.Exit(2)
 	}
 	configureCommandGroups()
+	configureBuildHelp(rootCmd)
 	runStarted := trackRuns(rootCmd)
 	if command, err := rootCmd.ExecuteC(); err != nil {
 		// SilenceErrors keeps cobra from printing raw text; every error that a
