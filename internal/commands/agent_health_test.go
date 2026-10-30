@@ -97,6 +97,7 @@ func TestOutcomeUnknownHasVerificationNext(t *testing.T) {
 	tab, _ := store.Register(b, 1, "fixture/a", "", true)
 	_ = store.Remember("fixture/a", "", b)
 	cmd := &cobra.Command{Use: "eval"}
+	cmd.SetContext(context.Background())
 	out := new(bytes.Buffer)
 	cmd.SetOut(out)
 	err := coreFailure(cmd, &bridge.TransportError{Dispatched: true, Cause: errors.New("lost reply")})
