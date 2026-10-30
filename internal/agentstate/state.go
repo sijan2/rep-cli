@@ -91,6 +91,7 @@ type Cursor struct {
 	Source   string    `json:"source,omitempty"`
 }
 type Capture struct {
+	Browser Browser   `json:"browser"`
 	ID      string    `json:"id"`
 	Owner   string    `json:"owner"`
 	Archive string    `json:"archive"`

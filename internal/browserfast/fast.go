@@ -282,3 +282,15 @@ func (s *Session) CloseRead() error {
 	s.lease = browserrpc.Lease{}
 	return err
 }
+
+// Capture starts recording without surrendering this command's execute lease.
+func (s *Session) Capture(ctx context.Context, url string, out any) error {
+	timeout := int64(30000)
+	if deadline, ok := ctx.Deadline(); ok {
+		timeout = time.Until(deadline).Milliseconds()
+	}
+	if timeout < 1000 {
+		timeout = 1000
+	}
+	return s.Call(ctx, "browser.capture.begin", map[string]any{"tab_id": s.Tab, "owner": s.lease.Owner, "lease_id": s.lease.LeaseID, "generation": s.lease.Generation, "url": url, "timeout_ms": timeout}, out)
+}
