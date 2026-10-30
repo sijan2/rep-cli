@@ -23,7 +23,7 @@ type corePageOptions struct {
 
 func newCorePageCommand() *cobra.Command {
 	options := corePageOptions{}
-	command := &cobra.Command{Use: "page [TAB] [URL|/path|p_CURSOR]", Short: "Read or navigate a page; continue with its returned cursor", Args: cobra.MaximumNArgs(2)}
+	command := &cobra.Command{Use: "page [TAB] [URL|/path|p_CURSOR]", Short: "Read or navigate", Args: cobra.MaximumNArgs(2)}
 	command.Flags().StringVar(&options.Section, "section", "", "Read one heading section")
 	command.Flags().StringVar(&options.Find, "find", "", "Find text, css:SELECTOR, or role:ROLE NAME")
 	command.Flags().BoolVar(&options.Reload, "reload", false, "Reload before reading")

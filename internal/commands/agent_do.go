@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/repplus/rep-cli/internal/agentstate"
+	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/browserflow"
 	"github.com/repplus/rep-cli/internal/browserrpc"
@@ -20,7 +21,13 @@ func newCoreDoCommand() *cobra.Command {
 	var capture bool
 	var key string
 	var files []string
-	command := &cobra.Command{Use: "do REF [VALUE] | @PLAN [TAB]", Short: "Act and return verified changes and fresh controls", Args: cobra.RangeArgs(1, 33)}
+	command := &cobra.Command{Use: "do REF [VALUE] | @PLAN [TAB]", Short: "Act; return verified changes", Long: `REF clicks; VALUE fills, selects or checks. --press accepts chords/sequences.
+@PLAN or @- reads JSON; stops at the first failed step. Example:
+{"version":1,"url":"https://example.com/","steps":[{"id":"fill","action":"fill","target":{"name":"Search","role":"textbox"},"value":"query"}]}
+Actions: fill, replace, choose, check, click, press, wait. Target: name/role or
+selector. Click/press/wait require after:[{target:{selector},text|value|checked|
+visible|enabled|absent}] or after:[{url}]. Press uses keys:["Enter"].
+Replace requires old and value. See docs/interactions.md for the full schema.`, Args: cobra.RangeArgs(1, 33)}
 	command.Flags().StringVar(&key, "press", "", "Key, chord, or space-separated sequence after filling")
 	command.Flags().StringArrayVar(&files, "file", nil, "Upload a local file to the observed file input")
 	command.Flags().BoolVar(&capture, "capture", false, "Record traffic triggered by this action")
@@ -202,6 +209,13 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 		operation = spec.Action
 		prepared, e := session.Eval(ctx, spec)
 		if e != nil {
+			if bridge.PossibleDispatch(e) || bridge.BeforeDispatch(e) {
+				outcome = "outcome_unknown"
+				if bridge.BeforeDispatch(e) {
+					outcome = "not_dispatched"
+				}
+				return e
+			}
 			outcome = "performed"
 			return coreDoUnobserved(command, tab, operation, "outcome_unknown; verify before continuing")
 		}
@@ -235,6 +249,10 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 			err = session.Press(ctx, k, reference.Raw, prepared.URL)
 		}
 		if err != nil {
+			if bridge.PossibleDispatch(err) {
+				outcome = "outcome_unknown"
+				return err
+			}
 			outcome = "performed"
 			return coreDoUnobserved(command, tab, operation, "input may have been dispatched; verify before continuing")
 		}

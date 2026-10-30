@@ -274,6 +274,7 @@ func connection(ctx context.Context, state State) (*bridge.Client, error) {
 		if registry.ParentPID != state.PID || registry.ExtensionID != state.ExtensionID || filepath.Dir(registry.Socket) != state.BridgeDir {
 			continue
 		}
+		registry.RegistryPath = path
 		client := &bridge.Client{Registry: registry}
 		var status struct {
 			Connected bool `json:"connected"`
@@ -291,6 +292,9 @@ func Start(ctx context.Context, dataDir string, options Options) (Status, error)
 		return Status{}, err
 	}
 	defer unlock(guard)
+	return startLocked(ctx, dataDir, options)
+}
+func startLocked(ctx context.Context, dataDir string, options Options) (Status, error) {
 	prior, priorErr := readState(dataDir)
 	if priorErr == nil && ownedProcess(prior) {
 		if err := validateRunningOptions(prior, options); err != nil {
@@ -413,6 +417,9 @@ func Stop(ctx context.Context, dataDir string) (Status, error) {
 		return Status{}, err
 	}
 	defer unlock(guard)
+	return stopLocked(ctx, dataDir)
+}
+func stopLocked(ctx context.Context, dataDir string) (Status, error) {
 	state, err := readState(dataDir)
 	if os.IsNotExist(err) {
 		return Status{IsolatedProfile: true, Reason: "not_started"}, nil
@@ -540,10 +547,15 @@ func extensionDigest(dir string) (string, error) {
 // binary, extension, and host unless options override them. It loads changed
 // extension source; tabs do not survive a restart.
 func Restart(ctx context.Context, dataDir string, options Options) (Status, error) {
-	if _, err := Stop(ctx, dataDir); err != nil {
+	guard, err := lock(dataDir)
+	if err != nil {
 		return Status{}, err
 	}
-	return Start(ctx, dataDir, options)
+	defer unlock(guard)
+	if _, err := stopLocked(ctx, dataDir); err != nil {
+		return Status{}, err
+	}
+	return startLocked(ctx, dataDir, options)
 }
 
 func validateRunningOptions(prior State, requested Options) error {
@@ -663,7 +675,7 @@ func resolveOptions(options Options) (Options, string, error) {
 		return options, "", errors.New("use full Chrome for Testing or Chromium; Arc, branded Chrome, and headless_shell are not supported")
 	}
 	if options.Extension == "" {
-		options.Extension = os.Getenv("REP_EXTENSION_PATH")
+		options.Extension = ConfiguredExtension()
 	}
 	if options.Extension == "" {
 		for _, path := range []string{"extension", "../rep", "."} {

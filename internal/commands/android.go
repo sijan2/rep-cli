@@ -1,3 +1,5 @@
+//go:build replab
+
 package commands
 
 import (
@@ -259,15 +261,6 @@ func matchAndroidFilters(r *store.AndroidRequest, view requestView) bool {
 	return true
 }
 
-// parseSinceTime parses duration string (5m, 1h, 30s) and returns cutoff timestamp in ms
-func parseSinceTime(since string) int64 {
-	d, err := time.ParseDuration(since)
-	if err != nil {
-		return 0
-	}
-	return time.Now().Add(-d).UnixMilli()
-}
-
 func printAndroidLine(reqs []store.AndroidRequest) {
 	for _, r := range reqs {
 		// Get status from either format
@@ -345,13 +338,6 @@ func printAndroidDetail(reqs []store.AndroidRequest) {
 		}
 		fmt.Println()
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // Android primitive implementations

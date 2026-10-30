@@ -9,16 +9,18 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 type commandReference struct {
-	File string   `json:"file"`
-	Line int      `json:"line"`
-	Argv []string `json:"argv"`
-	Kind string   `json:"kind"`
+	File   string   `json:"file"`
+	Line   int      `json:"line"`
+	Argv   []string `json:"argv"`
+	Kind   string   `json:"kind"`
+	Binary string   `json:"binary"`
 }
 
 // Resolve references without executing their Run functions (some examples are
@@ -112,6 +114,9 @@ func referenceFailures(t *testing.T) []string {
 	}
 	var failures []string
 	for _, ref := range references {
+		if ref.Binary == "rep-lab" && !labBuild {
+			continue
+		}
 		if _, err := resolveReference(ref.Argv); err != nil {
 			// Do not key the migration debt by line number: edits elsewhere in
 			// a file must not silently bless a changed command or flag.
@@ -135,15 +140,6 @@ func uniqueStrings(values []string) []string {
 func TestDocumentedCommandsResolve(t *testing.T) {
 	failures := referenceFailures(t)
 	path := filepath.Join("testdata", "command-reference-debt.json")
-	// Explicit one-time Step 0 inventory. Step 7 removes this debt and the
-	// update hook; new failures cannot be accepted by the regular suite.
-	if os.Getenv("REP_FREEZE_CONTRACT_BASELINE") == "1" {
-		data, _ := json.MarshalIndent(failures, "", "  ")
-		if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
-			t.Fatal(err)
-		}
-		return
-	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -151,6 +147,11 @@ func TestDocumentedCommandsResolve(t *testing.T) {
 	var baseline []string
 	if err := json.Unmarshal(data, &baseline); err != nil {
 		t.Fatal(err)
+	}
+	// Exact file+argv debt only during the parallel migration. The original
+	// freeze hook is gone; no environment variable can bless new failures.
+	if len(baseline) > 0 && !time.Now().Before(time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC)) {
+		t.Fatal("command-reference migration debt expired; remove it at step 7/9")
 	}
 	allowed := map[string]bool{}
 	for _, value := range baseline {
@@ -161,7 +162,7 @@ func TestDocumentedCommandsResolve(t *testing.T) {
 			t.Error(value)
 		}
 	}
-	t.Logf("resolved source contracts; %d known stale examples must be removed by Step 7", len(failures))
+	t.Logf("resolved source contracts; %d exact migration exceptions must be removed by Step 7/9", len(failures))
 }
 
 func TestCompanionCommandShapes(t *testing.T) {
@@ -172,12 +173,17 @@ func TestCompanionCommandShapes(t *testing.T) {
 	var cases []struct {
 		Argv   []string `json:"argv"`
 		Fields []string `json:"fields"`
+		Binary string   `json:"binary"`
 	}
 	if err := json.Unmarshal(data, &cases); err != nil {
 		t.Fatal(err)
 	}
 	paths := map[string]bool{}
 	for _, item := range cases {
+		if item.Binary == "rep-lab" && !labBuild {
+			paths["rep-lab "+strings.Join(item.Argv[:2], " ")] = true
+			continue
+		}
 		path, err := resolveReference(item.Argv)
 		if err != nil {
 			t.Errorf("%v: %v", item.Argv, err)

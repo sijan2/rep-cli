@@ -90,6 +90,22 @@ func TestCoreTransportTimeoutDoesNotRetryWrite(t *testing.T) {
 		t.Fatal(result)
 	}
 }
+
+func TestCoreTransportConsumesActualLargeBody(t *testing.T) {
+	result := runCoreTransportJS(t, "GET", coreFetchFixture+`global.fetch=async()=>{calls++;return new Response(new Uint8Array((8<<20)+257),{headers:{'content-length':'1'}})};`, 1)
+	variant := result["result"].(map[string]any)["variants"].([]any)[0].(map[string]any)
+	if variant["ok"] != true || variant["bytes"] != float64((8<<20)+257) || variant["error"] != nil {
+		t.Fatalf("body consumption relied on headers instead of actual bytes: %v", variant)
+	}
+}
+
+func TestCoreTransportBodyFailureStaysFailedWithoutWriteRetry(t *testing.T) {
+	result := runCoreTransportJS(t, "POST", coreFetchFixture+`global.fetch=async()=>{calls++;return new Response(new ReadableStream({start(c){c.enqueue(new Uint8Array(1024));setTimeout(()=>c.error(Error('fixture disconnect')),1)}}))};`, 3)
+	variant := result["result"].(map[string]any)["variants"].([]any)[0].(map[string]any)
+	if result["calls"] != float64(1) || variant["ok"] != false || variant["error"] != "request_failed" {
+		t.Fatalf("failed body was counted complete or unsafe request repeated: %v", result)
+	}
+}
 func TestCoreDownloadInferredValidation(t *testing.T) {
 	if coreDownloadValidation("report.PDF").ExpectedMagic != "pdf" || coreDownloadValidation("file.txt").ExpectedMagic != "" {
 		t.Fatal("extension inference")

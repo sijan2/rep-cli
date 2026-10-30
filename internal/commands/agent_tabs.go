@@ -10,7 +10,7 @@ import (
 )
 
 func newCoreTabsCommand() *cobra.Command {
-	command := &cobra.Command{Use: "tabs", Short: "List tabs and ownership in the selected profile", Args: cobra.NoArgs}
+	command := &cobra.Command{Use: "tabs", Short: "List live tabs and owners", Args: cobra.NoArgs}
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		store, err := coreStore()
 		if err != nil {
@@ -33,6 +33,13 @@ func newCoreTabsCommand() *cobra.Command {
 		if err := client.Call(ctx, "browser.tabs", nil, &live); err != nil {
 			return coreFailure(cmd, err)
 		}
+		ids := []int{}
+		for _, item := range live.Tabs {
+			ids = append(ids, item.ID)
+		}
+		if err := store.Inventory(browser, ids); err != nil {
+			return coreFailure(cmd, err)
+		}
 		state, err := store.Read()
 		if err != nil {
 			return coreFailure(cmd, err)
@@ -49,6 +56,18 @@ func newCoreTabsCommand() *cobra.Command {
 						row["owner"] = "mine"
 					}
 					row["last_seen"] = tab.LastUsed
+					row["adoptable"] = store.Adoptable(state, tab) && tab.Owner != selected.Identity()
+					row["live"] = true
+					row["leased"] = tab.Busy(time.Now())
+					row["created_by_rep"] = tab.CreatedByRep
+					if tab.Owner == "" {
+						row["owner"] = "user"
+					} else if tab.Owner != selected.Identity() {
+						row["owner_state"] = "live"
+						if store.Adoptable(state, tab) {
+							row["owner_state"] = "idle"
+						}
+					}
 					break
 				}
 			}
@@ -59,7 +78,7 @@ func newCoreTabsCommand() *cobra.Command {
 	return command
 }
 func newCoreCloseCommand() *cobra.Command {
-	command := &cobra.Command{Use: "close [TAB]", Short: "Close an owned tab without affecting other tasks", Args: cobra.MaximumNArgs(1)}
+	command := &cobra.Command{Use: "close [TAB]", Short: "Close an owned tab", Args: cobra.MaximumNArgs(1)}
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := coreClose(cmd, args); err != nil {
 			return coreFailure(cmd, err)
@@ -84,6 +103,9 @@ func coreClose(command *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+		if !addressed.CreatedByRep {
+			return agentstate.Failure("user_tab", "close refuses a tab that rep did not create", coreNext("tabs"))
+		}
 	}
 	ctx, cancel := coreTimeout(command, 5*time.Second)
 	defer cancel()
@@ -100,6 +122,9 @@ func coreClose(command *cobra.Command, args []string) error {
 		return err
 	}
 	defer store.Release(tab.Handle, lease)
+	if !tab.CreatedByRep {
+		return agentstate.Failure("user_tab", "close refuses a tab that rep did not create", coreNext("tabs"))
+	}
 	session := &browserfast.Session{Browser: client, Tab: tab.ChromeID, Owner: tab.Owner}
 	defer session.Close()
 	if err := session.Acquire(ctx); err != nil {

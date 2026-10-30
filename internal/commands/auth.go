@@ -385,10 +385,6 @@ func saveAuthEnv(tokens []AuthToken, domain string) (string, error) {
 	return envPath, nil
 }
 
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
-}
-
 func fileExists(path string) bool {
 	if path == "" {
 		return false

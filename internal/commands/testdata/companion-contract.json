@@ -179,14 +179,16 @@
       "--env-file",
       "/fixture/fake.env"
     ],
-    "fields": []
+    "fields": [],
+    "binary": "rep-lab"
   },
   {
     "argv": [
       "jev",
       "status"
     ],
-    "fields": []
+    "fields": [],
+    "binary": "rep-lab"
   },
   {
     "argv": [

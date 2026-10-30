@@ -1,62 +1,15 @@
-# Repository Guidelines
+# Working on rep
 
-## Project Structure & Module Organization
-- `cmd/rep/main.go` is the CLI entry point; `cmd/rep-host/` is the native messaging host binary.
-- `internal/commands/` holds the Cobra command tree (one file per command) with its embedded `descriptions/` contracts.
-- `internal/` contains shared packages (`internal/store`, `internal/output`, `internal/noise`).
-- `scripts/` has build helpers (see `scripts/build_install.sh`).
-- `VERSION` defines the default CLI version.
+`cmd/rep` is the CLI; `cmd/rep-host` is the native messaging host. Cobra constructors live in `internal/commands`; shared state, output, bridge, headless and browser execution packages live under `internal/`. `VERSION` is the release version.
 
-## Available Commands (Minimal Set)
-- `setup <target>` - Initialize recon, extract tokens, set primary domains
-- `summary` - Traffic overview with domain breakdown
-- `primary <domain>` - Manage primary target domains
-- `list` - List requests for review
-- `mute <path>` - Mute specific endpoints
-- `js` - List all JavaScript files
-- `save` - Save current session with notes
+Read `rep --help` once before browser work. Use only the rep binary built for this checkout, first on PATH, and a private headless `REP_PROFILE` under private XDG data/runtime paths. Never drive the user's real browsers or another agent's tabs for development verification. Use rep for UI checks; do not substitute browser automation libraries or direct protocol scripts. Fixture servers bind port 0 and must be stopped, along with private browsers.
 
-## Build, Test, and Development Commands
-- `scripts/build_install.sh --host --install-dir ~/.local/bin`: build and install
-- `go build ./...`: quick compile check
-- `go run ./cmd/rep --help`: run CLI directly
+The grammar is verb first. Use `rep page URL`, returned tab/ref handles, and `rep do REF VALUE` for an action. Identity and browser are inferred; a deliberate `--task` override follows the verb. Same-session siblings share an identity and must use handles for isolation. Check `complete` and `page_state`; follow one returned `next` verbatim. A dispatched but unobserved action must be verified without repeating it.
 
-## Coding Style & Naming Conventions
-- Go formatting is standard `gofmt`; use tabs for indentation
-- New commands should live in `internal/commands/<name>.go` and register with Cobra in `init()`
-- Keep flags consistent with existing patterns (e.g., `--output`/`-o`, `--json`)
+Capture only when needed with `rep page URL --capture` or the action/eval capture switch. Inspect with `rep net`, then one `rep body h_ID`. Requests are bound to their archive; an empty task never falls back to unrelated captures. Preserve redaction before projection, explicit completeness, private artifact permissions and refusal to overwrite an existing body export. Only explicit body `--out` may export raw credential bytes.
 
-## Testing Guidelines
-- Run `go test ./...` before submitting changes
+Use `rep scope` for offline context, `rep tabs` for liveness and ownership, and `rep doctor` for repair. Preserve holder and execute-lease guards. Browser/profile accounts are not isolated by a task name; independent login state requires independent profiles.
 
-## Configuration & Native Host Tips
-- Native host writes live export to `~/.local/share/rep-cli/live.json`
-- Override with `REPLIVE_PATH` environment variable
-- Set `REP_KEEP_ON_DISCONNECT=1` to preserve `live.json` when extension disconnects
+Run `gofmt` on Go changes and `go test ./...`. Extension changes require its `npm test`; shared-client and companion changes require their Python suites. Keep core buildable with `CGO_ENABLED=0`; specialized features use the `replab` tag. Help is generated from Cobra metadata; maintain at most five local command flags, one inherited post-verb task flag, zero hidden flags, root help below 2 KB and compact verb help. The bounded UI-plan schema is the one verb-help exception.
 
-## Multi-agent browser work
-
-- Select a distinct workspace/task for each independent agent. Use explicit
-  `--workspace/--task` flags or process environment; run `rep scope -j` first.
-- Never interpret another site's shared capture as inability to access the
-  requested site. An empty scoped capture is `no_capture`; observe the authorized
-  site with a task-owned tab when the task requires it.
-- Use `rep summary --max-bytes 4096`, then `rep context --since CURSOR`; retain the
-  newest cursor and inspect omission counts. Fetch individual response bodies only
-  when needed. Do not load all archives or notes into context automatically.
-- `primary` filters are task-local. `--global` deliberately opens legacy shared
-  data; it is not a workaround for an empty task.
-- Browser cookies and tabs remain shared. Use explicit owned tab IDs. Independent
-  account state requires different browser profiles.
-- Full architecture and limits: `docs/agent-context.md`; command contracts:
-  `rep describe scope` and `rep describe summary`.
-
-- Diagnose large/missing bodies with `rep body ID --saved HASH --info` before
-  interpreting content. Require complete evidence when the task depends on it.
-  Use JSON pointers, SSE/NDJSON pages, byte ranges, or private artifacts; do not
-  dump a full large body or silently refetch to cover an incomplete observation.
-- Reuse `browser headless start` and `--browser headless` for a private persistent
-  task profile. `--headed` supports manual login only in that profile. Browser
-  evaluation results should stay small; archive-pinned artifacts carry bodies.
-- Read `docs/body-capture.md`, `rep describe body`, and `rep describe headless` for current
-  contracts. Body inline success output is bounded JSON, including --head.
+The source-contract scanner checks documented commands and executable argv. Keep examples in the final grammar, keep the three copies of the versioned skill identical, and remove dated migration-test entries as their shims disappear. Preserve unrelated changes and never install or publish as a side effect of tests.

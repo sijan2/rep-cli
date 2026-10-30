@@ -17,7 +17,7 @@ import (
 
 func newCoreReferenceCommand() *cobra.Command {
 	options := corePageOptions{Reference: true}
-	command := &cobra.Command{Use: "reference URL|TAB|p_CURSOR", Short: "Save content, layout, fonts, assets and a screenshot", Args: cobra.ExactArgs(1)}
+	command := &cobra.Command{Use: "reference URL|TAB|p_CURSOR", Short: "Save design evidence", Args: cobra.ExactArgs(1)}
 	command.Flags().StringVar(&options.Selector, "selector", "", "Focus one CSS selector or control reference")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := corePage(cmd, args, options); err != nil {

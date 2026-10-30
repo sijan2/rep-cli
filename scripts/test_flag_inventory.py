@@ -7,6 +7,35 @@ from flag_inventory import parse_help
 
 
 class FlagInventoryTests(unittest.TestCase):
+    def test_compact_contract_declares_task_once(self):
+        children, local, inherited = parse_help("""Usage:
+  rep VERB [POSITIONAL...] [--flag ...] [--task NAME]
+
+Commands:
+  page [TAB] [URL|/path|p_CURSOR]  Read a page
+  browser start [NAME] | stop  Manage the browser
+
+Task, browser and profile are inferred.
+""")
+        self.assertEqual(children, ["page", "browser"])
+        self.assertEqual(local, ["task"])
+        self.assertEqual(inherited, [])
+
+    def test_compact_local_flags_preserve_shorthands(self):
+        children, local, inherited = parse_help("""Usage:
+  rep fetch URL
+
+Make a request.
+
+Flags:
+  -X, --X string  Method
+  -H, --H stringArray  Header
+  -d, --d string  Body
+""")
+        self.assertEqual(children, [])
+        self.assertEqual(local, ["X", "H", "d"])
+        self.assertEqual(inherited, [])
+
     def test_long_help_fields_are_not_subcommands(self):
         children, local, inherited = parse_help("""Compute statistics.
 

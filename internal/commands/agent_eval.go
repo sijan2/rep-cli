@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/repplus/rep-cli/internal/agentstate"
+	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/scope"
@@ -44,7 +45,7 @@ func coreSource(command *cobra.Command, value string) (string, error) {
 func newCoreEvalCommand() *cobra.Command {
 	var capture bool
 	var timeout time.Duration
-	command := &cobra.Command{Use: "eval JS|@FILE [TAB]", Short: "Evaluate JavaScript with an execution lease; return its value", Args: cobra.RangeArgs(1, 2)}
+	command := &cobra.Command{Use: "eval JS|@FILE|@- [TAB]", Short: "Evaluate JavaScript", Args: cobra.RangeArgs(1, 2)}
 	command.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Execution deadline (1s–5m)")
 	command.Flags().BoolVar(&capture, "capture", false, "Record traffic triggered by the script")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
@@ -56,7 +57,7 @@ func newCoreEvalCommand() *cobra.Command {
 	return command
 }
 func newCoreCDPCommand() *cobra.Command {
-	command := &cobra.Command{Use: "cdp METHOD [JSON|@FILE] [TAB]", Short: "Run a journaled protocol call on an owned tab", Args: cobra.RangeArgs(1, 3)}
+	command := &cobra.Command{Use: "cdp METHOD [JSON|@FILE] [TAB]", Short: "Run a guarded protocol call", Args: cobra.RangeArgs(1, 3)}
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := coreEvaluate(cmd, args, 30*time.Second, true, false); err != nil {
 			return coreFailure(cmd, err)
@@ -197,6 +198,12 @@ func coreEvaluate(command *cobra.Command, args []string, timeout time.Duration, 
 	result.Untrusted = map[string]any{"url": tab.URL}
 	if err = session.Inspect(ctx, "", method, params, &wire); err != nil {
 		outcome = "outcome_unknown"
+		if bridge.PossibleDispatch(err) || bridge.BeforeDispatch(err) {
+			if bridge.BeforeDispatch(err) {
+				outcome = "not_dispatched"
+			}
+			return err
+		}
 		result.Status = "performed"
 		result.Next = coreNext("page", tab.Handle)
 		result.Meta = map[string]any{"operation": operation, "observation_error": "outcome_unknown; verify before continuing"}

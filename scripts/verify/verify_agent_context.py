@@ -13,6 +13,11 @@ directory under /tmp. The host and directory are removed on success or failure.
 
 from __future__ import annotations
 
+# Retired by the rep-lab migration; never dispatch legacy browser calls.
+if __name__ == "__main__":
+    raise SystemExit('Retired verifier: Ambient task/handle behavior is covered by the agentstate and command suites plus T11 acceptance. Run: go test ./internal/agentstate ./internal/commands. Historical source: git show f321b300d4e6af1f8e8d1297f490ffbd5a3a2561:scripts/verify/verify_agent_context.py; use only binaries from that commit in a separate private profile.')
+
+
 import concurrent.futures
 import json
 import os
