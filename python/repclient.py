@@ -2,7 +2,7 @@
 
 The caller owns task selection. Ambient REP_TASK is ignored unless explicitly
 requested; subprocess environment changes never mutate the parent environment.
-The legacy transport flags are confined here until migration step 9.
+JSON is the default transport; browser and task pins use the child environment.
 """
 import hashlib
 import json
@@ -49,12 +49,9 @@ class Client:
         arguments = list(arguments)
         if not arguments or arguments[0].startswith("-"):
             raise ValueError("rep client requires a verb first")
-        # Append pins after the verb but before --, where values become literal.
-        split = arguments.index("--") if "--" in arguments else len(arguments)
-        flags = ["--raw-json"]
-        if arguments[0] == "browser" and self.browser and "--browser" not in arguments:
-            flags += ["--browser", self.browser]
-        return [self.binary, *arguments[:split], *flags, *arguments[split:]]
+        # Identity and browser selection are already pinned in the environment.
+        # Preserve every caller argument, including the literal -- boundary.
+        return [self.binary, *arguments]
 
     def call(self, *arguments, timeout=60):
         try:
@@ -84,7 +81,7 @@ class Client:
 
 
 def evaluation_value(response):
-    """Decode the version-matched value; retain the staged legacy spelling."""
+    """Decode the version-matched value or its private artifact."""
     if response.get("error"):
         raise RepError(response["error"].get("code", "evaluation_exception"), "page evaluation failed")
     artifact = response.get("meta", {}).get("artifact")
@@ -96,7 +93,4 @@ def evaluation_value(response):
         return json.loads(path.read_text())
     if "untrusted" in response:
         return response["untrusted"].get("value")
-    result = response.get("result", {})
-    if result.get("exceptionDetails"):
-        raise RepError("evaluation_exception", "page evaluation threw an exception")
-    return result.get("result", {}).get("value")
+    raise RepError("invalid_output", "expected the version-matched eval result")
