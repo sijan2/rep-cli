@@ -105,6 +105,11 @@ func coreEvaluate(command *cobra.Command, args []string, timeout time.Duration, 
 		target = args[len(args)-1]
 		args = args[:len(args)-1]
 	}
+	// Scripts can mutate the page. Same-session siblings share an identity, so
+	// even a single current tab is not a safe implicit execution target.
+	if !protocol && target == "" && selected.TaskSource != "flag" && strings.HasPrefix(selected.SessionKey, "agent-") {
+		return agentstate.Failure("ambiguous_target", "address a tab before evaluating in a shared agent task", coreNext("tabs"))
+	}
 	operation := "eval"
 	if protocol {
 		operation = "cdp"
