@@ -104,3 +104,14 @@ func TestCoreOriginNormalizesBrowserOrigin(t *testing.T) {
 		}
 	}
 }
+
+func TestCoreReplayHeaderMutationReplacesCaseInsensitively(t *testing.T) {
+	source := &store.Request{Method: "GET", URL: "https://example.test/", Headers: store.HeaderMap{"X-Test": {"old"}}}
+	variants, _, err := coreReplayVariants(source, []string{"header.x-test=new"}, "", false)
+	if err != nil || variants[0].Headers["x-test"] != "new" || len(variants[0].Headers) != 1 {
+		t.Fatalf("%v %v", variants, err)
+	}
+	if source.Headers["X-Test"][0] != "old" {
+		t.Fatal("source headers mutated")
+	}
+}
