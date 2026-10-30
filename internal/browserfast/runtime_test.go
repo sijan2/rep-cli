@@ -5,6 +5,66 @@ import (
 	"testing"
 )
 
+// A populated sidebar must not make an empty application main ready. Exercise
+// hydration and a bounded continuation without launching a browser.
+func TestPageRendererWaitsForMainContentDespiteNavigation(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node is required to exercise the renderer")
+	}
+	script := `const assert=require('node:assert/strict');
+const fast=(` + renderer + `);
+global.location=new URL('https://example.test/thread');
+global.innerWidth=1200;global.innerHeight=800;
+global.getComputedStyle=()=>({display:'block',visibility:'visible'});
+global.crypto=require('node:crypto').webcrypto;
+function element(tag, label='') {
+  return {tagName:tag,innerText:label,labels:[],isConnected:true,href:'https://example.test/nav',
+    getAttribute(n){return n==='aria-label'?label:null;},closest(){return null;},
+    matches(s){return s==='button,a,summary,[role]' && tag==='A';},
+    getBoundingClientRect(){return {width:20,height:20,left:0,right:20,top:0,bottom:20};},
+    getRootNode(){return document;},contains(n){return n===this;}};
+}
+const main=element('MAIN'), nav=Array.from({length:17},(_,i)=>element('A','Navigation '+i));
+const spinner=element('DIV');let loading=true;
+main.contains=n=>n===main || n===spinner;
+global.document={readyState:'complete',title:'Thread',body:element('BODY','Navigation'),
+  querySelectorAll(s){
+    if(s==='*') return [main,...nav];
+    if(s==='main,[role="main"]') return [main];
+    if(s==='[aria-busy="true"],[role="progressbar"]') return loading?[spinner]:[];
+    if(s.startsWith('input')) return s.includes('a[href]')?nav:[];
+    return [];
+  }};
+(async()=>{
+  setTimeout(()=>{main.innerText='See new posts';},20);
+  setTimeout(()=>{main.innerText='The actual thread and its replies';loading=false;},120);
+  const hydrated=await fast({owner:'hydration',operation:'page',wait_ms:400,max_text:4096,limit:40});
+  assert.equal(hydrated.status,'ready');
+  assert.match(hydrated.text,/actual thread/,'sidebar controls must not bypass hydration');
+  assert.equal(hydrated.page_state.kind,'content');
+
+  main.innerText='';
+  const pending=await fast({owner:'hydration',operation:'page',wait_ms:10,max_text:4096,limit:1});
+  assert.equal(pending.status,'loading');
+  assert.equal(pending.page_state.kind,'loading');
+  assert.equal(pending.next_cursor,undefined,'an unfinished shell must not paginate stale controls');
+  assert.equal(pending.controls.length,1,'keep available controls for diagnosis');
+
+  main.innerText='No results';
+  const empty=await fast({owner:'hydration',operation:'page',wait_ms:400,max_text:4096,limit:40});
+  assert.equal(empty.status,'ready');
+  assert.equal(empty.text,'No results','an explicit empty state is content');
+
+  main.innerText='A populated conversation. '.repeat(20);loading=true;
+  const pagination=await fast({owner:'hydration',operation:'page',wait_ms:400,max_text:4096,limit:40});
+  assert.equal(pagination.status,'ready','loading more records does not erase existing content');
+  assert.equal(pagination.page_state.loading_indicators,1);
+})().catch(e=>{console.error(e);process.exitCode=1;});`
+	if out, err := exec.Command("node", "-e", script).CombinedOutput(); err != nil {
+		t.Fatalf("page hydration contract: %v\n%s", err, out)
+	}
+}
+
 // Exercise the shipped page renderer in one process so cursor state and exact
 // references are covered together with the aggregate wire-byte budget.
 func TestPageRendererBoundsControlsAndDegradesLargeDOMToPartial(t *testing.T) {

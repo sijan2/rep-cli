@@ -30,12 +30,18 @@ Truncated reads include an exact `next` command with `--cursor`. It returns the
 next slice of the same snapshot, preserving `observed_at`; it does not rescan
 and repeat the first controls. Cursors expire after two minutes and belong to
 one task and document. Changed controls fail and require a fresh page read.
-Supported chat pages get a bounded wait for visible UI during fades or startup;
-unready UI returns `loading` with an exact read continuation. An application
-shell with no text and at most three controls after a cold two-second read
-returns `loading` with code `awaiting_hydration` and a continuation whose
-longer budget waits for content; a long budget that still finds nothing is
-final. A read that fails with `page_changed` right after navigation is retried
+Page reads spend the available readiness budget waiting for main content; a
+sidebar full of controls does not establish that the main content has hydrated.
+Visible busy/progress indicators in a sparse main region keep it loading even
+when a small heading has appeared. These signals are heuristic: unmarked text
+loaders and visual-only applications can still need `state` and verification.
+Unready UI returns `loading` with code `awaiting_hydration` and an exact
+`page --tab ID --timeout 10s` continuation without reopening the URL. If that
+longer read is still loading, `next` asks for `state --tab ID` to distinguish
+slow hydration from an image-only view or a blocked page. Login, consent,
+challenge and error signals also return a state continuation. A timeout never
+proves that a page is empty. Explicit rendered empty states remain readable.
+A read that fails with `page_changed` right after navigation is retried
 once on the same tab (`rebound_after_url_change`), because applications such as
 Google Docs rewrite their URL after commit.
 Google Docs pages read the selected document tab through a same-session text
@@ -123,7 +129,7 @@ every site, whatever rendered it:
   totals and whether it happened after `DOMContentLoaded`. This is where the
   page's data comes from; capture one such request and replay it with
   `browser capture fanout`.
-- `page_state`: in-page signals (`kind`, hints, text characters, visible
+- `page_state`: in-page signals (`kind`, hints, text characters, loading indicators, visible
   controls, dialogs, password fields, new resources and mutations in a short
   window). `kind` is `content`, `loading`, `login`, `consent`, `challenge`,
   `rate_limited`, `error` or `empty`. For an ambiguous page, `rep browser state

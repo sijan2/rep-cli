@@ -215,6 +215,53 @@ func TestFastPagePartialWithoutCursorHasNoRetryLoop(t *testing.T) {
 	}
 }
 
+func TestFastPageStateContinuationStaysInOwnedTab(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, budget, wantStatus, wantNext string
+	}{
+		{"shell", "loading", "2s", "loading", "browser page --tab 7 --timeout 10s"},
+		{"unresolved", "loading", "10s", "loading", "browser state --tab 7"},
+		{"challenge", "challenge", "2s", "ready", "browser state --tab 7"},
+		{"login", "login", "2s", "ready", "browser state --tab 7"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fastTestScope(t)
+			evals := 0
+			caller := fastTestCaller(func(_ context.Context, method string, in, out any) error {
+				switch method {
+				case "browser.lease.acquire":
+					return fastTestDecode(out, `{"lease_id":"lease","generation":"generation"}`)
+				case "browser.lease.release":
+					return fastTestDecode(out, `{}`)
+				case "browser.cdp":
+					evals++
+					// Reproduce the contradictory live response, including a stale
+					// shell cursor that must not take precedence over readiness.
+					return fastTestDecode(out, `{"result":{"result":{"value":{"status":"ready","url":"https://example.test/thread","next_cursor":"p_shell","page_state":{"kind":"`+tc.kind+`"},"coverage":{"controls":17}}}}}`)
+				default:
+					t.Fatalf("read continuation attempted %s", method)
+					return nil
+				}
+			})
+			command := newBrowserPageCommand(jevDOMDependencies{browser: func(context.Context, string) (jevdom.Browser, error) { return caller, nil }})
+			addDecisionBrowserFlag(command)
+			var stdout bytes.Buffer
+			command.SetOut(&stdout)
+			command.SetArgs([]string{"--tab", "7", "--timeout", tc.budget})
+			if err := command.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			var result fastOutput
+			if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Status != tc.wantStatus || !strings.Contains(result.Next, tc.wantNext) || !strings.HasPrefix(result.Next, "rep --workspace fast-test --task action ") || result.NextCursor != "" || strings.Contains(result.Next, "https://") || evals != 1 {
+				t.Fatalf("wrong continuation: %s (evaluations=%d)", stdout.String(), evals)
+			}
+		})
+	}
+}
+
 func TestFastNavigationTimeoutRetainsTheAllocatedOwnedTab(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -298,7 +345,7 @@ func TestCloseTabGrammarNeverAcceptsPartialOrConflictingIDs(t *testing.T) {
 	}
 }
 
-func TestHydrationPendingOnlyForShortColdEmptyReads(t *testing.T) {
+func TestHydrationPendingUsesSignalsWithLegacyFallback(t *testing.T) {
 	empty := &browserfast.Result{Status: "ready"}
 	if !hydrationPending(empty, true, 2*time.Second) {
 		t.Fatal("a cold two-second read with nothing on the page is still loading")
@@ -317,6 +364,14 @@ func TestHydrationPendingOnlyForShortColdEmptyReads(t *testing.T) {
 	form := &browserfast.Result{Status: "ready", Controls: make([]browserfast.Control, 6)}
 	if hydrationPending(form, true, 2*time.Second) {
 		t.Fatal("several controls mean the page rendered even without main text")
+	}
+	form.PageState = json.RawMessage(`{"kind":"loading"}`)
+	if !hydrationPending(form, false, 10*time.Second) {
+		t.Fatal("sidebar controls and elapsed time must not override observed loading")
+	}
+	empty.PageState = json.RawMessage(`{"kind":"challenge"}`)
+	if hydrationPending(empty, true, 2*time.Second) {
+		t.Fatal("a challenge must not be treated as ordinary hydration")
 	}
 }
 

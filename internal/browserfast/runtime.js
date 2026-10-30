@@ -112,6 +112,8 @@ async function repFast(spec) {
   };
   // Cheap readiness and interruption signals. The decisive judgment for an
   // ambiguous page belongs to browser state, which can ask Jev about pixels.
+  const mainLoadingIndicators = main => query('[aria-busy="true"],[role="progressbar"]')
+    .filter(el=>visible(el) && (el===main || main?.contains(el))).length;
   const stateSignals = async windowMs => {
     let mutations=0;
     const observer=typeof MutationObserver==='function' && document.documentElement ? new MutationObserver(list=>{ mutations+=list.length; }) : null;
@@ -121,6 +123,7 @@ async function repFast(spec) {
     const after=entries('resource').length;
     const main=query('main,[role="main"]').filter(visible)[0] || document.body;
     const textChars=(main?.innerText || '').trim().length;
+    const loadingIndicators=mainLoadingIndicators(main);
     const controls=query('input,textarea,select,button,a[href],[role="button"],[role="tab"],[role="menuitem"]').filter(visible).length;
     const dialogs=query('[role="dialog"],[role="alertdialog"],dialog[open]').filter(visible).length;
     const password=query('input[type="password"]').filter(visible).length;
@@ -134,7 +137,9 @@ async function repFast(spec) {
     if (query('iframe[src*="captcha"],iframe[src*="challenges.cloudflare"],iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="arkoselabs"]').some(visible)) hints.push('captcha_frame');
     if (/\b(too many requests|rate limit|rate-limited)\b/.test(body)) hints.push('rate_limit_text');
     if (/^(404|403|500|error)\b|page not found|something went wrong|this page isn.?t working/.test(title) || /page not found|something went wrong|this page isn.?t working/.test(body.slice(0,600))) hints.push('error_text');
-    const busy=document.readyState==='loading' || (after>before && mutations>0 && textChars<200);
+    // Small headings can precede the content while a main-region spinner is
+    // active. A pagination spinner beneath substantial content is not a shell.
+    const busy=document.readyState==='loading' || ((loadingIndicators>0 || after>before && mutations>0) && textChars<200);
     const kind=hints.includes('captcha_frame') || hints.includes('challenge_text') ? 'challenge'
       : hints.includes('password_field') || (hints.includes('login_text') && controls<=12) ? 'login'
       : dialogs && hints.includes('consent_text') ? 'consent'
@@ -144,7 +149,7 @@ async function repFast(spec) {
       // so ("No results"). A shell with navigation but no text is still loading.
       : busy || textChars===0 ? 'loading'
       : 'content';
-    return {kind, hints, ready_state:document.readyState, text_chars:textChars, visible_controls:controls, dialogs, password_fields:password,
+    return {kind, hints, ready_state:document.readyState, text_chars:textChars, loading_indicators:loadingIndicators, visible_controls:controls, dialogs, password_fields:password,
       new_resources_in_window:after-before, mutations_in_window:mutations, window_ms:windowMs, basis:'in_page_signals'};
   };
   const stateKey = Symbol.for('rep.fast.v1');
@@ -232,23 +237,20 @@ async function repFast(spec) {
   try {
     if(spec.url && !sameDocument(location.href,spec.url)) fail('page_changed');
     if(spec.operation==='page') {
+      let awaitingChatUI=false, physics={};
       if(!spec.cursor) {
-        // An application shell before hydration has no readable text and only a
-        // few scaffold controls. Spend the readiness budget waiting for content
-        // instead of reporting an empty page as read; the caller decides whether
-        // an empty result after the budget is final or needs a longer read.
+        // Navigation can be fully interactive before the application's main
+        // content hydrates. Sidebar control counts do not establish readiness.
         const shell=()=>{
-          const controls=query('input,textarea,select,button,a[href],[role="button"],[role="menuitem"],[role="tab"]').filter(visible);
-          if(controls.length>3) return false;
           const main=query('main,[role="main"]').filter(visible)[0] || document.body;
-          return !(main?.innerText || '').trim();
+          const chars=(main?.innerText || '').trim().length;
+          return chars===0 || chars<200 && mainLoadingIndicators(main)>0;
         };
         const ready=await wait(()=>{
           const interactive=query('input,textarea,select,button,a[href],[role="button"],[role="menuitem"],[role="tab"]').some(visible);
           return {status:document.readyState==='loading' || chatSupported() && !interactive || shell() ? 'pending' : 'ready'};
         });
-        if(ready.status==='pending' && (document.readyState==='loading' || chatSupported())) return {status:'loading',url:location.href,title:document.title,
-          coverage:{scope:'top_document_and_open_shadow_roots',controls:0,text_source:'waiting_for_visible_ui',iframes:query('iframe').length}};
+        awaitingChatUI=ready.status==='pending' && chatSupported();
       }
       let page, controlOffset=0, textOffset=0;
       if(spec.cursor) {
@@ -257,6 +259,12 @@ async function repFast(spec) {
         ({page,controlOffset,textOffset}=slice);
         if(!sameDocument(page.url,location.href)) fail('page_snapshot_stale');
       } else {
+        // Measure before taking the text/control snapshot: hydration during the
+        // measurement must not leave us returning an older, empty snapshot.
+        const main=query('main,[role="main"]').filter(visible)[0] || document.body;
+        const settledLooking=document.readyState==='complete' && (main?.innerText || '').trim().length>0;
+        const pageState=await stateSignals(settledLooking ? 0 : 150);
+        physics={stack:fingerprint(),data_requests:dataRequests(),page_state:pageState};
         const all=query('input:not([type=hidden]):not([type=file]),textarea,select,button,a[href],summary,[role="button"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="option"],[role="checkbox"],[role="radio"],[role="tab"],[role="combobox"],[contenteditable="true"]').filter(visible);
         const overlays=query('[role="dialog"],[role="alertdialog"],[role="menu"]').filter(visible), overlay=overlays.at(-1);
         const composer=chatComposer();
@@ -271,7 +279,7 @@ async function repFast(spec) {
         const body=(documentContent ? documentContent.text : overlay ? overlay.innerText : chatSupported() && composer ? transcript.slice(-12).map(messageText).join('\n\n') : (mains.length===1 ? mains[0].innerText : document.body?.innerText)) || '';
         const contentMeta=documentContent ? {...documentContent} : null;
         if(contentMeta) {delete contentMeta.text; delete contentMeta.headings; delete contentMeta.links;}
-        page={url:location.href,title:document.title,at:Date.now(),status:document.readyState==='loading'?'loading':'ready',body:new TextEncoder().encode(body),
+        page={url:location.href,title:document.title,at:Date.now(),status:awaitingChatUI || pageState.kind==='loading'?'loading':'ready',body:new TextEncoder().encode(body),
           content:contentMeta,
           bindings:all.map(el=>({...binding(el),enabled:enabled(el),...(el.matches('input,textarea,select') && el.type!=='password' ? {has_value:!!el.value} : {})})),
           coverage:{scope:'top_document_and_open_shadow_roots',controls:all.length,offscreen_controls:all.filter(el=>!inViewport(el)).length,iframes:query('iframe').length,
@@ -302,12 +310,6 @@ async function repFast(spec) {
         nextCursor='p_'+crypto.randomUUID().replaceAll('-','');
         owner.pages.set(nextCursor,{page,controlOffset:controlOffset+controls.length,textOffset:end});
         while(owner.pages.size>8) owner.pages.delete(owner.pages.keys().next().value);
-      }
-      let physics={};
-      if(!spec.cursor) {
-        // Measure quiet only when the page looks unsettled; a settled page costs nothing extra.
-        const settledLooking=document.readyState==='complete' && page.body.length>0 && page.bindings.length>3;
-        physics={stack:fingerprint(),data_requests:dataRequests(),page_state:await stateSignals(settledLooking ? 0 : 150)};
       }
       return {status:page.status,url:page.url,title:page.title,text:new TextDecoder().decode(page.body.slice(textOffset,end)),controls,
         observed_at:new Date(page.at).toISOString(),next_cursor:nextCursor,content:page.content || undefined,...physics,

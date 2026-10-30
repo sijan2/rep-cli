@@ -225,12 +225,20 @@ func rebindAfterURLChange(ctx context.Context, session *browserfast.Session, res
 	return err
 }
 
-// hydrationPending marks a cold read that returned nothing as still loading, so
-// an agent re-reads with a longer budget instead of concluding the page is empty.
-// Only short budgets qualify; a long budget that still finds nothing is final.
+func fastPageStateKind(result *browserfast.Result) string {
+	var signals struct {
+		Kind string `json:"kind"`
+	}
+	_ = json.Unmarshal(result.PageState, &signals)
+	return signals.Kind
+}
+
+// Prefer the observed application state to control counts or elapsed time.
+// The older empty-shell heuristic is only a fallback when signals are absent.
 func hydrationPending(result *browserfast.Result, navigated bool, budget time.Duration) bool {
-	// An application shell before hydration has no text at all and at most a
-	// few scaffold controls (a skip link, a theme toggle). Real pages have text.
+	if kind := fastPageStateKind(result); kind != "" {
+		return result.Status == "ready" && kind == "loading"
+	}
 	return navigated && budget < 5*time.Second && result.Status == "ready" && len(result.Controls) <= 3 && strings.TrimSpace(result.Text) == ""
 }
 
@@ -253,6 +261,13 @@ func fastNext(command *cobra.Command, verb string, tab int, extra string) string
 		extra = " --browser " + shellQuote(browser) + extra
 	}
 	return fmt.Sprintf("%s browser %s --tab %d%s", prefix, verb, tab, extra)
+}
+
+func fastPageLoadingNext(command *cobra.Command, tab int, flags fastFlags) string {
+	if flags.timeout >= 5*time.Second {
+		return fastNext(command, "state", tab, "")
+	}
+	return fastNext(command, "page", tab, fmt.Sprintf(" --timeout 10s --max-text %d --limit %d", flags.maxText, flags.limit))
 }
 
 func newBrowserPageCommand(deps jevDOMDependencies) *cobra.Command {
@@ -295,12 +310,10 @@ func newBrowserPageCommand(deps jevDOMDependencies) *cobra.Command {
 			result.Next = fastNext(command, "page", session.Tab, "")
 		}
 		if err == nil {
-			// A quick read spends at most 400 ms on readiness; an explicit longer
-			// budget (the continuation after awaiting_hydration) waits for content.
+			// Spend the remaining caller budget on hydration rather than returning
+			// a shell after an arbitrary short wait and requiring another agent turn.
+			// Reserve time for the final snapshot and bridge response.
 			readinessMS := max(int64(0), time.Until(deadlineOrNow(ctx)).Milliseconds()-750)
-			if flags.timeout < 5*time.Second && readinessMS > 400 {
-				readinessMS = 400
-			}
 			read := func() (browserfast.Result, error) {
 				return session.Eval(ctx, browserfast.Spec{Operation: "page", MaxText: flags.maxText, Limit: flags.limit, Cursor: cursor, WaitMS: readinessMS, ReadMS: max(0, time.Until(deadlineOrNow(ctx)).Milliseconds()-250)})
 			}
@@ -308,15 +321,20 @@ func newBrowserPageCommand(deps jevDOMDependencies) *cobra.Command {
 			if rawURL != "" {
 				err = rebindAfterURLChange(ctx, session, &result, err, read)
 			}
-			if err == nil && hydrationPending(&result.Result, rawURL != "", flags.timeout) {
+			if err == nil && (result.Status == "loading" || hydrationPending(&result.Result, rawURL != "", flags.timeout)) {
 				result.Status, result.Code = "loading", "awaiting_hydration"
 			}
-			if result.NextCursor != "" {
+			kind := fastPageStateKind(&result.Result)
+			if err == nil && result.Status == "loading" {
+				result.NextCursor = ""
+				result.Next = fastPageLoadingNext(command, session.Tab, flags)
+			} else if err == nil && kind != "" && kind != "content" && kind != "empty" {
+				result.NextCursor = ""
+				result.Next = fastNext(command, "state", session.Tab, "")
+			} else if result.NextCursor != "" {
 				result.Next = fastNext(command, "page", session.Tab, fmt.Sprintf(" --cursor %s --limit %d --max-text %d", result.NextCursor, flags.limit, flags.maxText))
 			} else if err == nil && (result.Status == "ready" || result.Status == "partial") {
 				result.Next = ""
-			} else if result.Status == "loading" {
-				result.Next = fastNext(command, "page", session.Tab, fmt.Sprintf(" --timeout 10s --max-text %d --limit %d", flags.maxText, flags.limit))
 			}
 			if err == nil && (result.Status == "failed" || result.Status == "unconfirmed") {
 				err = errors.New(result.Code)
@@ -330,7 +348,7 @@ func newBrowserPageCommand(deps jevDOMDependencies) *cobra.Command {
 		}
 		if result.Tab >= 0 && fastReadPending(ctx, err) {
 			result.Status, result.Code, err = "loading", "observation_pending", nil
-			result.Next = fastNext(command, "page", result.Tab, fmt.Sprintf(" --timeout 10s --max-text %d --limit %d", flags.maxText, flags.limit))
+			result.Next = fastPageLoadingNext(command, result.Tab, flags)
 		}
 		return finishFast(command, result, record, started, err)
 	}
