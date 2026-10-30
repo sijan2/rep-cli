@@ -436,3 +436,22 @@ func TestCoreBodyCapturedStreamEventUsesPrivateBinaryArtifact(t *testing.T) {
 		t.Fatal("raw stream export not exact/private")
 	}
 }
+
+func TestCoreNetMissingCaptureNextAddressesOwnedTab(t *testing.T) {
+	capture, _ := netFixture(t, []store.Request{netRequest("/one", `{}`)})
+	index, _ := coreStore()
+	if err := index.Update(func(state *agentstate.State) error {
+		for id, entry := range state.Captures {
+			entry.Created = time.Now().Add(-11 * time.Minute)
+			state.Captures[id] = entry
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err := coreNet(&cobra.Command{Use: "net"}, nil)
+	problem, ok := err.(*agentstate.Error)
+	if !ok || problem.Code != "capture_required" || !strings.Contains(problem.Next, "rep page "+capture.Tab+" --capture --reload") {
+		t.Fatalf("capture hint omitted its safe explicit target: %v", err)
+	}
+}

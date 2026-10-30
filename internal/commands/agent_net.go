@@ -11,6 +11,7 @@ import (
 
 	"github.com/repplus/rep-cli/internal/agentstate"
 	"github.com/repplus/rep-cli/internal/output"
+	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/repplus/rep-cli/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -263,6 +264,24 @@ func coreNet(command *cobra.Command, args []string) error {
 	query.Now = now
 	capture, snapshot, err := loadCoreDataCapture(handle)
 	if err != nil {
+		if problem, ok := err.(*agentstate.Error); ok && problem.Code == "capture_required" {
+			selected, _ := scope.Current()
+			state, stateErr := index.Read()
+			if stateErr != nil {
+				return stateErr
+			}
+			candidates := []string{}
+			for _, tab := range state.Tabs {
+				if tab.Owner == selected.Identity() && !tab.Closed && tab.TransportOrigin == "" {
+					candidates = append(candidates, tab.Handle)
+				}
+			}
+			if len(candidates) == 1 {
+				problem.Next = coreNext("page", candidates[0], "--capture", "--reload")
+			} else {
+				problem.Next = coreNext("tabs")
+			}
+		}
 		return err
 	}
 	sourceDigest := coreDataDigest(snapshot)
