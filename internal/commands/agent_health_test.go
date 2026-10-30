@@ -203,7 +203,7 @@ func TestDoctorUnstartedPrivateProfileEmitsOneFailureObject(t *testing.T) {
 }
 
 func TestDoctorRealProfileReloadRequiresLiveStaleUnleasedBridge(t *testing.T) {
-	for _, scenario := range []string{"current", "stale", "capture", "lease", "offline"} {
+	for _, scenario := range []string{"current", "stale", "capture", "lease", "pending", "offline"} {
 		t.Run(scenario, func(t *testing.T) {
 			dir, err := os.MkdirTemp("", "doc-")
 			if err != nil {
@@ -258,6 +258,8 @@ func TestDoctorRealProfileReloadRequiresLiveStaleUnleasedBridge(t *testing.T) {
 									value = `{"active_captures":1}`
 								} else if scenario == "lease" {
 									value = `{"active_leases":1}`
+								} else if scenario == "pending" {
+									value = `{"pending_leases":1}`
 								} else {
 									value = `{"active_captures":0,"active_leases":0}`
 								}
@@ -283,7 +285,7 @@ func TestDoctorRealProfileReloadRequiresLiveStaleUnleasedBridge(t *testing.T) {
 			} else if reloads.Load() != 0 {
 				t.Fatal("unnecessary/unsafe reload")
 			}
-			if scenario == "capture" || scenario == "lease" {
+			if scenario == "capture" || scenario == "lease" || scenario == "pending" {
 				var problem *agentstate.Error
 				if !errors.As(err, &problem) || problem.Code != "browser_in_use" {
 					t.Fatalf("missing active-operation guard: %v", err)

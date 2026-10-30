@@ -271,14 +271,15 @@ func waitCoreReplacement(ctx context.Context, store *agentstate.Store, previous 
 }
 func coreReloadGuard(ctx context.Context, client *bridge.Client) error {
 	var status struct {
-		Active int `json:"active_captures"`
-		Queued int `json:"queued_captures"`
-		Leases int `json:"active_leases"`
+		Active  int `json:"active_captures"`
+		Queued  int `json:"queued_captures"`
+		Leases  int `json:"active_leases"`
+		Pending int `json:"pending_leases"`
 	}
 	if err := client.Call(ctx, "browser.status", nil, &status); err != nil {
 		return err
 	}
-	if status.Active > 0 || status.Queued > 0 || status.Leases > 0 {
+	if status.Active > 0 || status.Queued > 0 || status.Leases > 0 || status.Pending > 0 {
 		return agentstate.Failure("browser_in_use", "browser has an active capture or execution lease", coreNext("tabs"))
 	}
 	return nil
