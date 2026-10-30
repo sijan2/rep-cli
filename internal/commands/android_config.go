@@ -1,3 +1,5 @@
+//go:build replab
+
 package commands
 
 import (
@@ -451,15 +453,6 @@ func addPattern(pkg, pattern, patternType string) error {
 	}
 	fmt.Printf("Added %s pattern '%s' for %s\n", patternType, pattern, pkg)
 	return nil
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 func removeFromSlice(slice []string, item string) []string {

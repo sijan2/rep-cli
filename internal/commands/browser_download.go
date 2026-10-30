@@ -33,10 +33,6 @@ type browserDownloadOptions struct {
 	NoCache         bool
 	OmitCredentials bool
 	Validation      artifactValidationOptions
-	Client          *bridge.Client
-	Origin          string
-	OnCreate        func(int) error
-	OnClose         func(int)
 }
 
 type browserDownloadResult struct {
@@ -150,12 +146,9 @@ func downloadCapturedRequestInBrowser(ctx context.Context, req *store.Request, o
 
 	transferCtx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
-	client := opts.Client
-	if client == nil {
-		client, err = bridge.Select(transferCtx, browserSelector)
-		if err != nil {
-			return browserDownloadResult{}, fmt.Errorf("select browser bridge: %w", err)
-		}
+	client, err := bridge.Select(transferCtx, browserSelector)
+	if err != nil {
+		return browserDownloadResult{}, fmt.Errorf("select browser bridge: %w", err)
 	}
 
 	var created struct {
@@ -171,28 +164,12 @@ func downloadCapturedRequestInBrowser(ctx context.Context, req *store.Request, o
 		return browserDownloadResult{}, errors.New("browser create returned an invalid tab ID")
 	}
 	tabID := created.TabID
-	if opts.OnCreate != nil {
-		if err := opts.OnCreate(tabID); err != nil {
-			if cleanupBrowserDownload(client, tabID, "", false) == nil && opts.OnClose != nil {
-				opts.OnClose(tabID)
-			}
-			return browserDownloadResult{}, err
-		}
-	}
 	attached := false
 	streamHandle := ""
 	defer func() {
-		if tabID >= 0 && cleanupBrowserDownload(client, tabID, streamHandle, attached) == nil && opts.OnClose != nil {
-			opts.OnClose(tabID)
-		}
+		cleanupBrowserDownload(client, tabID, streamHandle, attached)
 	}()
 
-	if opts.Origin != "" {
-		var navigated any
-		if err := client.Call(transferCtx, "browser.navigate", map[string]any{"tab_id": tabID, "url": opts.Origin + "/", "wait": "load", "timeout_ms": opts.Timeout.Milliseconds(), "active": false}, &navigated); err != nil {
-			return browserDownloadResult{}, err
-		}
-	}
 	var attachResult map[string]interface{}
 	if err := client.Call(transferCtx, "browser.attach", map[string]interface{}{"tab_id": tabID}, &attachResult); err != nil {
 		return browserDownloadResult{}, err
@@ -310,9 +287,6 @@ func downloadCapturedRequestInBrowser(ctx context.Context, req *store.Request, o
 	downloadTabID := tabID
 	if err := cleanupBrowserDownload(client, tabID, streamHandle, attached); err != nil {
 		return browserDownloadResult{}, err
-	}
-	if opts.OnClose != nil {
-		opts.OnClose(tabID)
 	}
 	streamHandle = ""
 	attached = false

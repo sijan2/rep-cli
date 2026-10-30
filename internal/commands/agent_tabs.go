@@ -10,7 +10,7 @@ import (
 )
 
 func newCoreTabsCommand() *cobra.Command {
-	command := &cobra.Command{Use: "tabs", Short: "List tabs and ownership in the selected profile", Args: cobra.NoArgs}
+	command := &cobra.Command{Use: "tabs", Short: "List live tabs and owners", Args: cobra.NoArgs}
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		store, err := coreStore()
 		if err != nil {
@@ -78,7 +78,7 @@ func newCoreTabsCommand() *cobra.Command {
 	return command
 }
 func newCoreCloseCommand() *cobra.Command {
-	command := &cobra.Command{Use: "close [TAB]", Short: "Close an owned tab without affecting other tasks", Args: cobra.MaximumNArgs(1)}
+	command := &cobra.Command{Use: "close [TAB]", Short: "Close an owned tab", Args: cobra.MaximumNArgs(1)}
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := coreClose(cmd, args); err != nil {
 			return coreFailure(cmd, err)

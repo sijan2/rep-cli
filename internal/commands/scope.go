@@ -81,7 +81,7 @@ func inspectScopeBrowserProfiles(ctx context.Context, selected scope.Scope) scop
 }
 
 var scopeCmd = &cobra.Command{
-	Use: "scope", Short: "Show workspace/task data paths and browser profile isolation",
+	Use: "scope", Short: "Show offline task context",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		selected, err := scope.Current()

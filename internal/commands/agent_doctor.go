@@ -17,7 +17,7 @@ import (
 )
 
 func newCoreDoctorCommand() *cobra.Command {
-	command := &cobra.Command{Use: "doctor", Short: "Repair the selected browser bridge without interrupting other tasks", Args: cobra.NoArgs}
+	command := &cobra.Command{Use: "doctor", Short: "Repair the selected browser", Args: cobra.NoArgs}
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := coreDoctor(cmd); err != nil {
 			return coreFailure(cmd, err)

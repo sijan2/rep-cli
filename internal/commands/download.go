@@ -85,8 +85,8 @@ var (
 )
 
 var downloadCmd = &cobra.Command{
-	Use:   "download <request-id> <output-path>",
-	Short: "Replay a captured GET directly into an atomic file",
+	Use:   "download h_ID|URL PATH",
+	Short: "Save a file",
 	Long: `Download from a captured browser request without printing its URL,
 cookies, signed query, headers, or response body. rep feeds the request to curl
 through stdin, strips HTTP/2 pseudoheaders and Range by default, writes to a

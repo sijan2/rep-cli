@@ -60,7 +60,6 @@ func coreHasHandle(args []string) bool {
 	return false
 }
 func emitCore(command *cobra.Command, result coreResult) error {
-	attachCoreCapture(command, &result)
 	selected, _ := scope.Current()
 	result.Task, result.TaskSource = selected.Identity(), selected.TaskSource
 	if result.Untrusted != nil {
@@ -135,7 +134,7 @@ func invocationHandle(command *cobra.Command, args []string) string {
 		if strings.HasPrefix(candidate, "@") && len(args) > 1 {
 			candidate = args[len(args)-1]
 		}
-	case "page", "shot", "reference", "body", "close", "replay", "download":
+	case "page", "shot", "reference", "body", "close":
 		if len(args) > 0 {
 			candidate = args[0]
 		}

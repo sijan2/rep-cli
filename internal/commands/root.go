@@ -30,21 +30,7 @@ var rootCmd = &cobra.Command{
 	Short:         "Browser automation and captured-network analysis",
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	Long: `Rep drives browser workflows and preserves captured network evidence.
-
-Start with:
-  rep browser page <url>               Open, read, and get control references
-  rep browser reference <url>          Save content, CSS, fonts, assets and timings
-  rep browser do REF --tab ID --text TEXT  Fill an observed control
-  rep browser chat <url> --message TEXT   Send once and observe its reply
-  rep browser interact flow.json --tab ID --apply  Run a declared UI plan
-  rep browser capture open <url> --keep-tab  Navigate and capture
-  rep summary                         Inspect the current capture
-  rep describe browser                Full browser options and contracts
-
-Choose --workspace/--task or set REP_WORKSPACE/REP_TASK in the calling process.
-Dia is the default browser. --raw-json selects plain JSON by itself.
-Low-level controls and specialized tools remain available in the groups below.`,
+	Long:          "Read pages, act on observed controls, and inspect captured requests.",
 }
 
 func Execute() {
@@ -53,6 +39,7 @@ func Execute() {
 		os.Exit(2)
 	}
 	configureCommandGroups()
+	configureBuildHelp(rootCmd)
 	runStarted := trackRuns(rootCmd)
 	if command, err := rootCmd.ExecuteC(); err != nil {
 		// SilenceErrors keeps cobra from printing raw text; every error that a
@@ -63,6 +50,7 @@ func Execute() {
 }
 
 func init() {
+	configureContractHelp(rootCmd)
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 	rootCmd.PersistentFlags().StringVarP(&outputMode, "output", "o", "compact", "Output mode: compact, meta, full, json")

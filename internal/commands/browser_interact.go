@@ -192,8 +192,5 @@ func interactionSelection(decision jevdom.Result) browserflow.Selection {
 }
 func init() {
 	browserCmd.AddCommand(newInheritedBrowserInteractCommand(defaultJevDOMDependencies()))
-	legacy := newBrowserInteractCommand(defaultJevDOMDependencies())
-	legacy.Use = "act [plan.json] --tab ID"
-	legacy.Hidden = true
-	jevCmd.AddCommand(legacy)
+
 }

@@ -12,28 +12,31 @@ import (
 	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/browserflow"
-	"github.com/repplus/rep-cli/internal/browserrpc"
 	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/spf13/cobra"
 )
 
 func newCoreDoCommand() *cobra.Command {
-	var capture bool
 	var key string
 	var files []string
-	command := &cobra.Command{Use: "do REF [VALUE] | @PLAN [TAB]", Short: "Act and return verified changes and fresh controls", Args: cobra.RangeArgs(1, 33)}
+	command := &cobra.Command{Use: "do REF [VALUE] | @PLAN [TAB]", Short: "Act; return verified changes", Long: `REF clicks; VALUE fills, selects or checks. --press accepts chords/sequences.
+@PLAN or @- reads JSON; stops at the first failed step. Example:
+{"version":1,"url":"https://example.com/","steps":[{"id":"fill","action":"fill","target":{"name":"Search","role":"textbox"},"value":"query"}]}
+Actions: fill, replace, choose, check, click, press, wait. Target: name/role or
+selector. Click/press/wait require after:[{target:{selector},text|value|checked|
+visible|enabled|absent}] or after:[{url}]. Press uses keys:["Enter"].
+Replace requires old and value. See docs/interactions.md for the full schema.`, Args: cobra.RangeArgs(1, 33)}
 	command.Flags().StringVar(&key, "press", "", "Key, chord, or space-separated sequence after filling")
 	command.Flags().StringArrayVar(&files, "file", nil, "Upload a local file to the observed file input")
-	command.Flags().BoolVar(&capture, "capture", false, "Record traffic triggered by this action")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := coreDo(cmd, args, key, files, capture); err != nil {
+		if err := coreDo(cmd, args, key, files); err != nil {
 			return coreFailure(cmd, err)
 		}
 		return nil
 	}
 	return command
 }
-func coreDo(command *cobra.Command, args []string, key string, files []string, capture bool) error {
+func coreDo(command *cobra.Command, args []string, key string, files []string) error {
 	keys := []string{}
 	if key != "" {
 		keys = strings.FieldsFunc(key, func(r rune) bool { return r == ',' || r == ' ' })
@@ -145,13 +148,6 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 	if err = applyCoreViewport(ctx, store, tab, lease, session, ""); err != nil {
 		return err
 	}
-	if capture {
-		recording, e := beginCoreCapture(ctx, command, client, session, tab, tab.URL)
-		if e != nil {
-			return e
-		}
-		defer recording.finish()
-	}
 	before, err := session.Eval(ctx, browserfast.Spec{Operation: "page", Readable: true, MaxText: 8000, Limit: 40, WaitMS: 500, ReadMS: 1500})
 	if err != nil {
 		return err
@@ -160,15 +156,10 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 	verified := false
 	observationError := ""
 	if plan != nil {
-		var engineBrowser browserrpc.Caller = client
-		if capture {
-			engineBrowser = session.CaptureCaller()
-		} else {
-			_ = session.Close()
-			session = &browserfast.Session{Browser: client, Tab: tab.ChromeID, Owner: tab.Owner}
-			defer session.Close()
-		}
-		engine := browserflow.Engine{Browser: engineBrowser, Owner: tab.Owner}
+		_ = session.Close()
+		session = &browserfast.Session{Browser: client, Tab: tab.ChromeID, Owner: tab.Owner}
+		defer session.Close()
+		engine := browserflow.Engine{Browser: client, Owner: tab.Owner}
 		report, runErr := engine.Run(ctx, tab.ChromeID, *plan, true)
 		attempted := false
 		for _, step := range report.Steps {
@@ -182,11 +173,9 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 		}
 		verified = report.Status == "verified" || report.Status == "complete"
 		operation = "plan"
-		if !capture {
-			if err = session.Acquire(ctx); err != nil {
-				outcome = "performed"
-				return coreDoUnobserved(command, tab, operation, "plan dispatched; observation unavailable")
-			}
+		if err = session.Acquire(ctx); err != nil {
+			outcome = "performed"
+			return coreDoUnobserved(command, tab, operation, "plan dispatched; observation unavailable")
 		}
 	} else {
 		if before.Generation != reference.Generation {

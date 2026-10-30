@@ -114,24 +114,3 @@ func TestLifecycleCanStopEmptyFormerlySharedTask(t *testing.T) {
 		t.Fatalf("empty shared task kept a phantom holder: %v", err)
 	}
 }
-
-func TestTransportReservationHonorsLifecycleGuard(t *testing.T) {
-	s := &Store{Root: t.TempDir()}
-	browser := Browser{Name: "headless", Profile: "p", Epoch: "e", PrivateName: "fixture"}
-	id, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := s.ReserveTransport(browser, "fixture/a", "a", "https://fixture.test", time.Minute); err == nil {
-		t.Fatal("fetch/replay opened a tab during restart")
-	}
-	_ = s.EndLifecycle(browser, id, false)
-	tab, lease, err := s.ReserveTransport(browser, "fixture/a", "a", "https://fixture.test", time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute); err == nil {
-		t.Fatal("restart interrupted active transport")
-	}
-	_ = s.Release(tab.Handle, lease)
-}

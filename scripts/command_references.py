@@ -23,7 +23,7 @@ def tokens(text):
 
 
 def extract(root):
-    roots = [root / "docs", root / "skills", root / "scripts", root / "internal/commands",
+    roots = [root / "docs", root / "skills", root / ".agents/skills", root / ".claude/skills", root / "scripts", root / "internal/commands",
              root.parent / "rep-workspace/tools"]
     files = [root / "AGENTS.md", root / "README.md", root.parent / "rep-workspace/AGENTS.md",
              root.parent / "rep-workspace/README.md", root.parent / "rep-workspace/Makefile"]
@@ -35,30 +35,51 @@ def extract(root):
     for directory in (root.parent / "rep-workspace/tools/sitelearn", root.parent / "rep-workspace/tools/fbmp"):
         if directory.exists():
             files += [p for p in directory.iterdir() if p.is_file() and not p.suffix]
+    retired = set()
+    dispositions = root / "scripts/verify/dispositions.json"
+    if dispositions.exists():
+        retired = {row["file"] for row in json.loads(dispositions.read_text())["scripts"] if row["disposition"] == "retire"}
     rows, seen = [], set()
 
-    def add(path, line, argv, kind):
-        if argv and argv[0] == "rep":
-            argv = argv[1:]
+    def add(path, line, argv, kind, binary="rep"):
+        if argv and argv[0] in ("rep", "rep-lab"):
+            binary, argv = argv[0], argv[1:]
+        # During the staged migration old examples of moved commands are
+        # checked by the replab suite; their docs are rewritten in step 7.
+        lab_roots = {"android", "ig", "arc", "audit", "engine", "probe", "packets", "media", "jev", "locate", "element", "step", "state", "native-capture", "watch"}
+        lab_browser = {"locate", "element", "select", "select-batch", "observe", "validate", "step", "state", "native-capture", "watch"}
+        path_args, index = [], 0
+        while index < len(argv):
+            arg = argv[index]
+            if arg in ("--workspace", "--task", "--output", "-o", "--run", "--browser"):
+                index += 2
+                continue
+            if arg.startswith("-"):
+                index += 1
+                continue
+            path_args.append(arg)
+            index += 1
+        if path_args and (path_args[0] in lab_roots or (len(path_args) > 1 and path_args[0] == "browser" and path_args[1] in lab_browser)):
+            binary = "rep-lab"
         if not argv:
             return
         # Prose and Cobra placeholders do not promise an executable command.
-        if argv[0] in ("CLI", "drives", "supplies", "[command]"):
+        if argv[0] in ("CLI", "drives", "supplies", "[command]", "VERB"):
             return
         argv = [arg.rstrip("`,") for arg in argv]
         # A compact command-path alternative promises every named path.
         for index, arg in enumerate(argv[:3]):
             if re.fullmatch(r"[a-z-]+(?:[|/][a-z-]+)+", arg):
                 for choice in re.split(r"[|/]", arg):
-                    add(path, line, argv[:index] + [choice] + argv[index+1:], kind)
+                    add(path, line, argv[:index] + [choice] + argv[index+1:], kind, binary)
                 return
-        key = (str(path.relative_to(root.parent)), line, tuple(argv))
+        key = (str(path.relative_to(root.parent)), line, binary, tuple(argv))
         if key not in seen:
             seen.add(key)
-            rows.append({"file": key[0], "line": line, "argv": argv, "kind": kind})
+            rows.append({"file": key[0], "line": line, "argv": argv, "kind": kind, "binary": binary})
 
     for path in sorted(set(files)):
-        if not path.exists() or path.name == Path(__file__).name:
+        if not path.exists() or path.name == Path(__file__).name or (path.parent == root / "scripts/verify" and path.name in retired):
             continue
         source = path.read_text()
         if path.suffix == ".py" or (not path.suffix and source.startswith("#!/usr/bin/env python")):
@@ -76,7 +97,7 @@ def extract(root):
                             parts = node.args[2:]  # wrapper's first two args are scope
                 if isinstance(node, (ast.List, ast.Tuple)) and node.elts:
                     first = node.elts[0]
-                    if isinstance(first, ast.Constant) and first.value in ("rep", "browser", "body", "list", "detail", "summary", "jev", "scope"):
+                    if isinstance(first, ast.Constant) and first.value in ("rep", "rep-lab", "browser", "body", "list", "detail", "summary", "jev", "scope"):
                         parts = node.elts
                 if parts:
                     add(path, node.lineno, [x.value if isinstance(x, ast.Constant) and isinstance(x.value, str) else "VALUE" for x in parts], "argv")
@@ -84,14 +105,14 @@ def extract(root):
         # metacharacter inside an argument. Multi-line code blocks are scanned
         # separately as command lines. Plain prose is deliberately not a call.
         for number, line in enumerate(source.splitlines(), 1):
-            for match in re.finditer(r'`(rep(?:\s+[^`\n]*)?)`', line):
+            for match in re.finditer(r'`(rep(?:-lab)?(?:\s+[^`\n]*)?)`', line):
                 add(path, number, tokens(match.group(1)), "example")
             stripped = line.strip().lstrip("$ ")
             stripped = re.split(r"\s{2,}(?=[A-Z])", stripped)[0]
-            if (path.suffix in (".md", ".sh", ".go") or path.name == "Makefile") and (stripped.startswith("rep ") or stripped == "rep"):
+            if (path.suffix in (".md", ".sh", ".go") or path.name == "Makefile") and (stripped.startswith(("rep ", "rep-lab ")) or stripped in ("rep", "rep-lab")):
                 add(path, number, tokens(stripped), "example")
             if path.suffix in (".go", ".js", ".mjs"):
-                for match in re.finditer(r'"(rep [^"\n]+)"', line):
+                for match in re.finditer(r'"(rep(?:-lab)? [^"\n]+)"', line):
                     add(path, number, tokens(match.group(1)), "hint")
     return sorted(rows, key=lambda row: (row["file"], row["line"], row["argv"]))
 

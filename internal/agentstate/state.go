@@ -52,24 +52,23 @@ type Ref struct {
 	At         time.Time `json:"at"`
 }
 type Tab struct {
-	TransportOrigin string         `json:"transport_origin,omitempty"`
-	Handle          string         `json:"handle"`
-	Browser         Browser        `json:"browser"`
-	ChromeID        int            `json:"chrome_id"`
-	Owner           string         `json:"owner"`
-	Session         string         `json:"session,omitempty"`
-	Created         time.Time      `json:"created"`
-	LastUsed        time.Time      `json:"last_used"`
-	CreatedByRep    bool           `json:"created_by_rep"`
-	Closed          bool           `json:"closed,omitempty"`
-	URL             string         `json:"url,omitempty"`
-	Generation      string         `json:"generation,omitempty"`
-	NextRef         uint64         `json:"next_ref"`
-	Refs            map[string]Ref `json:"refs,omitempty"`
-	Lease           *Lease         `json:"lease,omitempty"`
-	Viewport        string         `json:"viewport,omitempty"`
-	HasInput        bool           `json:"has_input,omitempty"`
-	Dialog          bool           `json:"dialog,omitempty"`
+	Handle       string         `json:"handle"`
+	Browser      Browser        `json:"browser"`
+	ChromeID     int            `json:"chrome_id"`
+	Owner        string         `json:"owner"`
+	Session      string         `json:"session,omitempty"`
+	Created      time.Time      `json:"created"`
+	LastUsed     time.Time      `json:"last_used"`
+	CreatedByRep bool           `json:"created_by_rep"`
+	Closed       bool           `json:"closed,omitempty"`
+	URL          string         `json:"url,omitempty"`
+	Generation   string         `json:"generation,omitempty"`
+	NextRef      uint64         `json:"next_ref"`
+	Refs         map[string]Ref `json:"refs,omitempty"`
+	Lease        *Lease         `json:"lease,omitempty"`
+	Viewport     string         `json:"viewport,omitempty"`
+	HasInput     bool           `json:"has_input,omitempty"`
+	Dialog       bool           `json:"dialog,omitempty"`
 }
 
 func (t *Tab) Busy(now time.Time) bool { return t.Lease != nil && t.Lease.Until.After(now) }
@@ -92,7 +91,6 @@ type Cursor struct {
 	Source   string    `json:"source,omitempty"`
 }
 type Capture struct {
-	Browser Browser   `json:"browser"`
 	ID      string    `json:"id"`
 	Owner   string    `json:"owner"`
 	Archive string    `json:"archive"`
@@ -368,7 +366,7 @@ func (s *Store) Reserve(browser Browser, owner, session, explicit string, pinned
 		} else {
 			var candidates []*Tab
 			for _, tab := range state.Tabs {
-				if tab.Owner == owner && !tab.Closed && sameBrowser(tab.Browser, browser) && tab.TransportOrigin == "" {
+				if tab.Owner == owner && !tab.Closed && sameBrowser(tab.Browser, browser) {
 					candidates = append(candidates, tab)
 				}
 			}
@@ -406,14 +404,9 @@ func (s *Store) Reserve(browser Browser, owner, session, explicit string, pinned
 				}
 			}
 			if result == nil {
-				count := 0
-				for _, t := range state.Tabs {
-					if t.Owner == owner && !t.Closed && sameBrowser(t.Browser, browser) {
-						count++
-					}
-				}
-				if count >= TabCap {
-					return Failure("tab_cap", "task tab cap reached; close an idle tab", "rep tabs")
+				if len(candidates) >= TabCap {
+					oldest := candidates[len(candidates)-1]
+					return Failure("tab_cap", "task tab cap reached; close an idle tab", "rep close "+oldest.Handle)
 				}
 				state.NextTab++
 				result = &Tab{Handle: fmt.Sprintf("t%d", state.NextTab), Browser: browser, ChromeID: -1, Owner: owner, Session: session, Created: now, CreatedByRep: true, Refs: map[string]Ref{}}

@@ -1,3 +1,5 @@
+//go:build replab
+
 package commands
 
 import (
@@ -48,16 +50,6 @@ type locateViewport struct {
 	ScrollX          float64 `json:"scroll_x"`
 	ScrollY          float64 `json:"scroll_y"`
 	DevicePixelRatio float64 `json:"device_pixel_ratio"`
-}
-
-type locateScreenshot struct {
-	Path           string  `json:"path"`
-	Width          int     `json:"width"`
-	Height         int     `json:"height"`
-	Bytes          int     `json:"bytes"`
-	SHA256         string  `json:"sha256"`
-	PixelsPerCSSPx float64 `json:"pixels_per_css_px"`
-	Scope          string  `json:"scope"`
 }
 
 type locateBox struct {
