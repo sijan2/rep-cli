@@ -27,7 +27,11 @@ async function repReference(spec) {
 	  await new Promise(resolve => setTimeout(resolve, Math.min(50, remaining)));
 	}
     let focus = null;
-    if (spec.selector) {
+    if (spec.selector?.startsWith('e_')) {
+      const bound=globalThis[Symbol.for('rep.fast.v1')]?.owners?.get(spec.owner)?.refs?.get(spec.selector);
+      if (!bound || !bound.el.isConnected || Date.now()-bound.at>120000 || bound.generation!==performance.timeOrigin) return {status:'failed',code:'reference_stale',url:pageURL};
+      focus=bound.el;
+    } else if (spec.selector) {
       let matches;
       try { matches = document.querySelectorAll(spec.selector); } catch { return {status: 'failed', code: 'invalid_selector', url: pageURL}; }
       if (matches.length !== 1) return {status: 'failed', code: matches.length ? 'selector_ambiguous' : 'selector_not_found', url: pageURL};

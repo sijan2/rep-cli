@@ -85,7 +85,9 @@ func TestSavedReferenceOversizedRecordPointsToExactArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Reference) > 16384 || !strings.Contains(string(result.Reference), "record_exceeds_inline_budget") || !strings.Contains(string(result.Reference), "snapshot.json") || !strings.Contains(result.Next, "--offset 1") {
+	registry, _ := coreStore()
+	cursor, cursorErr := registry.Cursor(strings.Fields(result.Next)[2])
+	if len(result.Reference) > 16384 || !strings.Contains(string(result.Reference), "record_exceeds_inline_budget") || !strings.Contains(string(result.Reference), "snapshot.json") || cursorErr != nil || cursor.Offset != 1 || cursor.Section != "styles" {
 		t.Fatalf("oversized row was silently truncated or blocked progress: %s; %s", result.Reference, result.Next)
 	}
 	if _, err := referenceProjection(command, archive, "", "unknown", 0, fastFlags{}); err == nil {
@@ -251,7 +253,7 @@ func TestReferenceMathConnectsAuthoredCandidateToMeasuredBox(t *testing.T) {
 	}
 }
 
-func TestReferencePendingPreservesFocusedReadAndImagePreference(t *testing.T) {
+func TestReferencePendingStoresFocusAndBudgetInOpaqueCursor(t *testing.T) {
 	fastTestScope(t)
 	command := newBrowserReferenceCommand(jevDOMDependencies{})
 	addDecisionBrowserFlag(command)
@@ -259,7 +261,13 @@ func TestReferencePendingPreservesFocusedReadAndImagePreference(t *testing.T) {
 	_ = command.Flags().Set("max-text", "512")
 	_ = command.Flags().Set("limit", "7")
 	next := referenceResume(command, 7, selector, false)
-	if !strings.Contains(next, "--tab 7") || !strings.Contains(next, "--selector "+shellQuote(selector)) || !strings.Contains(next, "--screenshot=false") || !strings.Contains(next, "--timeout 10s") || !strings.Contains(next, "--max-text 512 --limit 7") {
-		t.Fatalf("pending continuation lost the requested scope: %s", next)
+	if !strings.HasPrefix(next, "rep reference p_") || strings.Contains(next, selector) || strings.Contains(next, "--timeout") || strings.Contains(next, "--max-text") {
+		t.Fatalf("unsafe continuation: %s", next)
 	}
+	registry, _ := coreStore()
+	cursor, err := registry.Cursor(strings.Fields(next)[2])
+	if err != nil || cursor.Selector != selector || cursor.Budget != 512 || cursor.Kind != "reference-loading" {
+		t.Fatalf("cursor lost requested focus: %+v %v", cursor, err)
+	}
+
 }

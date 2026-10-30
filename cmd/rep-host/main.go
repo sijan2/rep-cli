@@ -55,6 +55,9 @@ type Message struct {
 	BrowserLabel     string           `json:"browser_label,omitempty"`
 	ExtensionID      string           `json:"extension_id,omitempty"`
 	ExtensionVersion string           `json:"extension_version,omitempty"`
+	ProfileID        string           `json:"profile_id,omitempty"`
+	BrowserEpoch     string           `json:"browser_epoch,omitempty"`
+	BuildDigest      string           `json:"build_digest,omitempty"`
 	UserAgent        string           `json:"user_agent,omitempty"`
 	CaptureMode      string           `json:"capture_mode,omitempty"`
 	TimedOut         bool             `json:"timed_out,omitempty"`
@@ -101,6 +104,9 @@ type RPCResponse struct {
 }
 
 type Registry struct {
+	ProfileID    string `json:"profile_id,omitempty"`
+	Epoch        string `json:"browser_epoch,omitempty"`
+	BuildDigest  string `json:"build_digest,omitempty"`
 	PID          int    `json:"pid"`
 	ParentPID    int    `json:"parent_pid,omitempty"`
 	Browser      string `json:"browser"`
@@ -973,6 +979,9 @@ func (server *bridgeServer) Touch(message *Message) {
 		}
 		server.registry.ExtensionID = message.ExtensionID
 		server.registry.ExtensionVer = message.ExtensionVersion
+		server.registry.ProfileID = message.ProfileID
+		server.registry.Epoch = message.BrowserEpoch
+		server.registry.BuildDigest = message.BuildDigest
 		server.registry.UserAgent = message.UserAgent
 		persist = true
 	}

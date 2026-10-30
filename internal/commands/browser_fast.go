@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/repplus/rep-cli/internal/agentstate"
 	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/browserflow"
@@ -193,6 +193,11 @@ func fastSessionWithWait(ctx context.Context, browser browserrpc.Caller, owner, 
 		}
 	}
 	session.Tab = tab
+	if client, ok := browser.(*bridge.Client); ok && client.Registry.ProfileID != "" {
+		if _, err := registerLegacyTab(client, tab, created); err != nil {
+			return session, created, err
+		}
+	}
 	if err := session.Acquire(ctx); err != nil {
 		return session, created, err
 	}
@@ -254,20 +259,79 @@ func fastReadPending(ctx context.Context, err error) bool {
 		errors.As(err, &transport) && transport.Timeout() || errors.As(err, &rpc) && (rpc.Code == "navigation_timeout" || rpc.Code == "lease_acquisition_expired")
 }
 
-func fastNext(command *cobra.Command, verb string, tab int, extra string) string {
+func legacyHandle(command *cobra.Command, chromeID int) *agentstate.Tab {
+	registry, err := coreStore()
+	if err != nil {
+		return nil
+	}
+	state, err := registry.Read()
+	if err != nil {
+		return nil
+	}
 	selected, _ := scope.Current()
-	prefix := fmt.Sprintf("rep --workspace %s --task %s", selected.Workspace, selected.Task)
-	if browser := decisionBrowserName(command); browser != defaultBrowser {
-		extra = " --browser " + shellQuote(browser) + extra
+	name := decisionBrowserName(command)
+	var match *agentstate.Tab
+	for _, tab := range state.Tabs {
+		if tab.Owner == selected.Identity() && !tab.Closed && tab.ChromeID == chromeID && (name == "any" || tab.Browser.Name == name) {
+			if match != nil {
+				return nil
+			}
+			match = tab
+		}
 	}
-	return fmt.Sprintf("%s browser %s --tab %d%s", prefix, verb, tab, extra)
+	return match
 }
-
-func fastPageLoadingNext(command *cobra.Command, tab int, flags fastFlags) string {
-	if flags.timeout >= 5*time.Second {
-		return fastNext(command, "state", tab, "")
+func fastNext(command *cobra.Command, verb string, tab int, extra string) string {
+	owned := legacyHandle(command, tab)
+	if owned == nil {
+		return coreNext("tabs")
 	}
-	return fastNext(command, "page", tab, fmt.Sprintf(" --timeout 10s --max-text %d --limit %d", flags.maxText, flags.limit))
+	switch verb {
+	case "state", "screenshot":
+		verb = "shot"
+	case "page", "do":
+	default:
+		verb = "page"
+	}
+	return coreNext(verb, owned.Handle)
+}
+func fastPageLoadingNext(command *cobra.Command, tab int, flags fastFlags) string {
+	owned := legacyHandle(command, tab)
+	if owned == nil {
+		return coreNext("tabs")
+	}
+	if flags.timeout >= 5*time.Second {
+		return coreNext("shot", owned.Handle)
+	}
+	registry, err := coreStore()
+	if err != nil {
+		return coreNext("page", owned.Handle)
+	}
+	cursor, err := registry.SaveCursor(agentstate.Cursor{Tab: owned.Handle, Owner: owned.Owner, Kind: "loading", Budget: flags.maxText})
+	if err != nil {
+		return coreNext("page", owned.Handle)
+	}
+	return coreNext("page", cursor)
+}
+func fastPageContinuation(command *cobra.Command, tab int, flags fastFlags, result browserfast.Result) string {
+	owned := legacyHandle(command, tab)
+	if owned == nil {
+		return coreNext("tabs")
+	}
+	registry, err := coreStore()
+	if err != nil {
+		return coreNext("page", owned.Handle)
+	}
+	var coverage struct {
+		Text     int `json:"text_offset"`
+		Controls int `json:"control_offset"`
+	}
+	_ = json.Unmarshal(result.Coverage, &coverage)
+	cursor, err := registry.SaveCursor(agentstate.Cursor{Tab: owned.Handle, Owner: owned.Owner, Kind: "page", URL: result.URL, Digest: result.ContentHash, Offset: coverage.Text + len(result.Text), Controls: coverage.Controls + len(result.Controls), Budget: flags.maxText})
+	if err != nil {
+		return coreNext("page", owned.Handle)
+	}
+	return coreNext("page", cursor)
 }
 
 func newBrowserPageCommand(deps jevDOMDependencies) *cobra.Command {
@@ -332,7 +396,7 @@ func newBrowserPageCommand(deps jevDOMDependencies) *cobra.Command {
 				result.NextCursor = ""
 				result.Next = fastNext(command, "state", session.Tab, "")
 			} else if result.NextCursor != "" {
-				result.Next = fastNext(command, "page", session.Tab, fmt.Sprintf(" --cursor %s --limit %d --max-text %d", result.NextCursor, flags.limit, flags.maxText))
+				result.Next = fastPageContinuation(command, session.Tab, flags, result.Result)
 			} else if err == nil && (result.Status == "ready" || result.Status == "partial") {
 				result.Next = ""
 			}

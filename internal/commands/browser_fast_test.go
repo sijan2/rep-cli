@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/repplus/rep-cli/internal/agentstate"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/jevdom"
 	"github.com/repplus/rep-cli/internal/output"
@@ -24,11 +25,17 @@ func fastTestDecode(out any, value string) error { return json.Unmarshal([]byte(
 
 func fastTestScope(t *testing.T) {
 	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	_, err := scope.Configure(scope.Options{Workspace: "fast-test", Task: "action", WorkspaceSet: true, TaskSet: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = scope.Configure(scope.Options{}) })
+	t.Cleanup(scope.Reset)
+	registry, _ := coreStore()
+	_, err = registry.Register(agentstate.Browser{Name: defaultBrowser, Profile: "fixture", Epoch: "fixture"}, 7, "fast-test/action", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
 	previous := rawJSON
 	rawJSON = true
 	t.Cleanup(func() { rawJSON = previous })
@@ -219,10 +226,10 @@ func TestFastPageStateContinuationStaysInOwnedTab(t *testing.T) {
 	for _, tc := range []struct {
 		name, kind, budget, wantStatus, wantNext string
 	}{
-		{"shell", "loading", "2s", "loading", "browser page --tab 7 --timeout 10s"},
-		{"unresolved", "loading", "10s", "loading", "browser state --tab 7"},
-		{"challenge", "challenge", "2s", "ready", "browser state --tab 7"},
-		{"login", "login", "2s", "ready", "browser state --tab 7"},
+		{"shell", "loading", "2s", "loading", "rep page p_"},
+		{"unresolved", "loading", "10s", "loading", "rep shot t1"},
+		{"challenge", "challenge", "2s", "ready", "rep shot t1"},
+		{"login", "login", "2s", "ready", "rep shot t1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fastTestScope(t)
@@ -255,7 +262,7 @@ func TestFastPageStateContinuationStaysInOwnedTab(t *testing.T) {
 			if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 				t.Fatal(err)
 			}
-			if result.Status != tc.wantStatus || !strings.Contains(result.Next, tc.wantNext) || !strings.HasPrefix(result.Next, "rep --workspace fast-test --task action ") || result.NextCursor != "" || strings.Contains(result.Next, "https://") || evals != 1 {
+			if result.Status != tc.wantStatus || !strings.Contains(result.Next, tc.wantNext) || !strings.HasSuffix(result.Next, " --task fast-test/action") || result.NextCursor != "" || strings.Contains(result.Next, "https://") || evals != 1 {
 				t.Fatalf("wrong continuation: %s (evaluations=%d)", stdout.String(), evals)
 			}
 		})

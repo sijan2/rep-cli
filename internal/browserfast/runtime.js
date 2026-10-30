@@ -160,11 +160,12 @@ async function repFast(spec) {
   }
   const owner = state.owners.get(spec.owner);
   owner.pages ||= new Map();
-  const binding = el => ({el,parent:el.parentNode,url:location.href,name:name(el),role:role(el),type:el.getAttribute('type') || '',href:el.getAttribute('href') || '',at:Date.now()});
+  const rowContext = el => norm(el.closest('tr,li,[role="row"],[role="listitem"]')?.innerText || '').slice(0,512);
+  const binding = el => ({el,parent:el.parentNode,generation:performance.timeOrigin,context:rowContext(el),url:location.href,name:name(el),role:role(el),type:el.getAttribute('type') || '',href:el.getAttribute('href') || '',at:Date.now()});
   // Applications rewrite the query and fragment (tabs, filters, scroll state);
   // the same origin and path is the same document for a reference.
   const sameDocument = (a,b) => { try { const x=new URL(a), y=new URL(b); return x.origin===y.origin && x.pathname===y.pathname; } catch(_) { return a===b; } };
-  const unchanged = bound => sameDocument(bound.url,location.href) && bound.el.isConnected && bound.parent===bound.el.parentNode &&
+  const unchanged = bound => bound.generation===performance.timeOrigin && bound.context===rowContext(bound.el) && sameDocument(bound.url,location.href) && bound.el.isConnected && bound.parent===bound.el.parentNode &&
     bound.name===name(bound.el) && bound.role===role(bound.el) && bound.type===(bound.el.getAttribute('type') || '') && bound.href===(bound.el.getAttribute('href') || '');
   const remember = el => {
     const ref = 'e_' + crypto.randomUUID().replaceAll('-','');
@@ -252,7 +253,7 @@ async function repFast(spec) {
         });
         awaitingChatUI=ready.status==='pending' && chatSupported();
       }
-      let page, controlOffset=0, textOffset=0;
+      let page, controlOffset=Math.max(0,spec.control_offset || 0), textOffset=Math.max(0,spec.text_offset || 0);
       if(spec.cursor) {
         const slice=owner.pages.get(spec.cursor);
         if(!slice || Date.now()-slice.page.at>120000) fail('page_cursor_expired');
@@ -291,6 +292,8 @@ async function repFast(spec) {
         if(documentContent?.status==='unavailable' || documentContent?.status==='partial') page.status='partial';
         if((domScan.limited || domScan.shadowLimited) && page.status!=='loading') page.status='partial';
       }
+      textOffset=Math.min(textOffset,page.body.length);
+      controlOffset=Math.min(controlOffset,page.bindings.length);
       const selected=page.bindings.slice(controlOffset,controlOffset+spec.limit);
       if(selected.some(bound=>!unchanged(bound) || !visible(bound.el))) fail('page_snapshot_stale');
       const controls=[];let controlBytes=2, controlsLimitedByBytes=false;
@@ -311,7 +314,8 @@ async function repFast(spec) {
         owner.pages.set(nextCursor,{page,controlOffset:controlOffset+controls.length,textOffset:end});
         while(owner.pages.size>8) owner.pages.delete(owner.pages.keys().next().value);
       }
-      return {status:page.status,url:page.url,title:page.title,text:new TextDecoder().decode(page.body.slice(textOffset,end)),controls,
+      const contentHash=globalThis.crypto?.subtle ? [...new Uint8Array(await crypto.subtle.digest('SHA-256',page.body))].map(x=>x.toString(16).padStart(2,'0')).join('') : String(page.body.length);
+      return {status:page.status,generation:String(performance.timeOrigin),content_hash:contentHash,url:page.url,title:page.title,text:new TextDecoder().decode(page.body.slice(textOffset,end)),controls,
         observed_at:new Date(page.at).toISOString(),next_cursor:nextCursor,content:page.content || undefined,...physics,
         coverage:{...page.coverage,read:spec.cursor?'snapshot_continuation':'live',control_offset:controlOffset,text_offset:textOffset,
           omitted_controls:Math.max(0,page.bindings.length-controls.length),remaining_controls:remainingControls,

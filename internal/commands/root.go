@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/pterm/pterm"
+	"github.com/repplus/rep-cli/internal/agentstate"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/spf13/cobra"
@@ -81,7 +82,10 @@ func init() {
 		if !term.IsTerminal(int(os.Stdout.Fd())) || noColor || os.Getenv("NO_COLOR") != "" {
 			pterm.DisableColor()
 		}
-		if err := configureInvocationScope(cmd); err != nil {
+		if err := configureInvocationScope(cmd, args...); err != nil {
+			if _, ok := err.(*agentstate.Error); ok {
+				return coreFailure(cmd, err)
+			}
 			ae, ok := err.(output.AgentError)
 			if !ok {
 				ae = output.NewAgentError(output.ErrCodeInvalidArgument, cmd.CommandPath(), err.Error(), "rep scope")
@@ -96,11 +100,24 @@ func init() {
 	}
 }
 
-func configureInvocationScope(cmd *cobra.Command) error {
+func configureInvocationScope(cmd *cobra.Command, args ...string) error {
+	owner := ""
+	if handle := invocationHandle(cmd, args); handle != "" && !cmd.Flags().Changed("task") && !globalScope {
+		registry, err := agentstate.Default()
+		if err != nil {
+			return err
+		}
+		owner, err = registry.Owner(handle)
+		// Legacy captured h_ IDs remain readable until the archive resolver lands.
+		if err != nil && rootCommandName(cmd) != "body" {
+			_, _ = scope.ConfigureInvocation(scope.Options{Workspace: workspaceName, Task: taskName, Global: globalScope, WorkspaceSet: cmd.Flags().Changed("workspace"), TaskSet: cmd.Flags().Changed("task")}, "")
+			return err
+		}
+	}
 	selected, err := scope.ConfigureInvocation(scope.Options{
 		Workspace: workspaceName, Task: taskName, Global: globalScope,
 		WorkspaceSet: cmd.Flags().Changed("workspace"), TaskSet: cmd.Flags().Changed("task"),
-	}, "")
+	}, owner)
 	if err != nil {
 		return err
 	}

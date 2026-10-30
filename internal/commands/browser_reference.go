@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/repplus/rep-cli/internal/agentstate"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/spf13/cobra"
@@ -147,36 +148,32 @@ func referenceSections(data map[string]any) map[string][]any {
 
 func referenceReadNext(command *cobra.Command, id, section string, offset int, flags fastFlags) string {
 	selected, _ := scope.Current()
-	extra := ""
-	if offset != 0 {
-		extra += fmt.Sprintf(" --offset %d", offset)
+	registry, err := coreStore()
+	if err != nil {
+		return coreNext("scope")
 	}
-	if flags.maxText != 4096 {
-		extra += fmt.Sprintf(" --max-text %d", flags.maxText)
+	cursor, err := registry.SaveCursor(agentstate.Cursor{Owner: selected.Identity(), Kind: "reference-legacy", Source: id, Section: section, Offset: offset, Budget: flags.maxText, Controls: flags.limit})
+	if err != nil {
+		return coreNext("scope")
 	}
-	if flags.limit != 40 {
-		extra += fmt.Sprintf(" --limit %d", flags.limit)
-	}
-	return fmt.Sprintf("rep --workspace %s --task %s browser reference --saved %s --section %s%s", selected.Workspace, selected.Task, id, section, extra)
+	return coreNext("reference", cursor)
 }
 
 func referenceResume(command *cobra.Command, tab int, selector string, screenshot bool) string {
-	extra := " --timeout 10s"
-	maxText, _ := command.Flags().GetInt("max-text")
-	limit, _ := command.Flags().GetInt("limit")
-	if maxText != 4096 || limit != 40 {
-		extra += fmt.Sprintf(" --max-text %d --limit %d", maxText, limit)
+	owned := legacyHandle(command, tab)
+	if owned == nil {
+		return coreNext("tabs")
 	}
-	if keep, _ := command.Flags().GetBool("keep-tab"); keep {
-		extra += " --keep-tab"
+	registry, err := coreStore()
+	if err != nil {
+		return coreNext("page", owned.Handle)
 	}
-	if selector != "" {
-		extra += " --selector " + shellQuote(selector)
+	budget, _ := command.Flags().GetInt("max-text")
+	cursor, err := registry.SaveCursor(agentstate.Cursor{Tab: owned.Handle, Owner: owned.Owner, Kind: "reference-loading", Selector: selector, Budget: budget})
+	if err != nil {
+		return coreNext("page", owned.Handle)
 	}
-	if !screenshot {
-		extra += " --screenshot=false"
-	}
-	return fastNext(command, "reference", tab, extra)
+	return coreNext("reference", cursor)
 }
 
 func referenceFile(path string, data []byte) (map[string]any, error) {

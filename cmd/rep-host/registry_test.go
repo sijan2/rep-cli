@@ -38,7 +38,7 @@ func TestTouchCoalescesLivenessButPersistsIdentity(t *testing.T) {
 	if pendingRegistryWrite(server) {
 		t.Fatal("ordinary messages inside the refresh interval scheduled a registry write")
 	}
-	server.Touch(&Message{Action: "hello", ExtensionID: "abc", ExtensionVersion: "1.2.3"})
+	server.Touch(&Message{Action: "hello", ExtensionID: "abc", ExtensionVersion: "1.2.3", ProfileID: "profile-fixture", BrowserEpoch: "epoch-fixture", BuildDigest: "digest-fixture"})
 	if !pendingRegistryWrite(server) {
 		t.Fatal("an identity change was not scheduled for persistence")
 	}
@@ -47,7 +47,7 @@ func TestTouchCoalescesLivenessButPersistsIdentity(t *testing.T) {
 	}
 	var saved Registry
 	data, err := os.ReadFile(server.registryPath)
-	if err != nil || json.Unmarshal(data, &saved) != nil || saved.ExtensionID != "abc" || saved.ExtensionVer != "1.2.3" {
+	if err != nil || json.Unmarshal(data, &saved) != nil || saved.ExtensionID != "abc" || saved.ExtensionVer != "1.2.3" || saved.ProfileID != "profile-fixture" || saved.Epoch != "epoch-fixture" || saved.BuildDigest != "digest-fixture" {
 		t.Fatalf("identity was not persisted: %s %v", data, err)
 	}
 	if info, err := os.Stat(server.registryPath); err != nil || info.Mode().Perm() != 0600 {

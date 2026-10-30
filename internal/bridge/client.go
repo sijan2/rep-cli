@@ -19,6 +19,9 @@ import (
 const defaultCallTimeout = 35 * time.Second
 
 type Registry struct {
+	ProfileID    string `json:"profile_id,omitempty"`
+	Epoch        string `json:"browser_epoch,omitempty"`
+	BuildDigest  string `json:"build_digest,omitempty"`
 	PID          int    `json:"pid"`
 	ParentPID    int    `json:"parent_pid,omitempty"`
 	Browser      string `json:"browser"`

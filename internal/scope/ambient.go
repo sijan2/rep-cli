@@ -121,6 +121,15 @@ func ResolveIdentity(opts Options, owner string, facts IdentityFacts) (Scope, er
 	}
 	key, markers := sessionKey(facts.Env)
 	selected := Scope{Source: "ambient", DataDir: base, LivePath: filepath.Join(base, "live.json"), SessionKey: key}
+	if selected.SessionKey == "" {
+		for _, p := range facts.Ancestors {
+			if eligibleAncestor(p) {
+				digest := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%s", p.PID, p.Started)))
+				selected.SessionKey = fmt.Sprintf("process-%x", digest[:10])
+				break
+			}
+		}
+	}
 	name, source := "", ""
 	switch {
 	case opts.Global:

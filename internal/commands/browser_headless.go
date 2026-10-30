@@ -3,6 +3,9 @@ package commands
 import (
 	"context"
 	"fmt"
+	"github.com/repplus/rep-cli/internal/agentstate"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/repplus/rep-cli/internal/headless"
@@ -65,6 +68,9 @@ func init() {
 			}
 			ctx, cancel := context.WithTimeout(cmd.Context(), restartTimeout)
 			defer cancel()
+			if err := guardPrivateHolders(); err != nil {
+				return coreFailure(cmd, err)
+			}
 			status, err := headless.Restart(ctx, dir, restartOptions)
 			if err != nil {
 				return emitHeadlessError(cmd, err)
@@ -89,6 +95,9 @@ func init() {
 				defer cancel()
 				var status headless.Status
 				if operation == "stop" {
+					if err := guardPrivateHolders(); err != nil {
+						return coreFailure(cmd, err)
+					}
 					status, err = headless.Stop(ctx, dir)
 				} else {
 					status, err = headless.GetStatus(ctx, dir)
@@ -104,4 +113,30 @@ func init() {
 
 func emitHeadlessError(cmd *cobra.Command, err error) error {
 	return output.EmitAgentError(cmd.OutOrStdout(), output.NewAgentError("headless_unavailable", cmd.CommandPath(), err.Error(), "rep scope", "rep browser headless start --help"), getOutputMode() == "json")
+}
+
+func guardPrivateHolders() error {
+	store, err := coreStore()
+	if err != nil {
+		return err
+	}
+	state, err := store.Read()
+	if err != nil {
+		return err
+	}
+	selected, _ := scope.Current()
+	name := strings.TrimSpace(os.Getenv("REP_PROFILE"))
+	if name == "" {
+		name = "default"
+	}
+	var holders []string
+	for _, tab := range state.Tabs {
+		if !tab.Closed && tab.Owner != selected.Identity() && tab.Browser.Name == "headless" && tab.Browser.PrivateName == name {
+			holders = append(holders, tab.Handle)
+		}
+	}
+	if len(holders) > 0 {
+		return &agentstate.Error{Code: "browser_in_use", Message: "another task owns tabs in this private profile", Next: coreNext("tabs"), Retry: "needs-agent", Candidates: holders}
+	}
+	return nil
 }

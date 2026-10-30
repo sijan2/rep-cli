@@ -24,23 +24,27 @@ var contentRenderer string
 var referenceRenderer string
 
 type Spec struct {
-	Owner     string `json:"owner"`
-	Operation string `json:"operation"`
-	URL       string `json:"url,omitempty"`
-	Ref       string `json:"ref,omitempty"`
-	Action    string `json:"action,omitempty"`
-	Text      string `json:"text,omitempty"`
-	Replace   bool   `json:"replace,omitempty"`
-	Turn      string `json:"turn,omitempty"`
-	WaitMS    int64  `json:"wait_ms,omitempty"`
-	ReadMS    int64  `json:"read_ms,omitempty"`
-	MaxText   int    `json:"max_text"`
-	Limit     int    `json:"limit"`
-	Cursor    string `json:"cursor,omitempty"`
-	Selector  string `json:"selector,omitempty"`
+	Owner         string `json:"owner"`
+	TextOffset    int    `json:"text_offset,omitempty"`
+	ControlOffset int    `json:"control_offset,omitempty"`
+	Operation     string `json:"operation"`
+	URL           string `json:"url,omitempty"`
+	Ref           string `json:"ref,omitempty"`
+	Action        string `json:"action,omitempty"`
+	Text          string `json:"text,omitempty"`
+	Replace       bool   `json:"replace,omitempty"`
+	Turn          string `json:"turn,omitempty"`
+	WaitMS        int64  `json:"wait_ms,omitempty"`
+	ReadMS        int64  `json:"read_ms,omitempty"`
+	MaxText       int    `json:"max_text"`
+	Limit         int    `json:"limit"`
+	Cursor        string `json:"cursor,omitempty"`
+	Selector      string `json:"selector,omitempty"`
 }
 
 type Result struct {
+	Generation         string          `json:"generation,omitempty"`
+	ContentHash        string          `json:"content_hash,omitempty"`
 	Status             string          `json:"status"`
 	Code               string          `json:"code,omitempty"`
 	URL                string          `json:"url"`

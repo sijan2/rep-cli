@@ -75,6 +75,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(DOCUMENT, "text/plain")
         pages = {
             "/article": ARTICLE,
+            "/long": "<article><h1>Persistent cursor fixture</h1>" + "".join("<p>Paragraph {0}: " .format(i) + "Evidence remains readable after the renderer expires. " * 10 + "</p>" for i in range(90)) + "</article>",
             "/form": """<main><h1>Search fixture</h1><form onsubmit="event.preventDefault(); document.querySelector('[role=status]').textContent='Saved: '+this.query.value;">
                 <label>Query <input name='query'></label><button>Submit</button></form><p role='status'></p></main>""",
             "/flow": """<main><h1>Five-step flow</h1><p role='status'>Step 1</p><button onclick="let n=Number(this.dataset.n||1); document.querySelector('[role=status]').textContent=n===5?'Flow complete':'Step '+(n+1); this.dataset.n=n+1; this.textContent=n===5?'Done':'Continue '+(n+1); this.disabled=n===5;">Continue 1</button></main>""",

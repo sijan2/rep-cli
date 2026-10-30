@@ -112,7 +112,7 @@ func TestStateWithoutProviderStaysHeuristic(t *testing.T) {
 		t.Fatalf("%v\n%s", err, stdout.String())
 	}
 	var result stateOutput
-	if json.Unmarshal(stdout.Bytes(), &result) != nil || result.Kind != "loading" || result.Basis != "in_page_signals_only" || result.ModelRequests != 0 || !strings.Contains(result.Next, "--timeout 10s") {
+	if json.Unmarshal(stdout.Bytes(), &result) != nil || result.Kind != "loading" || result.Basis != "in_page_signals_only" || result.ModelRequests != 0 || !strings.HasPrefix(result.Next, "rep tabs") {
 		t.Fatalf("heuristic fallback wrong: %s", stdout.String())
 	}
 }
