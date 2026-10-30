@@ -5,15 +5,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION_FILE="${VERSION_FILE:-$ROOT_DIR/VERSION}"
 BUILD_HOST=false
+BUILD_LAB=false
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build_install.sh [--host] [--install-dir <dir>]
+Usage: scripts/build_install.sh [--host] [--lab] [--install-dir <dir>]
 
 Builds the rep CLI and installs it into the target directory.
 
 Options:
   --host               Also build and install rep-host.
+  --lab                Also build, test and install rep-lab with -tags replab.
   --install-dir <dir>  Install directory (default: $HOME/.local/bin)
   -h, --help           Show this help.
 
@@ -26,6 +28,9 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --host)
       BUILD_HOST=true
+      ;;
+    --lab)
+      BUILD_LAB=true
       ;;
     --install-dir)
       shift
@@ -68,9 +73,12 @@ LDFLAGS=(
 if [[ -z "${REP_SKIP_TESTS:-}" ]]; then
   echo "Running tests..."
   (cd "$ROOT_DIR" && go test ./...)
+  if [[ "$BUILD_LAB" == "true" ]]; then
+    (cd "$ROOT_DIR" && go test -tags replab ./...)
+  fi
 fi
 
-go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" "$ROOT_DIR/cmd/rep"
+CGO_ENABLED=0 go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" "$ROOT_DIR/cmd/rep"
 # Verify the new executable now so the agent's first browser command does not
 # also pay macOS's first-execution validation cost.
 "$INSTALL_DIR/rep" --version >/dev/null
@@ -79,4 +87,10 @@ echo "Installed: $INSTALL_DIR/rep"
 if [[ "$BUILD_HOST" == "true" ]]; then
   go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep-host" "$ROOT_DIR/cmd/rep-host"
   echo "Installed: $INSTALL_DIR/rep-host"
+fi
+
+if [[ "$BUILD_LAB" == "true" ]]; then
+  go build -tags replab -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep-lab" "$ROOT_DIR/cmd/rep"
+  "$INSTALL_DIR/rep-lab" --version >/dev/null
+  echo "Installed: $INSTALL_DIR/rep-lab"
 fi

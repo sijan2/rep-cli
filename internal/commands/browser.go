@@ -12,7 +12,7 @@ import (
 
 	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/output"
-	"github.com/repplus/rep-cli/internal/scope"
+
 	"github.com/spf13/cobra"
 )
 
@@ -213,38 +213,6 @@ func resolveCloseTabID(args []string, flag int, set bool) (int, error) {
 	return -1, errors.New("provide exactly one non-negative tab ID, as --tab ID or a positional argument")
 }
 
-var browserWatchCmd = &cobra.Command{
-	Use:   "watch",
-	Short: "Stream normal browsing traffic into a dedicated live session",
-}
-
-var browserWatchStartCmd = &cobra.Command{
-	Use:   "start",
-	Short: "Clear live.json and start ambient all-tab capture",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBrowserWatch(cmd, "start")
-	},
-}
-
-var browserWatchStopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Seal the current ambient capture",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBrowserWatch(cmd, "stop")
-	},
-}
-
-var browserWatchStatusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show whether ambient capture is enabled",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBrowserWatch(cmd, "status")
-	},
-}
-
 func runBrowserOpen(cmd *cobra.Command, rawURL string, flags browserOpenFlags) (returnErr error) {
 	if flags.Timeout <= 0 {
 		flags.Timeout = 30 * time.Second
@@ -401,32 +369,6 @@ func runBrowserFetch(cmd *cobra.Command, rawURL string, flags browserFetchFlags)
 		printBrowserCapturedRequests(result)
 		if body, ok := response["body"].(string); ok && body != "" {
 			fmt.Println(body)
-		}
-	})
-}
-
-func runBrowserWatch(cmd *cobra.Command, action string) error {
-	selected, err := scope.Current()
-	if err != nil {
-		return err
-	}
-	if selected.Scoped {
-		return emitBrowserArgumentError("browser watch "+action, fmt.Errorf("ambient capture covers all tabs and is unavailable in a task scope; use explicit tab captures"))
-	}
-	ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
-	defer cancel()
-	client, err := selectBrowserBridge(ctx, browserSelector, "browser watch "+action)
-	if err != nil {
-		return err
-	}
-	var result map[string]interface{}
-	if err := client.Call(ctx, "browser.watch."+action, nil, &result); err != nil {
-		return emitBrowserCallError("browser watch "+action, err)
-	}
-	return emitBrowserResult(result, func() {
-		fmt.Printf("ambient capture: %v\n", result["watching"])
-		if session := result["session_id"]; session != nil {
-			fmt.Printf("session: %v\n", session)
 		}
 	})
 }
@@ -799,8 +741,7 @@ func errorsAs(err error, target interface{}) bool {
 func init() {
 	browserCloseCmd.Flags().IntVar(&closeTabID, "tab", -1, "Explicit task-owned tab to close (also accepts a positional ID)")
 	rootCmd.AddCommand(browserCmd)
-	browserCmd.AddCommand(browserStatusCmd, browserTabsCmd, browserCloseCmd, browserWatchCmd)
-	browserWatchCmd.AddCommand(browserWatchStartCmd, browserWatchStopCmd, browserWatchStatusCmd)
+	browserCmd.AddCommand(browserStatusCmd, browserTabsCmd, browserCloseCmd)
 	browserCmd.PersistentFlags().StringVar(&browserSelector, "browser", defaultBrowser, "Browser bridge to use: dia, arc, chrome, headless, or any")
 	browserCmd.AddCommand(newBrowserCaptureCommand(runBrowserOpen, runBrowserFetch, callBrowserRPC))
 	browserCmd.AddCommand(browserOpenCmd, newLegacyBrowserFetchCommand(runBrowserFetch), newLegacyBrowserActionCommand(callBrowserRPC))

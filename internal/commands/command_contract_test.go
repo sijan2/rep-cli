@@ -15,10 +15,11 @@ import (
 )
 
 type commandReference struct {
-	File string   `json:"file"`
-	Line int      `json:"line"`
-	Argv []string `json:"argv"`
-	Kind string   `json:"kind"`
+	File   string   `json:"file"`
+	Line   int      `json:"line"`
+	Argv   []string `json:"argv"`
+	Kind   string   `json:"kind"`
+	Binary string   `json:"binary"`
 }
 
 // Resolve references without executing their Run functions (some examples are
@@ -112,6 +113,9 @@ func referenceFailures(t *testing.T) []string {
 	}
 	var failures []string
 	for _, ref := range references {
+		if ref.Binary == "rep-lab" && !labBuild {
+			continue
+		}
 		if _, err := resolveReference(ref.Argv); err != nil {
 			// Do not key the migration debt by line number: edits elsewhere in
 			// a file must not silently bless a changed command or flag.
@@ -172,12 +176,17 @@ func TestCompanionCommandShapes(t *testing.T) {
 	var cases []struct {
 		Argv   []string `json:"argv"`
 		Fields []string `json:"fields"`
+		Binary string   `json:"binary"`
 	}
 	if err := json.Unmarshal(data, &cases); err != nil {
 		t.Fatal(err)
 	}
 	paths := map[string]bool{}
 	for _, item := range cases {
+		if item.Binary == "rep-lab" && !labBuild {
+			paths["rep-lab "+strings.Join(item.Argv[:2], " ")] = true
+			continue
+		}
 		path, err := resolveReference(item.Argv)
 		if err != nil {
 			t.Errorf("%v: %v", item.Argv, err)

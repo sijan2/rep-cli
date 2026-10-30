@@ -10,6 +10,11 @@ Only loopback fixtures and processes created by this invocation are controlled.
 """
 from __future__ import annotations
 
+# Retired by the rep-lab migration; never dispatch legacy browser calls.
+if __name__ == "__main__":
+    raise SystemExit('Retired verifier: The dated benchmark uses raw bridge RPC and parses the old browser next token. Its source and binaries must be pinned for historical comparison. The new lab gate uses rep-lab element observe. Run: python3 scripts/verify/verify_lab.py. Historical source: git show f321b300d4e6af1f8e8d1297f490ffbd5a3a2561:scripts/verify/verify_decision_runtime.py; use only binaries from that commit in a separate private profile.')
+
+
 import argparse
 import hashlib
 import http.server

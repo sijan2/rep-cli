@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
-	"github.com/spf13/cobra"
 	"github.com/repplus/rep-cli/internal/store"
+	"github.com/spf13/cobra"
 )
 
 var getCmd = &cobra.Command{
@@ -34,7 +34,7 @@ func runGet(cmd *cobra.Command, args []string) {
 	id := args[0]
 
 	// Try Android first
-	if req := findAndroidRequest(id); req != nil {
+	if req := findLabRequest(id); req != nil {
 		outputField(req, getField)
 		return
 	}
@@ -46,24 +46,6 @@ func runGet(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Println("Request not found:", id)
-}
-
-func findAndroidRequest(id string) map[string]interface{} {
-	data, err := store.LoadAndroidData()
-	if err != nil {
-		return nil
-	}
-	for _, pkg := range data.Packages {
-		for _, r := range pkg.Requests {
-			if r.ID == id {
-				b, _ := sonic.Marshal(r)
-				var m map[string]interface{}
-				sonic.Unmarshal(b, &m)
-				return m
-			}
-		}
-	}
-	return nil
 }
 
 func findWebRequest(id string) map[string]interface{} {

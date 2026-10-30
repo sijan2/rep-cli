@@ -11,6 +11,11 @@ ECDSA certificate pinned by the page. No global dependencies or trust changes.
 """
 from __future__ import annotations
 
+# Retired by the rep-lab migration; never dispatch legacy browser calls.
+if __name__ == "__main__":
+    raise SystemExit('Retired verifier: Old capture/stream forms and direct bridge helpers were removed. Extension transport suites and core body tests cover current semantics. Run: go test ./internal/bodyview ./internal/store. Historical source: git show f321b300d4e6af1f8e8d1297f490ffbd5a3a2561:scripts/verify/verify_transport_capture.py; use only binaries from that commit in a separate private profile.')
+
+
 import argparse
 import asyncio
 import base64
