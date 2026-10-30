@@ -20,7 +20,7 @@ var androidCmd = &cobra.Command{
 	Short: "View Android traffic by package",
 	Long: `View captured Android traffic grouped by app package.
 
-Output modes match 'rep list':
+Android output is bounded JSON:
   --view line   One-line per request with ID (default, grep-friendly)
   --view detail Multi-line with headers/body preview
   -o json       Raw JSON for piping
@@ -38,7 +38,7 @@ Examples:
   rep android spotify --domain api         Only requests to *api* domains
   rep android spotify --select errors           Only error responses
   rep android spotify --since 5m           Last 5 minutes only
-  rep android spotify -o json              JSON output for piping
+  rep-lab android spotify              JSON output for piping
   rep body <id>                            Get full body for any request ID`,
 	RunE: runAndroid,
 }

@@ -19,11 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bytedance/sonic"
-	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/store"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 type capturedDownloadOptions struct {
@@ -73,77 +69,6 @@ type capturedDownloadResult struct {
 	ContentType         string                `json:"content_type"`
 	DetectedContentType string                `json:"detected_content_type"`
 	Retries             int                   `json:"retry_limit"`
-}
-
-var (
-	downloadOverwrite  bool
-	downloadKeepRange  bool
-	downloadRetries    int
-	downloadRetryDelay time.Duration
-	downloadTimeout    time.Duration
-	downloadValidation artifactValidationOptions
-)
-
-var downloadCmd = &cobra.Command{
-	Use:   "download h_ID|URL PATH",
-	Short: "Save a file",
-	Long: `Download from a captured browser request without printing its URL,
-cookies, signed query, headers, or response body. rep feeds the request to curl
-through stdin, strips HTTP/2 pseudoheaders and Range by default, writes to a
-mode-0600 part file, then atomically publishes and hashes the result.
-
-The captured final request should be used directly. Redirect following is
-intentionally disabled so explicit Cookie headers cannot leak to another host.`,
-	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) (returnErr error) {
-		req := lookupRequestForReplay(args[0])
-		if req == nil {
-			return output.EmitAgentError(os.Stdout, output.NewAgentError(
-				output.ErrCodeRequestNotFound,
-				"download",
-				fmt.Sprintf("no request matched %q", args[0]),
-				"rep list --primary=false --pattern 'download|export|artifact' --limit 10 -o meta",
-			), getOutputMode() == "json")
-		}
-		record, err := beginBrowserEvidence("download", map[string]any{"intent": "save a fresh HTTP transfer", "source_request_id": req.ID, "new_observation": true}, "curl", -1)
-		if err != nil {
-			return err
-		}
-		defer record.finishOnReturn(&returnErr)
-		record.dispatch()
-		result, err := downloadCapturedRequest(cmd.Context(), req, args[1], capturedDownloadOptions{
-			Overwrite: downloadOverwrite, KeepRange: downloadKeepRange,
-			Retries: downloadRetries, RetryDelay: downloadRetryDelay,
-			Timeout: downloadTimeout, Validation: downloadValidation,
-		})
-		if err != nil {
-			return output.EmitAgentError(os.Stdout, output.WrapError(
-				err, output.ErrCodeTransferFailed, "download",
-				"capture the final GET request in Arc and retry its request ID",
-				"use rep browser download <request-id> <output-path> when curl is rejected by browser-bound controls",
-			), getOutputMode() == "json")
-		}
-		result.Evidence = record.ref()
-		if err := record.artifact(result.OutputPath, "download", "complete", "HTTP transfer completed and the saved file passed transfer validation",
-			map[string]any{"source_request_id": req.ID, "new_observation": true, "transport": "curl", "status": result.Status}); err != nil {
-			return err
-		}
-		if err := record.finish(result, "completed", "satisfied", "", nil); err != nil {
-			return err
-		}
-		if getOutputMode() == "json" {
-			data, marshalErr := sonic.MarshalIndent(result, "", "  ")
-			if marshalErr != nil {
-				return marshalErr
-			}
-			fmt.Println(string(data))
-			return nil
-		}
-		fmt.Printf("saved: %s\nstatus: %d\nbytes: %d\ncontent-type: %s\ndetected-content-type: %s\nsha256: %s\n",
-			result.OutputPath, result.Status, result.Bytes, displayContentType(result.ContentType),
-			displayContentType(result.DetectedContentType), result.SHA256)
-		return nil
-	},
 }
 
 func downloadCapturedRequest(ctx context.Context, req *store.Request, outputPath string, opts capturedDownloadOptions) (_ capturedDownloadResult, err error) {
@@ -302,14 +227,6 @@ func downloadCapturedRequest(ctx context.Context, req *store.Request, outputPath
 		DetectedContentType: validation.DetectedContentType,
 		Retries:             opts.Retries,
 	}, nil
-}
-
-func bindArtifactValidationFlags(flags *pflag.FlagSet, options *artifactValidationOptions) {
-	flags.BoolVar(&options.AllowEmpty, "allow-empty", false, "Allow publishing a zero-byte response")
-	flags.BoolVar(&options.AllowHTML, "allow-html", false, "Allow an HTML response when the output name or validators imply a binary artifact")
-	flags.Int64Var(&options.MinimumBytes, "min-bytes", 0, "Require at least this many response bytes before publishing")
-	flags.StringSliceVar(&options.ExpectedContentTypes, "expect-content-type", nil, "Require this response Content-Type (repeatable; type/* allowed)")
-	flags.StringVar(&options.ExpectedMagic, "expect-magic", "", "Require a named or hex file prefix (for example zip, pdf, macho, or hex:504b0304)")
 }
 
 func prepareArtifactValidator(options artifactValidationOptions) (artifactValidator, error) {
@@ -616,13 +533,6 @@ func describeContentType(value string) string {
 	return strconv.Quote(value)
 }
 
-func displayContentType(value string) string {
-	if value == "" {
-		return "unknown"
-	}
-	return value
-}
-
 func capturedReplayHeaders(headers store.HeaderMap, keepRange bool) ([]string, error) {
 	skip := map[string]bool{
 		"host": true, "content-length": true, "connection": true,
@@ -771,15 +681,4 @@ func hashFile(path string) (string, error) {
 		return "", fmt.Errorf("hash completed download: %w", err)
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
-}
-
-func init() {
-	rootCmd.AddCommand(downloadCmd)
-	downloadCmd.Flags().BoolVar(&downloadOverwrite, "overwrite", false, "Atomically replace an existing output")
-	downloadCmd.Flags().BoolVar(&downloadKeepRange, "keep-range", false, "Preserve the captured Range header instead of downloading the full file")
-	downloadCmd.Flags().IntVar(&downloadRetries, "retries", 3, "Retry transient GET failures, including HTTP 429")
-	downloadCmd.Flags().DurationVar(&downloadRetryDelay, "retry-delay", time.Second, "Delay between retries")
-
-	downloadCmd.Flags().DurationVar(&downloadTimeout, "timeout", 2*time.Minute, "Maximum transfer duration")
-	bindArtifactValidationFlags(downloadCmd.Flags(), &downloadValidation)
 }

@@ -108,5 +108,3 @@ func newNativeBrowserCaptureCommandWith(run func(context.Context, browserdiagnos
 
 	return command
 }
-
-func init() { browserCmd.AddCommand(newNativeBrowserCaptureCommandWith(browserdiagnostics.Run)) }

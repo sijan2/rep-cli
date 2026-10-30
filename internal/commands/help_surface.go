@@ -7,48 +7,27 @@ func configureCommandGroups() {
 		return
 	}
 	rootCmd.AddGroup(
-		&cobra.Group{ID: "browser", Title: "Browser automation:"},
+		&cobra.Group{ID: "browser", Title: "Browser work:"},
 		&cobra.Group{ID: "traffic", Title: "Captured traffic:"},
-		&cobra.Group{ID: "data", Title: "Workspace and archives:"},
 		&cobra.Group{ID: "tools", Title: "Specialized tools:"},
-		&cobra.Group{ID: "help", Title: "Help and configuration:"},
+		&cobra.Group{ID: "help", Title: "Context and help:"},
 	)
-	rootGroups := map[string][]string{
-		"browser": {"browser"},
-		"traffic": {"body", "chain", "compare", "context", "coverage", "detail", "diff", "domains", "extract", "findings", "get", "group", "js", "list", "media", "packets", "search", "stats", "stream", "summary"},
-		"data":    {"clear", "evidence", "ignore", "import", "mute", "note", "primary", "save", "scope", "sessions", "workspace"},
-		"help":    {"version", "jev", "help"},
-	}
 	groups := map[string]string{}
-	for group, names := range rootGroups {
+	for group, names := range map[string][]string{
+		"browser": {"page", "do", "eval", "shot", "reference", "tabs", "close", "browser", "cdp"},
+		"traffic": {"net", "body", "fetch", "replay", "download", "media"},
+		"help":    {"scope", "doctor", "jev", "help"},
+	} {
 		for _, name := range names {
 			groups[name] = group
 		}
 	}
 	for _, command := range rootCmd.Commands() {
-		group := groups[command.Name()]
-		if group == "" {
-			group = "tools"
+		command.GroupID = groups[command.Name()]
+		if command.GroupID == "" {
+			command.GroupID = "tools"
 		}
-		command.GroupID = group
 	}
 	rootCmd.SetHelpCommandGroupID("help")
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	browserCmd.AddGroup(
-		&cobra.Group{ID: "work", Title: "Everyday workflows:"},
-		&cobra.Group{ID: "capture", Title: "Network capture:"},
-		&cobra.Group{ID: "raw", Title: "Low-level control:"},
-		&cobra.Group{ID: "manage", Title: "Browser management:"},
-	)
-	browserGroups := map[string]string{"create": "work", "tabs": "work", "close": "work", "interact": "work", "element": "work", "select": "work", "select-batch": "work", "observe": "work", "validate": "work", "navigate": "work", "screenshot": "work", "shots": "work", "step": "work", "capture": "capture", "open": "capture", "fetch": "capture", "action": "capture", "watch": "capture", "download": "capture", "native-capture": "capture", "eval": "raw", "cdp": "raw", "attach": "raw", "detach": "raw", "targets": "raw", "probe": "raw"}
-	for _, command := range browserCmd.Commands() {
-		group := browserGroups[command.Name()]
-		if command.Name() == "page" || command.Name() == "do" || command.Name() == "chat" || command.Name() == "reference" || command.Name() == "locate" || command.Name() == "state" {
-			group = "work"
-		}
-		if group == "" {
-			group = "manage"
-		}
-		command.GroupID = group
-	}
 }

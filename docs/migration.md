@@ -30,3 +30,12 @@ Packet/native capture, media/watch, Android/IG, research engines/probes/audits, 
 The canonical skill is skills/rep/SKILL.md, mirrored at .agents/skills/rep and .claude/skills/rep in this repository. Personal agent profiles and installed skills require owner-managed updates; repository builds do not rewrite them.
 
 Compatibility test entries have a fixed expiry and must be removed with each deletion. They name exact commands, flags and hidden declarations, rather than waiving whole directories. Historical research harnesses stay pinned to their pre-migration binary until ported.
+
+The migration window is closed: removed commands and flags fail with a structured
+usage error. There are no hidden commands, hidden flags, aliases, completion
+protocols or migration allowlist entries. Use `REP_TASK=global` only when deliberately
+selecting shared legacy device data for rep-lab Android/IG or all-tab watch. The
+core has one optional inherited flag, placed after its verb: `--task`.
+
+Operation evidence is recorded automatically for an isolated task. Inspect its
+bounded journal with `rep scope`; no run identifier needs to be supplied.

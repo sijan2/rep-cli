@@ -22,7 +22,7 @@ func TestAmbientIdentityDecisionTable(t *testing.T) {
 		{"flag wins", Options{Task: "project/a"}, "project/b", IdentityFacts{Env: one}, "project/a", "flag"},
 		{"handle wins", Options{}, "project/b", IdentityFacts{Env: map[string]string{"REP_TASK": "c"}}, "project/b", "handle"},
 		{"environment", Options{}, "", IdentityFacts{Env: map[string]string{"REP_TASK": "a"}}, "default/a", "environment"},
-		{"legacy path", Options{}, "", IdentityFacts{Env: map[string]string{"REP_TASK": "a", "REP_WORKSPACE": "project"}}, "project/a", "environment"},
+		{"removed workspace environment", Options{}, "", IdentityFacts{Env: map[string]string{"REP_TASK": "a", "REP_WORKSPACE": "project"}}, "default/a", "environment"},
 		{"qualified", Options{}, "", IdentityFacts{Env: map[string]string{"REP_TASK": "project/a"}}, "project/a", "environment"},
 		{"global env", Options{}, "", IdentityFacts{Env: map[string]string{"REP_TASK": "global"}}, "global", "environment"},
 		{"terminal", Options{}, "", IdentityFacts{Terminal: true}, "global", "terminal"},

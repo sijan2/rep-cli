@@ -30,18 +30,17 @@ func operationEvidenceFixture(t *testing.T) (*evidence.Store, evidence.Run) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := evidenceRunID
-	evidenceRunID = run.ID
-	t.Cleanup(func() { evidenceRunID = previous })
+	previous := beginOperationRun
+	beginOperationRun = func(*evidence.Store, string, map[string]string) (evidence.Run, error) { return run, nil }
+	t.Cleanup(func() { beginOperationRun = previous })
 	return store, run
 }
 
-func TestBrowserEvidenceDisabledDoesNotTouchDisk(t *testing.T) {
+func TestGlobalEvidenceDoesNotTouchDisk(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "uncreated")
 	t.Setenv("XDG_DATA_HOME", base)
-	previous := evidenceRunID
-	evidenceRunID = ""
-	t.Cleanup(func() { evidenceRunID = previous })
+	_, _ = scope.Configure(scope.Options{Global: true})
+	t.Cleanup(scope.Reset)
 	record, err := beginBrowserEvidence("browser.step", func() {}, "arc", 4)
 	if err != nil || record != nil {
 		t.Fatalf("disabled recorder = %v, %v", record, err)
@@ -145,42 +144,13 @@ func TestBrowserEvidenceReferencesAreBoundedAndDiscloseOmissions(t *testing.T) {
 	}
 }
 
-func TestBrowserEvidenceRejectsGlobalScope(t *testing.T) {
+func TestGlobalEvidenceHasNoTaskRecorder(t *testing.T) {
 	_, _ = operationEvidenceFixture(t)
 	if _, err := scope.Configure(scope.Options{Global: true}); err != nil {
 		t.Fatal(err)
 	}
-	if record, err := beginBrowserEvidence("browser.create", nil, "arc", -1); err == nil || record != nil || !strings.Contains(err.Error(), "explicit workspace and task") {
+	if record, err := beginBrowserEvidence("browser.create", nil, "arc", -1); err != nil || record != nil {
 		t.Fatalf("global run was accepted: %v %v", record, err)
-	}
-}
-
-func TestBrowserEvidencePinsCaptureArchiveAndDigest(t *testing.T) {
-	store, run := operationEvidenceFixture(t)
-	record, err := beginBrowserEvidence("browser.open", nil, "arc", 12)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fixture := createBrowserSnapshotFixture(t, "capture-operation", "fixture-request")
-	handoff, err := prepareBrowserCapture(context.Background(), fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := map[string]any{"session_id": "capture-operation", "requests": 1}
-	if err := finishBrowserCapture(context.Background(), fixture, result, handoff, "fixture", false); err != nil {
-		t.Fatal(err)
-	}
-	record.capture(result)
-	if err := record.finish(captureEvidenceSummary(result), "completed", "unverified", "", nil); err != nil {
-		t.Fatal(err)
-	}
-	page, err := store.ListOperations(run.ID, "", 20)
-	if err != nil || len(page.Operations) != 2 || len(page.Operations[1].References) != 1 {
-		t.Fatalf("missing capture reference: %+v %v", page, err)
-	}
-	ref := page.Operations[1].References[0]
-	if ref.Kind != "capture_archive" || ref.ID != result["saved_hash_id"] || ref.SHA256 != fixture.reference.SHA256 || ref.Metadata["snapshot_verified"] != true {
-		t.Fatalf("capture reference not bound to verified archive: %+v", ref)
 	}
 }
 

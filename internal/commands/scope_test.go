@@ -1,64 +1,71 @@
 package commands
 
 import (
-	"crypto/sha256"
 	"encoding/json"
-	"fmt"
+
+	"github.com/spf13/cobra"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/repplus/rep-cli/internal/headless"
-	"github.com/spf13/cobra"
 )
 
-// Run the real root command in a fresh process so Cobra globals, scope selection
-// and the store cache cannot accidentally make isolation tests pass.
+// Exercise the actual entry point without browser or device side effects.
 func TestScopeCLIHelperProcess(t *testing.T) {
 	if os.Getenv("REP_SCOPE_CLI_TEST") != "1" {
 		return
 	}
-	for _, command := range []*cobra.Command{authCmd, setupCmd} {
-		// Guard regressions must fail locally instead of invoking a browser or
-		// reading/writing existing shared credential exports.
-		command.RunE = func(cmd *cobra.Command, args []string) error { return os.ErrPermission }
-	}
-	for _, verb := range []string{"open", "fetch", "action"} {
-		command, _, err := rootCmd.Find([]string{"browser", "capture", verb})
-		if err != nil {
-			t.Fatal(err)
-		}
-		command.RunE = func(cmd *cobra.Command, args []string) error { return os.ErrPermission }
-	}
 	if sentinel := os.Getenv("REP_SCOPE_TEST_ANDROID_SENTINEL"); sentinel != "" {
-		// Never invoke the real destructive handler, even if this regression
-		// test catches a future missing guard. Only a temporary fixture is used.
-		command, _, err := rootCmd.Find([]string{"android", "clear"})
-		if err != nil || command.Name() != "clear" {
-			t.Fatal("lab Android command missing")
+		command, rest, err := rootCmd.Find([]string{"android", "clear"})
+		if err != nil || len(rest) != 0 || command.Name() != "clear" {
+			t.Fatal("Android command missing")
 		}
-		command.RunE = func(cmd *cobra.Command, args []string) error { return os.Remove(sentinel) }
+		command.RunE = func(*cobra.Command, []string) error { return os.Remove(sentinel) }
 	}
 	for index, arg := range os.Args {
 		if arg == "--" {
-			rootCmd.SetArgs(os.Args[index+1:])
-			if err := rootCmd.Execute(); err != nil {
-				os.Exit(1)
-			}
+			os.Args = append([]string{"rep"}, os.Args[index+1:]...)
+			rootCmd.SetArgs(os.Args[1:])
+			Execute()
 			os.Exit(0)
 		}
 	}
 	os.Exit(2)
 }
 
-func TestScopedSharedCredentialExportsAreRejected(t *testing.T) {
+func TestScopeDerivesIdentityOfflineAndSeparatesTasks(t *testing.T) {
 	dir := t.TempDir()
-	for _, args := range [][]string{{"auth"}, {"auth", "--save"}, {"setup", "example.test"}} {
-		raw, err := runScopeCLI(t, dir, nil, append([]string{"--workspace", "project", "--task", "agent", "-j"}, args...)...)
-		requireScopeError(t, raw, err, "scope_unsupported")
+	for _, tc := range []struct {
+		args         []string
+		env          map[string]string
+		task, source string
+	}{
+		{[]string{"scope", "--task", "project/a"}, nil, "project/a", "flag"},
+		{[]string{"scope"}, map[string]string{"REP_TASK": "project/b"}, "project/b", "environment"},
+		{[]string{"scope"}, map[string]string{"REP_TASK": "global"}, "global", "environment"},
+	} {
+		raw, err := runScopeCLI(t, dir, tc.env, tc.args...)
+		var result struct {
+			Task     string   `json:"task"`
+			Source   string   `json:"task_source"`
+			Tabs     []string `json:"tabs"`
+			Captures []any    `json:"captures"`
+			Journal  []any    `json:"journal"`
+		}
+		if err != nil || json.Unmarshal(raw, &result) != nil || result.Task != tc.task || result.Source != tc.source || len(result.Tabs) != 0 || len(result.Captures) != 0 || len(result.Journal) != 0 {
+			t.Fatalf("offline scope: %s %v", raw, err)
+		}
 	}
+	if _, err := os.Stat(filepath.Join(dir, "data")); !os.IsNotExist(err) {
+		t.Fatalf("scope created data or a browser: %v", err)
+	}
+}
+
+func TestScopedStoresRejectExternalCaptureOverrides(t *testing.T) {
+	dir := t.TempDir()
+	raw, err := runScopeCLI(t, dir, map[string]string{"REPLIVE_PATH": filepath.Join(dir, "shared.json")}, "scope", "--task", "project/a")
+	requireScopeError(t, raw, err, "invalid_argument")
 }
 
 func runScopeCLI(t *testing.T, directory string, extra map[string]string, args ...string) ([]byte, error) {
@@ -72,7 +79,7 @@ func runScopeCLI(t *testing.T, directory string, extra map[string]string, args .
 			env[name] = value
 		}
 	}
-	for _, name := range []string{"REP_WORKSPACE", "REP_TASK", "REPLIVE_PATH", "REPANDROID_PATH", "REP_PROFILE", "XDG_RUNTIME_DIR"} {
+	for _, name := range []string{"REP_WORKSPACE", "REP_TASK", "REPLIVE_PATH", "REPANDROID_PATH", "REP_PROFILE", "XDG_RUNTIME_DIR", "CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "REP_TASK_SESSION"} {
 		delete(env, name)
 	}
 	env["REP_SCOPE_CLI_TEST"] = "1"
@@ -98,185 +105,5 @@ func requireScopeError(t *testing.T, raw []byte, err error, code string) {
 	}
 	if json.Unmarshal(raw, &result) != nil || result.Error.Code != code {
 		t.Fatalf("wanted structured %s: %s (%v)", code, raw, err)
-	}
-}
-
-func TestRootDerivesTaskBeforeReadingOrCapturing(t *testing.T) {
-	dir := t.TempDir()
-	raw, err := runScopeCLI(t, dir, map[string]string{"CLAUDE_CODE_SESSION_ID": "synthetic-session", "CODEX_THREAD_ID": ""}, "scope", "-j")
-	var result struct {
-		Scoped bool   `json:"scoped"`
-		Task   string `json:"task"`
-		Source string `json:"task_source"`
-	}
-	if err != nil || json.Unmarshal(raw, &result) != nil || !result.Scoped || result.Source != "agent" || !strings.HasPrefix(result.Task, "default/agent-") {
-		t.Fatalf("ambient scope = %s %v", raw, err)
-	}
-	for _, args := range [][]string{{"summary"}, {"list", "--primary=false"}, {"primary"}, {"sessions"}} {
-		raw, err := runScopeCLI(t, dir, nil, append(args, "-j")...)
-		if (err != nil && !strings.Contains(string(raw), `"code":"live_unavailable"`)) || strings.Contains(string(raw), `"legacy_global":true`) {
-			t.Fatalf("ambient read used legacy store: %s %v", raw, err)
-		}
-	}
-}
-
-func TestRootScopeDerivesTaskAndAllowsGlobalOptOut(t *testing.T) {
-	dir := t.TempDir()
-	legacyDir := filepath.Join(dir, "data", "rep-cli")
-	if err := os.MkdirAll(legacyDir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(legacyDir, "store.json"), []byte(`{"primary_domains":{"legacy.example":true}}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := runScopeCLI(t, dir, nil, "--workspace", "project", "primary", "-j")
-	if err != nil || strings.TrimSpace(string(raw)) != "[]" {
-		t.Fatalf("ambient task saw legacy data: %s %v", raw, err)
-	}
-	raw, err = runScopeCLI(t, dir, nil, "--workspace", "project", "--task", "agent-a", "primary", "-j")
-	if err != nil || strings.TrimSpace(string(raw)) != "[]" {
-		t.Fatalf("scoped empty read saw legacy data: %s %v", raw, err)
-	}
-	raw, err = runScopeCLI(t, dir, map[string]string{"REP_WORKSPACE": "project", "REP_TASK": "agent-a"}, "--global", "primary", "-j")
-	if err != nil || !strings.Contains(string(raw), "legacy.example") {
-		t.Fatalf("explicit global could not read legacy data: %s %v", raw, err)
-	}
-	raw, err = runScopeCLI(t, dir, nil, "--global", "--workspace", "project", "primary", "-j")
-	requireScopeError(t, raw, err, "invalid_argument")
-}
-
-func TestRootProjectBindingAndTaskIsolation(t *testing.T) {
-	dir := t.TempDir()
-	if raw, err := runScopeCLI(t, dir, nil, "workspace", "init", "project", "-j"); err != nil {
-		t.Fatalf("project init: %s %v", raw, err)
-	}
-	raw, err := runScopeCLI(t, dir, nil, "primary", "-j")
-	if err != nil || strings.TrimSpace(string(raw)) != "[]" {
-		t.Fatalf("ambient task saw legacy data: %s %v", raw, err)
-	}
-	if raw, err := runScopeCLI(t, dir, map[string]string{"REP_TASK": "agent-a"}, "primary", "a.example", "-j"); err != nil {
-		t.Fatalf("agent a set primary: %s %v", raw, err)
-	}
-	raw, err = runScopeCLI(t, dir, map[string]string{"REP_TASK": "agent-b"}, "primary", "-j")
-	if err != nil || strings.TrimSpace(string(raw)) != "[]" {
-		t.Fatalf("agent b saw agent a primary: %s %v", raw, err)
-	}
-	raw, err = runScopeCLI(t, dir, map[string]string{"REP_TASK": "agent-a"}, "primary", "-j")
-	if err != nil || !strings.Contains(string(raw), "a.example") {
-		t.Fatalf("agent a lost settings: %s %v", raw, err)
-	}
-	raw, err = runScopeCLI(t, dir, map[string]string{"REP_TASK": "agent-a", "REPLIVE_PATH": "/tmp/shared-capture.json"}, "primary", "-j")
-	requireScopeError(t, raw, err, "invalid_argument")
-}
-
-func readScopeProfiles(t *testing.T, directory string, args ...string) scopeBrowserProfiles {
-	t.Helper()
-	raw, err := runScopeCLI(t, directory, nil, append(args, "scope", "-j")...)
-	if err != nil {
-		t.Fatalf("scope failed: %s %v", raw, err)
-	}
-	var result struct {
-		SharedBrowser   bool                 `json:"shared_browser_profile"`
-		BrowserProfiles scopeBrowserProfiles `json:"browser_profiles"`
-	}
-	if err := json.Unmarshal(raw, &result); err != nil {
-		t.Fatalf("invalid scope output: %s %v", raw, err)
-	}
-	if !result.SharedBrowser || !result.BrowserProfiles.Extension.SharedAcrossTasks {
-		t.Fatalf("shared extension profile was incorrectly isolated: %s", raw)
-	}
-	if result.BrowserProfiles.ArchiveAccountIdentity != "not_verified" {
-		t.Fatalf("scope claimed an archive account identity: %s", raw)
-	}
-	return result.BrowserProfiles
-}
-
-func TestScopeReportsStableNamedProfileWithoutStartingBrowsers(t *testing.T) {
-	dir := t.TempDir()
-	var sharedPath string
-	for _, task := range []string{"account-a", "account-b"} {
-		profiles := readScopeProfiles(t, dir, "--workspace", "project", "--task", task)
-		profile := profiles.TaskHeadless
-		if !profile.Available || !profile.SharedAcrossTasks || !profile.Persistent || profile.Selector != "headless" || profile.Status != "not_started" || profile.Running == nil || *profile.Running || profile.Connected == nil || *profile.Connected {
-			t.Fatalf("incorrect unstarted private profile: %+v", profile)
-		}
-		wantPath := filepath.Join(dir, "data", "rep-cli", "profiles", "default", "headless", "profile")
-		if profile.ProfilePath != wantPath || (sharedPath != "" && sharedPath != profile.ProfilePath) {
-			t.Fatalf("named profile was not stable across tasks: %+v", profile)
-		}
-		sharedPath = profile.ProfilePath
-		if profile.StartCommand != "rep browser start --task project/"+task {
-			t.Fatalf("start guidance selected another task: %q", profile.StartCommand)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(dir, "data")); !os.IsNotExist(err) {
-		t.Fatalf("scope status inspection created data or a browser profile: %v", err)
-	}
-}
-
-func TestGlobalScopeDoesNotClaimPrivateProfile(t *testing.T) {
-	dir := t.TempDir()
-	for _, args := range [][]string{{"--global"}} {
-		profile := readScopeProfiles(t, dir, args...).TaskHeadless
-		if profile.Available || profile.Status != "requires_explicit_task" || profile.ProfilePath != "" || profile.StartCommand != "" {
-			t.Fatalf("missing task reported an available profile: %+v", profile)
-		}
-	}
-}
-
-func TestScopeReportsStoppedProfileWithoutConnectionDetails(t *testing.T) {
-	dir := t.TempDir()
-	taskDir := filepath.Join(dir, "data", "rep-cli", "profiles", "default")
-	profileDir := filepath.Join(taskDir, "headless", "profile")
-	sum := sha256.Sum256([]byte(filepath.Clean(taskDir)))
-	state := headless.State{
-		Version: 1, Profile: profileDir, Headed: true,
-		BridgeDir: fmt.Sprintf("/tmp/rep-headless-%d-%x", os.Getuid(), sum[:10]),
-		WebSocket: "ws://127.0.0.1:1234/private-debugging-identity", Binary: "private-binary-path",
-	}
-	data, err := json.Marshal(state)
-	if err != nil {
-		t.Fatal(err)
-	}
-	statePath := filepath.Join(taskDir, "headless", "state.json")
-	if err := os.MkdirAll(filepath.Dir(statePath), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(statePath, data, 0600); err != nil {
-		t.Fatal(err)
-	}
-	profile := readScopeProfiles(t, dir, "--workspace", "project", "--task", "account-a").TaskHeadless
-	if profile.Status != "stopped" || profile.Running == nil || *profile.Running || profile.Connected == nil || *profile.Connected || profile.Headed == nil || !*profile.Headed || profile.ProfilePath != profileDir {
-		t.Fatalf("incorrect stopped profile: %+v", profile)
-	}
-	raw, err := runScopeCLI(t, dir, nil, "--workspace", "project", "--task", "account-a", "scope", "-j")
-	if err != nil {
-		t.Fatalf("scope failed: %s %v", raw, err)
-	}
-	for _, privateValue := range []string{state.WebSocket, state.BridgeDir, state.Binary, "\"websocket\"", "\"port\""} {
-		if strings.Contains(string(raw), privateValue) {
-			t.Fatalf("scope disclosed connection state %q: %s", privateValue, raw)
-		}
-	}
-	if after, err := os.ReadFile(statePath); err != nil || string(after) != string(data) {
-		t.Fatalf("scope changed lifecycle state: %s %v", after, err)
-	}
-	if _, err := os.Stat(profileDir); !os.IsNotExist(err) {
-		t.Fatalf("scope created a browser profile: %v", err)
-	}
-}
-
-func TestScopeReportsInvalidProfileStateAsUnknown(t *testing.T) {
-	dir := t.TempDir()
-	stateDir := filepath.Join(dir, "data", "rep-cli", "profiles", "default", "headless")
-	if err := os.MkdirAll(stateDir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(stateDir, "state.json"), []byte(`{"version":1,"profile":"another-task"}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	profile := readScopeProfiles(t, dir, "--workspace", "project", "--task", "account-a").TaskHeadless
-	if profile.Status != "unknown" || profile.Running != nil || profile.Connected != nil || profile.Headed != nil {
-		t.Fatalf("invalid state claimed absence or availability: %+v", profile)
 	}
 }

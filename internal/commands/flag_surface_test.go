@@ -13,14 +13,12 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-// Every flag below is part of the final contract. All other accepted spellings
-// must have a named, dated migration entry; hiding a flag never avoids counting it.
+// Every accepted flag is counted. The completed migration has no exceptions.
 var contractFlags = map[string][]string{
 	"rep": {"task"}, "rep page": {"section", "find", "reload", "viewport", "capture"},
 	"rep do": {"press", "file", "capture"}, "rep eval": {"timeout", "capture"},
@@ -47,15 +45,9 @@ func readSurfaceMigration(t *testing.T) surfaceMigration {
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatal(err)
 	}
-	expires, err := time.Parse("2006-01-02", result.Expires)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !time.Now().Before(expires) {
-		for kind, entries := range result.Entries {
-			if len(entries) != 0 {
-				t.Errorf("expired %s migration entries: remove at %s (%s)", kind, result.RemoveBy, result.Expires)
-			}
+	for kind, entries := range result.Entries {
+		if len(entries) != 0 {
+			t.Fatalf("final surface requires an empty allowlist: %s", kind)
 		}
 	}
 	return result
@@ -247,11 +239,10 @@ func TestAcceptedFlagSurface(t *testing.T) {
 	}
 	walk(rootCmd)
 	t.Logf("all accepted flags, including hidden: %d local + %d inherited = %d effective; %d top-level verbs", localTotal, inheritedTotal, localTotal+inheritedTotal, verbs)
-	if len(debt["commands"]) == 0 && len(debt["flags"]) == 0 && len(debt["pending_commands"]) == 0 && len(debt["pending_flags"]) == 0 {
-		if verbs != 16 || localTotal != 29 {
-			t.Errorf("final surface: %d verbs, %d local flags including --task; want 16 and 29", verbs, localTotal)
-		}
+	if verbs != 16 || localTotal != 29 {
+		t.Errorf("final surface: %d verbs, %d local flags including --task; want 16 and 29", verbs, localTotal)
 	}
+
 }
 
 func TestContractHelpBudgets(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
+
 	"os"
 	"path/filepath"
 	"strings"
@@ -330,66 +330,6 @@ func TestCoreBodySpillRedactsAndPartialEvidenceStaysPartial(t *testing.T) {
 	}
 	if result["complete"] != false || result["next"] != nil {
 		t.Fatal("incomplete retained JSON was treated as complete or retriable")
-	}
-}
-
-func TestLegacySearchPaginatesMatchesAndExtractNeverUnionsArchives(t *testing.T) {
-	selected := summaryTestScope(t, "net-fixture", "legacy-query")
-	requests := []store.Request{}
-	for i := 0; i < 8; i++ {
-		path := fmt.Sprintf("/skip/%d", i)
-		if i == 2 || i == 5 || i == 7 {
-			path = fmt.Sprintf("/needle/%d", i)
-		}
-		requests = append(requests, netRequest(path, `{}`))
-	}
-	writeSummaryCapture(t, selected.LivePath, store.Export{Requests: requests})
-	oldFilter, oldIn, oldCase, oldInvert, oldMode, oldJSON, oldRaw := searchFilter, searchIn, searchIgnoreCase, searchInvert, outputMode, jsonOutput, rawJSON
-	t.Cleanup(func() {
-		searchFilter, searchIn, searchIgnoreCase, searchInvert, outputMode, jsonOutput, rawJSON = oldFilter, oldIn, oldCase, oldInvert, oldMode, oldJSON, oldRaw
-	})
-	searchFilter = store.FilterOptions{Limit: 1, Offset: 1}
-	searchIn = "path"
-	searchIgnoreCase, searchInvert = false, false
-	outputMode, jsonOutput, rawJSON = "json", true, true
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stdout := os.Stdout
-	os.Stdout = writer
-	err = searchCmd.RunE(searchCmd, []string{"needle"})
-	os.Stdout = stdout
-	_ = writer.Close()
-	data, readErr := io.ReadAll(reader)
-	_ = reader.Close()
-	if err != nil || readErr != nil {
-		t.Fatal(err, readErr)
-	}
-	var rows []SearchResult
-	if err = json.Unmarshal(data, &rows); err != nil {
-		t.Fatal(err, string(data))
-	}
-	if len(rows) != 1 || len(rows[0].Matches) != 1 {
-		t.Fatalf("search applied offset/limit before matching: %s", data)
-	}
-	// A single retained source is supported by the legacy shim, but more than
-	// one archive requires an explicit handle; neither is silently unioned.
-	if err = os.Remove(selected.LivePath); err != nil {
-		t.Fatal(err)
-	}
-	persistent, err := store.Get()
-	if err != nil {
-		t.Fatal(err)
-	}
-	persistent.Sessions = []store.Session{{ID: "a", Requests: requests[:1]}, {ID: "b", Requests: requests[1:2]}}
-	if _, err = loadRequestsForExtract(); err == nil {
-		t.Fatal("extract silently unioned archives")
-	}
-	writeSummaryCapture(t, selected.LivePath, store.Export{Requests: []store.Request{}})
-	got, err := loadRequestsForExtract()
-	if err != nil || len(got) != 0 {
-		t.Fatal("empty live capture fell through to saved history")
 	}
 }
 

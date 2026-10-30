@@ -7,8 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Lab commands have their own top-level paths. The old browser children remain
-// migration spellings until the final removal; core never registers either.
+// Specialized commands use explicit rep-lab top-level paths.
 func init() {
 	deps := defaultJevDOMDependencies()
 	element := newBrowserElementCommand(deps)

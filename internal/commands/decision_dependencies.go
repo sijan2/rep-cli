@@ -23,7 +23,7 @@ func defaultJevDOMDependencies() jevDOMDependencies {
 		browser: func(ctx context.Context, name string) (jevdom.Browser, error) {
 			client, err := connectBrowser(ctx, name)
 			if err != nil {
-				return nil, output.NewAgentError(output.ErrCodeBrowserUnavailable, "", "cannot connect to the selected browser bridge: "+err.Error(), "rep browser status", "rep browser tabs")
+				return nil, output.NewAgentError(output.ErrCodeBrowserUnavailable, "", "cannot connect to the selected browser bridge: "+err.Error(), "rep tabs", "rep tabs")
 			}
 			return client, nil
 		},

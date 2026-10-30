@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/repplus/rep-cli/internal/output"
+	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -60,8 +61,18 @@ func reportUnreported(command *cobra.Command, err error, runStarted bool, args [
 	default:
 		ae = output.WrapError(err, output.ErrCodeCommandFailed, path, path+" --help")
 	}
-	if getOutputMode() == "json" || jsonRequested(args) {
-		_ = output.EmitAgentError(stdout, ae, true)
+	if getOutputMode() == "json" {
+		if ae.Next == "" {
+			ae.Next = path + " --help"
+		}
+		if ae.Retry == "" {
+			ae.Retry = "needs-agent"
+		}
+		result := coreResult{Error: &coreError{Code: ae.Code, Message: ae.Message, Next: ae.Next, Retry: ae.Retry}}
+		if selected, ok := scope.Configured(); ok {
+			result.Task, result.TaskSource = selected.Identity(), selected.TaskSource
+		}
+		_ = output.WriteJSON(stdout, result)
 		return
 	}
 	_ = output.EmitAgentError(stderr, ae, false)
@@ -116,24 +127,6 @@ func flagOwners(name string, shorthand bool) []string {
 		owners = append(owners[:6], "...")
 	}
 	return owners
-}
-
-// jsonRequested detects a JSON request even when flag parsing stopped before
-// reaching -j/--json, so a usage error keeps the caller's output format.
-func jsonRequested(args []string) bool {
-	for index, arg := range args {
-		switch {
-		case arg == "--":
-			return false
-		case arg == "-j" || arg == "--json" || arg == "--json=true" || arg == "--raw-json" || arg == "--raw-json=true" || arg == "--envelope" || arg == "--envelope=true":
-			return true
-		case arg == "--output=json" || arg == "-ojson" || arg == "-o=json":
-			return true
-		case (arg == "--output" || arg == "-o") && index+1 < len(args) && args[index+1] == "json":
-			return true
-		}
-	}
-	return false
 }
 
 func processArgs() []string {

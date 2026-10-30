@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -148,10 +147,8 @@ func TestDocumentedCommandsResolve(t *testing.T) {
 	if err := json.Unmarshal(data, &baseline); err != nil {
 		t.Fatal(err)
 	}
-	// Exact file+argv debt only during the parallel migration. The original
-	// freeze hook is gone; no environment variable can bless new failures.
-	if len(baseline) > 0 && !time.Now().Before(time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC)) {
-		t.Fatal("command-reference migration debt expired; remove it at step 7/9")
+	if len(baseline) != 0 {
+		t.Fatal("final source contract requires an empty migration allowlist")
 	}
 	allowed := map[string]bool{}
 	for _, value := range baseline {
@@ -162,7 +159,7 @@ func TestDocumentedCommandsResolve(t *testing.T) {
 			t.Error(value)
 		}
 	}
-	t.Logf("resolved source contracts; %d exact migration exceptions must be removed by Step 7/9", len(failures))
+	t.Logf("source contract failures: %d", len(failures))
 }
 
 func TestCompanionCommandShapes(t *testing.T) {

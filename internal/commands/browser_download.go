@@ -15,9 +15,8 @@ import (
 	"time"
 
 	"github.com/repplus/rep-cli/internal/bridge"
-	"github.com/repplus/rep-cli/internal/output"
+
 	"github.com/repplus/rep-cli/internal/store"
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -51,72 +50,6 @@ type browserDownloadResult struct {
 	DetectedContentType string                `json:"detected_content_type"`
 	TabID               int                   `json:"tab_id"`
 	TabClosed           bool                  `json:"tab_closed"`
-}
-
-var (
-	browserDownloadOverwrite       bool
-	browserDownloadTimeout         time.Duration
-	browserDownloadChunkSize       int
-	browserDownloadNoCache         bool
-	browserDownloadOmitCredentials bool
-	browserDownloadValidation      artifactValidationOptions
-)
-
-var browserDownloadCmd = &cobra.Command{
-	Use:   "download <request-id> <output-path>",
-	Short: "Stream a captured GET through the real browser profile",
-	Long: `Stream a captured final GET through the connected Arc/Chrome profile.
-
-The URL stays inside rep's local data plane. rep+ creates one inactive
-about:blank tab, loads the resource with browser-managed credentials through
-Network.loadNetworkResource, drains its IO stream in bounded chunks, validates
-the completed part file, and publishes it atomically. This path needs only the
-rep+ Native Messaging bridge; Arc's browser-process debugging port is not
-required.`,
-	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) (returnErr error) {
-		req := lookupRequestForReplay(args[0])
-		if req == nil {
-			return output.EmitAgentError(os.Stdout, output.NewAgentError(
-				output.ErrCodeRequestNotFound,
-				"browser download",
-				fmt.Sprintf("no request matched %q", args[0]),
-				"rep list --primary=false --pattern 'download|export|artifact' --limit 10 -o meta",
-			), getOutputMode() == "json")
-		}
-		record, err := beginBrowserEvidence("browser.download", map[string]any{"intent": "save a fresh browser transfer", "source_request_id": req.ID, "new_observation": true}, browserSelector, -1)
-		if err != nil {
-			return emitBrowserCallError("browser download", err)
-		}
-		defer record.finishOnReturn(&returnErr)
-		record.dispatch()
-		result, err := downloadCapturedRequestInBrowser(cmd.Context(), req, args[1], browserDownloadOptions{
-			Overwrite: browserDownloadOverwrite, Timeout: browserDownloadTimeout,
-			ChunkSize: browserDownloadChunkSize, NoCache: browserDownloadNoCache,
-			OmitCredentials: browserDownloadOmitCredentials,
-			Validation:      browserDownloadValidation,
-		})
-		if err != nil {
-			return output.EmitAgentError(os.Stdout, output.WrapError(
-				err, output.ErrCodeTransferFailed, "browser download",
-				"rep browser status --browser arc -j",
-				"capture the final GET, then retry its request ID",
-			), getOutputMode() == "json")
-		}
-		result.Evidence = record.ref()
-		if err := record.artifact(result.OutputPath, "download", "complete", "browser stream reached EOF and the saved file passed transfer validation",
-			map[string]any{"source_request_id": req.ID, "new_observation": true, "transport": result.Transport, "status": result.Status}); err != nil {
-			return emitBrowserCallError("browser download", err)
-		}
-		if err := record.finish(result, "completed", "satisfied", "", nil); err != nil {
-			return emitBrowserCallError("browser download", err)
-		}
-		return emitBrowserResult(result, func() {
-			fmt.Printf("saved: %s\ntransport: browser\nstatus: %d\nbytes: %d\ncontent-type: %s\ndetected-content-type: %s\nsha256: %s\n",
-				result.OutputPath, result.Status, result.Bytes, displayContentType(result.ContentType),
-				displayContentType(result.DetectedContentType), result.SHA256)
-		})
-	},
 }
 
 func downloadCapturedRequestInBrowser(ctx context.Context, req *store.Request, outputPath string, opts browserDownloadOptions) (_ browserDownloadResult, err error) {
@@ -442,15 +375,4 @@ func boundedBrowserCall(client *bridge.Client, method string, params map[string]
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return client.Call(ctx, method, params, result)
-}
-
-func init() {
-	browserCmd.AddCommand(browserDownloadCmd)
-	browserDownloadCmd.Flags().BoolVar(&browserDownloadOverwrite, "overwrite", false, "Atomically replace an existing output file")
-	browserDownloadCmd.Flags().DurationVar(&browserDownloadTimeout, "timeout", 5*time.Minute, "Maximum total transfer duration")
-	browserDownloadCmd.Flags().IntVar(&browserDownloadChunkSize, "chunk-size", defaultBrowserDownloadChunk, "CDP IO.read chunk size in bytes")
-	browserDownloadCmd.Flags().BoolVar(&browserDownloadNoCache, "no-cache", false, "Disable browser cache for the resource load")
-	browserDownloadCmd.Flags().BoolVar(&browserDownloadOmitCredentials, "omit-credentials", false, "Do not include browser-managed credentials")
-
-	bindArtifactValidationFlags(browserDownloadCmd.Flags(), &browserDownloadValidation)
 }

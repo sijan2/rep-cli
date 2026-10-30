@@ -13,38 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var browserWatchCmd = &cobra.Command{
-	Use:   "watch",
-	Short: "Stream normal browsing traffic into a dedicated live session",
-}
-
-var browserWatchStartCmd = &cobra.Command{
-	Use:   "start",
-	Short: "Clear live.json and start ambient all-tab capture",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBrowserWatch(cmd, "start")
-	},
-}
-
-var browserWatchStopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Seal the current ambient capture",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBrowserWatch(cmd, "stop")
-	},
-}
-
-var browserWatchStatusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show whether ambient capture is enabled",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBrowserWatch(cmd, "status")
-	},
-}
-
 func runBrowserWatch(cmd *cobra.Command, action string) error {
 	selected, err := scope.Current()
 	if err != nil {
@@ -69,9 +37,4 @@ func runBrowserWatch(cmd *cobra.Command, action string) error {
 			fmt.Printf("session: %v\n", session)
 		}
 	})
-}
-
-func init() {
-	browserCmd.AddCommand(browserWatchCmd)
-	browserWatchCmd.AddCommand(browserWatchStartCmd, browserWatchStopCmd, browserWatchStatusCmd)
 }

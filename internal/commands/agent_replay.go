@@ -11,8 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var coreReplayWrite bool
-
 func newCoreReplayCommand() *cobra.Command {
 	var sets []string
 	var matrix string
@@ -149,28 +147,4 @@ func coreReplayVariants(source *store.Request, sets []string, matrix string, wri
 	return variants, origin, nil
 }
 
-// Retain old request-ID spellings during the staged migration. The final
-// constructor above is used when the integrator removes compatibility flags.
-func init() {
-	legacy := replayCmd.RunE
-	replayCmd.Flags().BoolVar(&coreReplayWrite, "write", false, "Permit sequential unsafe requests; never retry")
-	replayCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if strings.HasPrefix(args[0], "h_") {
-			if len(replayMatrix) > 1 {
-				return coreFailure(cmd, coreArgument("provide one matrix"))
-			}
-			if len(replayAs) > 0 || replayBaseline != 0 || cmd.Flags().Changed("concurrency") {
-				return coreFailure(cmd, coreArgument("captured handles use browser credentials and adaptive concurrency"))
-			}
-			matrix := ""
-			if len(replayMatrix) == 1 {
-				matrix = replayMatrix[0]
-			}
-			if err := coreReplay(cmd, args[0], replaySet, matrix, coreReplayWrite, replayTimeout); err != nil {
-				return coreFailure(cmd, err)
-			}
-			return nil
-		}
-		return legacy(cmd, args)
-	}
-}
+func init() { rootCmd.AddCommand(newCoreReplayCommand()) }

@@ -56,11 +56,3 @@ func TestHostSelectionBatchRetainsGoalOrderAndUsesOneDecisionRPC(t *testing.T) {
 		t.Fatalf("invalid batch: %v", err)
 	}
 }
-
-func TestInteractionSelectionRetainsFrameAndDocumentBinding(t *testing.T) {
-	decision := jevdom.Result{Status: "selected", Selected: &jevdom.Candidate{Name: "Save", Role: "button", BackendDOMNodeID: 8}, Binding: &jevdom.Binding{Generation: "session-generation", FrameID: "child-frame", FrameURL: "https://child.example/form", SessionID: "child-session", DocumentGeneration: "document-generation", SnapshotFingerprint: "scope-fingerprint", Kind: "controls", Origin: "https://root.example", ScopeFrameID: "original-frame", ScopeBackendDOMNodeID: 44}}
-	selection := interactionSelection(decision)
-	if selection.FrameID != "child-frame" || selection.SessionID != "child-session" || selection.FrameURL != "https://child.example/form" || selection.DocumentGeneration != "document-generation" || selection.Generation != "session-generation" || selection.SnapshotFingerprint != "scope-fingerprint" || selection.BackendDOMNodeID != 8 || selection.Kind != "controls" || selection.Origin != "https://root.example" || selection.ScopeFrameID != "original-frame" || selection.ScopeBackendDOMNodeID != 44 {
-		t.Fatal("interaction adapter discarded part of the observed handle")
-	}
-}

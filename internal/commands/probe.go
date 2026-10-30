@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
+
 	"strings"
 
 	"github.com/bytedance/sonic"
@@ -184,7 +184,7 @@ func probeOpenStore(cmd *cobra.Command) (*probe.ProbeStore, error) {
 		return nil, probeError(cmd, output.ErrCodeInvalidArgument, err.Error())
 	}
 	if !selected.Scoped || selected.TaskSource == "default" {
-		return nil, probeError(cmd, "scope_required", "probe requires an explicit workspace and task; select --workspace and --task or REP_WORKSPACE and REP_TASK", "rep scope")
+		return nil, probeError(cmd, "scope_required", "probe requires an explicit workspace and task; select a qualified post-verb --task or REP_TASK", "rep scope")
 	}
 	path, err := store.GetStorePath()
 	if err != nil {
@@ -307,68 +307,22 @@ func probePrintRow(w io.Writer, p probe.Probe) {
 }
 
 func probeSuggestions(p probe.Probe) []string {
+	// Stored-principal impersonation is gone. A probe preserves its explicit
+	// preconditions; replay uses only the current browser session.
 	if p.State != probe.ProbeUntested {
 		return []string{probeCommandLine("probe", "show", p.ID), probeCommandLine("probe", "next")}
 	}
-	replay := []string{"replay", p.RequestRef, "--baseline", "5"}
-	principals := append([]string{}, p.IdentityShape...)
-	if len(principals) == 0 {
-		switch p.OracleKind {
-		case probe.ProbeAuthzUnauthenticated:
-			principals = []string{"anon"}
-		case probe.ProbeAuthzCrossPrincipal, probe.ProbeObjectReference:
-			identities, err := loadIdentities()
-			if err != nil {
-				return []string{probeCommandLine("identity", "list"), probeCommandLine(replay...)}
-			}
-			fingerprints := make(map[string]bool)
-			names := make([]string, 0, len(identities))
-			for name := range identities {
-				names = append(names, name)
-			}
-			sort.Strings(names)
-			for _, name := range names {
-				identity := identities[name]
-				if identity.Fingerprint != "" && !fingerprints[identity.Fingerprint] && !strings.ContainsAny(name, ",\r\n") && name != "anon" {
-					principals = append(principals, name)
-					fingerprints[identity.Fingerprint] = true
-				}
-				if len(principals) == 2 {
-					break
-				}
-			}
-			if len(principals) < 2 {
-				return []string{probeCommandLine("identity", "list"), probeCommandLine(replay...)}
-			}
-		}
-	} else {
-		identities, err := loadIdentities()
-		for _, name := range principals {
-			if _, bound := identities[name]; name != "anon" && (!bound || err != nil) {
-				return []string{probeCommandLine("identity", "list"), probeCommandLine(replay...)}
-			}
-		}
-	}
-	if len(principals) > 0 {
-		replay = append(replay, "--as", strings.Join(principals, ","))
-	}
-	return []string{probeCommandLine(replay...), probeCommandLine("probe", "show", p.ID)}
+	return []string{probeCommandLine("body", p.RequestRef), probeCommandLine("replay", p.RequestRef), probeCommandLine("probe", "show", p.ID)}
 }
 
-// Suggestions must survive a shell round trip without turning captured or
-// user-chosen labels into shell syntax, and must retain the task selection.
 func probeCommandLine(args ...string) string {
-	parts := []string{"rep"}
+	binary := "rep"
+	if len(args) > 0 && args[0] == "probe" {
+		binary = "rep-lab"
+	}
+	parts := append([]string{binary}, args...)
 	if selected, err := scope.Current(); err == nil && selected.Scoped {
-		parts = append(parts, "--workspace", selected.Workspace, "--task", selected.Task)
+		parts = append(parts, "--task", selected.Identity())
 	}
-	parts = append(parts, args...)
-	for i, part := range parts {
-		if part == "" || strings.IndexFunc(part, func(r rune) bool {
-			return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_./,:=-", r))
-		}) >= 0 {
-			parts[i] = "'" + strings.ReplaceAll(part, "'", "'\"'\"'") + "'"
-		}
-	}
-	return strings.Join(parts, " ")
+	return quoteCommand(parts...)
 }

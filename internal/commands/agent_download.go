@@ -101,15 +101,5 @@ func coreDownload(command *cobra.Command, source, path string, overwrite bool, t
 	}
 	return emitCore(command, coreResult{Browser: browser.Name, Profile: browser.Profile, Status: "complete", Complete: boolPointer(true), Meta: map[string]any{"path": result.OutputPath, "bytes": result.Bytes, "sha256": result.SHA256, "transport": result.Transport, "status": result.Status}, Untrusted: map[string]any{"content_type": result.ContentType, "detected_content_type": result.DetectedContentType}})
 }
-func init() {
-	legacy := downloadCmd.RunE
-	downloadCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if strings.HasPrefix(args[0], "h_") || coreHTTPURL(args[0]) {
-			if err := coreDownload(cmd, args[0], args[1], downloadOverwrite, downloadTimeout); err != nil {
-				return coreFailure(cmd, err)
-			}
-			return nil
-		}
-		return legacy(cmd, args)
-	}
-}
+
+func init() { rootCmd.AddCommand(newCoreDownloadCommand()) }

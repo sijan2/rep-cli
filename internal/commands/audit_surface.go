@@ -5,7 +5,7 @@ package commands
 import (
 	"fmt"
 	"net/url"
-	"os"
+
 	"strings"
 
 	"github.com/bytedance/sonic"
@@ -158,21 +158,4 @@ func truncateRoute(route string, max int) string {
 		return route
 	}
 	return route[:max-3] + "..."
-}
-
-func emitSurfaceEmpty(jsonMode bool) error {
-	if jsonMode {
-		env := output.WrapData("audit", "live.json", map[string]interface{}{
-			"requests_scanned": 0, "candidates": []surface.Candidate{},
-			"termination_note": "no capture in this task",
-		})
-		buf, err := sonic.MarshalIndent(env, "", "  ")
-		if err != nil {
-			return err
-		}
-		fmt.Println(string(buf))
-		return nil
-	}
-	fmt.Fprintln(os.Stdout, "no capture in this task")
-	return nil
 }

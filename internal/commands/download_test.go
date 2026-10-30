@@ -293,18 +293,3 @@ func TestCapturedReplayHeadersStripPseudoAndDedupe(t *testing.T) {
 		}
 	}
 }
-
-func TestGenerateCurlAlwaysDropsHTTP2Pseudoheaders(t *testing.T) {
-	command := generateCurl(&store.Request{
-		Method: "GET",
-		URL:    "https://example.test/file?signature=visible-once",
-		Headers: store.HeaderMap{
-			":authority": {"example.test"},
-			":path":      {"/file?signature=must-not-repeat"},
-			"accept":     {"*/*"},
-		},
-	}, true)
-	if strings.Contains(command, ":authority") || strings.Contains(command, "must-not-repeat") {
-		t.Fatalf("pseudoheader leaked into curl command: %q", command)
-	}
-}

@@ -405,9 +405,3 @@ func newBrowserLocateCommand(deps jevDOMDependencies) *cobra.Command {
 	_ = command.MarkFlagRequired("tab")
 	return command
 }
-
-func init() {
-	command := newBrowserLocateCommand(defaultJevDOMDependencies())
-	addDecisionBrowserFlag(command)
-	browserCmd.AddCommand(command)
-}

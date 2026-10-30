@@ -117,7 +117,7 @@ func engineReportError(cmd *cobra.Command, err error) error {
 	if errors.As(err, &classified) {
 		code, message = classified.Code, classified.Message
 	}
-	ae := output.NewAgentError(code, cmd.CommandPath(), message, "rep engine list -j")
+	ae := output.NewAgentError(code, cmd.CommandPath(), message, "rep-lab engine list")
 	writer := cmd.ErrOrStderr()
 	if getOutputMode() == "json" {
 		writer = cmd.OutOrStdout()

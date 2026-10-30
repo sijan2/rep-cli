@@ -294,7 +294,7 @@ func newBrowserStateCommand(deps jevDOMDependencies) *cobra.Command {
 			}
 			result.Next = fastNext(command, "page", tab, extra)
 		case "locate":
-			result.Next = fmt.Sprintf("%s browser locate 'the button that accepts or closes the consent dialog' --tab %d", fmt.Sprintf("rep --workspace %s --task %s", selected.Workspace, selected.Task), tab)
+			result.Next = quoteCommand("rep-lab", "locate", "the button that accepts or closes the consent dialog", "--tab", fmt.Sprint(tab), "--task", selected.Identity())
 		}
 		return finish(nil)
 	}
@@ -302,10 +302,4 @@ func newBrowserStateCommand(deps jevDOMDependencies) *cobra.Command {
 	command.Flags().DurationVar(&timeout, "timeout", 15*time.Second, "Observation and decision budget (1s to 60s)")
 	_ = command.MarkFlagRequired("tab")
 	return command
-}
-
-func init() {
-	command := newBrowserStateCommand(defaultJevDOMDependencies())
-	addDecisionBrowserFlag(command)
-	browserCmd.AddCommand(command)
 }

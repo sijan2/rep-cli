@@ -191,9 +191,6 @@ func ResolveIdentity(opts Options, owner string, facts IdentityFacts) (Scope, er
 		task = name
 		workspace = strings.TrimSpace(opts.Workspace)
 		if workspace == "" {
-			workspace = strings.TrimSpace(facts.Env["REP_WORKSPACE"])
-		}
-		if workspace == "" {
 			workspace = "default"
 		}
 	}

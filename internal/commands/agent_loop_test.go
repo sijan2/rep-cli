@@ -71,15 +71,6 @@ func TestCDPCredentialAndGlobalIsolation(t *testing.T) {
 		}
 	}
 }
-func TestActionDeltaIncludesConfirmationWithoutUnchangedText(t *testing.T) {
-	result := coreTextDelta("Heading\nPrior evidence", "Heading\nSaved: fixture\nPrior evidence")
-	if result != "Saved: fixture" {
-		t.Fatal(result)
-	}
-	if got := coreTextDelta("", strings.Repeat("line\n", 2000)); len(got) > 4000 {
-		t.Fatal(len(got))
-	}
-}
 
 func TestCoreDefaultStringValuesRedactStructuredCredentials(t *testing.T) {
 	value := output.RedactValue(map[string]any{"value": `{"Authorization":"Bearer synthetic-secret","access_token":"synthetic-token"}`})

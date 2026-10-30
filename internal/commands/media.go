@@ -154,7 +154,7 @@ func inspectMedia(request *store.Request, requireComplete bool) (mediaAssembly, 
 	stream := request.Stream
 	if request.RecordKind != "webrtc_media" || stream == nil || stream.Protocol != "webrtc_media" || stream.Version != 1 ||
 		stream.Source != "browser_media_recorder" || stream.PayloadSemantics != "reencoded_media" || stream.Capture.Scope != "recorded_media_interval" {
-		return result, fmt.Errorf("record is not a supported WebRTC media recording; inspect rep stream --info for its source and scope")
+		return result, fmt.Errorf("record is not a supported WebRTC media recording; inspect rep body h_ID for its source and scope")
 	}
 	if err := validateStreamCoverage(stream); err != nil {
 		return result, err

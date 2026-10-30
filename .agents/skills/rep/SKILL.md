@@ -20,15 +20,15 @@ Commands:
   shot [TAB|URL] [PATH]  Save screenshots
   reference URL|TAB|p_CURSOR  Save design evidence
   net [QUERY...|s_CAPTURE|p_CURSOR]  Query captured traffic; terms are ANDed
-  body h_ID [POINTER|#EVENT|p_CURSOR]  Read retained body bytes
+  body h_ID [POINTER|#EVENT|p_CURSOR]  Read captured bytes and metadata
   fetch URL  Fetch in a private origin tab using browser credentials
-  replay h_ID  Replay observed requests
-  download h_ID|URL PATH  Save a file
+  replay h_ID  Replay captured traffic in its browser session; writes need --write
+  download h_ID|URL PATH  Save a GET privately with browser credentials and validation
   tabs  List live tabs and owners
   close [TAB]  Close an owned tab
-  scope  Show offline task context
+  scope  Show offline task, browser, storage and journal
   doctor  Repair the selected browser
-  browser start [NAME] | stop  Manage browser choice
+  browser start [arc|chrome|dia] | stop  Manage browser choice
   cdp METHOD [JSON|@FILE] [TAB]  Run a guarded protocol call
 
 Task, browser and profile are inferred and echoed. Use returned tN tabs,

@@ -2,8 +2,10 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/headless"
+	"github.com/repplus/rep-cli/internal/scope"
 	"strings"
 )
 
@@ -18,4 +20,15 @@ func connectBrowser(ctx context.Context, name string) (*bridge.Client, error) {
 		return headless.Connection(ctx, dir)
 	}
 	return bridge.Select(ctx, name)
+}
+
+func headlessTaskDir() (string, error) {
+	selected, err := scope.Current()
+	if err != nil {
+		return "", err
+	}
+	if !selected.Scoped || selected.TaskSource == "default" {
+		return "", fmt.Errorf("headless browser requires an isolated task")
+	}
+	return headless.NamedProfileDir("")
 }

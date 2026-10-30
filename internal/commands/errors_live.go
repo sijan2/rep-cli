@@ -17,7 +17,7 @@ func emitLiveUnavailable(command string, err error) error {
 		command,
 		"enable auto-export in the rep+ extension, then retry",
 		"or run: rep live-export --once  # one-shot capture from the extension",
-		"or load saved data: rep list --saved latest",
+		"inspect task capture handles with rep net",
 	)
 	return output.EmitAgentError(os.Stdout, ae, getOutputMode() == "json")
 }

@@ -35,9 +35,6 @@ func probeTestFixture(t *testing.T) string {
 	t.Setenv("REPANDROID_PATH", "")
 	scope.Reset()
 	t.Cleanup(scope.Reset)
-	oldMode, oldJSON, oldRaw, oldEnvelope := outputMode, jsonOutput, rawJSON, forceEnvelope
-	outputMode, jsonOutput, rawJSON, forceEnvelope = "json", false, false, false
-	t.Cleanup(func() { outputMode, jsonOutput, rawJSON, forceEnvelope = oldMode, oldJSON, oldRaw, oldEnvelope })
 	selected, err := scope.Configure(scope.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +123,7 @@ func TestProbeCLIFrontierConverges(t *testing.T) {
 			}
 			batch := probeTestJSON[probe.ProbeBatch](t, raw)
 			if len(batch.Data.Probes) != 1 || batch.Data.Probes[0].ID != added.Probe.ID || len(batch.Suggest) == 0 ||
-				!strings.Contains(batch.Suggest[0], "replay h_probe_source --baseline 5 --as anon") {
+				!strings.Contains(batch.Suggest[0], "body h_probe_source") {
 				t.Fatalf("bad frontier or non-runnable next step: %+v", batch)
 			}
 			again, err := probeTestExecute(t, "next", "--limit", "1")
@@ -264,10 +261,9 @@ func TestProbeCLIBoundsFiltersAndText(t *testing.T) {
 	if len(filtered.Data.Probes) != 1 || filtered.Data.Probes[0].OracleKind != probe.ProbeRateOrLockout || filtered.Filters["oracle"] != "rate_or_lockout" {
 		t.Fatalf("wrong filter result: %+v", filtered)
 	}
-	outputMode = "compact"
 	for _, args := range [][]string{{"next", "--limit", "1"}, {"coverage"}} {
 		raw, err := probeTestExecute(t, args...)
-		if err != nil || !strings.Contains(raw, "rep --workspace probe-tests --task frontier") || !strings.Contains(raw, "untested") {
+		if err != nil || !strings.Contains(raw, "--task probe-tests/frontier") || !strings.Contains(raw, "untested") {
 			t.Fatalf("missing JSON projection or executable suggestion: %v\n%s", err, raw)
 		}
 	}
@@ -308,11 +304,11 @@ func TestProbeCLIRequiresExplicitIsolatedTask(t *testing.T) {
 	}
 }
 
-func TestProbeCLISuggestionsUseRealPrincipalsAndShellQuoting(t *testing.T) {
+func TestProbeCLISuggestionsUseCurrentSessionAndShellQuoting(t *testing.T) {
 	dir := probeTestFixture(t)
-	identities := map[string]identityRecord{
-		"alice": {Name: "alice", Fingerprint: "first", Headers: map[string]string{"authorization": "credential-secret"}},
-		"bob":   {Name: "bob", Fingerprint: "second", Headers: map[string]string{"authorization": "another-secret"}},
+	identities := map[string]map[string]any{
+		"alice": {"name": "alice", "fingerprint": "first", "headers": map[string]string{"authorization": "credential-secret"}},
+		"bob":   {"name": "bob", "fingerprint": "second", "headers": map[string]string{"authorization": "another-secret"}},
 	}
 	data, err := sonic.Marshal(identities)
 	if err != nil {
@@ -327,7 +323,7 @@ func TestProbeCLISuggestionsUseRealPrincipalsAndShellQuoting(t *testing.T) {
 		t.Fatal(err)
 	}
 	envelope := probeTestJSON[probe.ProbeBatch](t, raw)
-	if !strings.Contains(envelope.Suggest[0], "replay h_probe_source --baseline 5 --as alice,bob") || strings.Contains(raw, "secret") {
+	if !strings.Contains(envelope.Suggest[0], "body h_probe_source") || strings.Contains(raw, "secret") {
 		t.Fatalf("suggestion used invented identities or exposed secrets: %s", raw)
 	}
 	for _, tc := range []struct {
@@ -339,7 +335,7 @@ func TestProbeCLISuggestionsUseRealPrincipalsAndShellQuoting(t *testing.T) {
 		{"alice'bob", "'alice'\"'\"'bob'"},
 		{"a; echo x", "'a; echo x'"},
 	} {
-		if line := probeCommandLine("replay", "h_probe_source", "--as", tc.input); !strings.HasSuffix(line, "--as "+tc.want) {
+		if line := probeCommandLine("replay", "h_probe_source", "--set", tc.input); !strings.Contains(line, "--set "+tc.want) {
 			t.Fatalf("unsafe shell quoting for %q: %s", tc.input, line)
 		}
 	}

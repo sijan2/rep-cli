@@ -340,10 +340,7 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 	outcome = result.Status
 	return emitCore(command, result)
 }
-func coreTextDelta(before, after string) string {
-	text, _ := coreTextDeltaBounded(before, after)
-	return text
-}
+
 func coreTextDeltaBounded(before, after string) (string, bool) {
 	existing := map[string]bool{}
 	for _, line := range strings.Split(before, "\n") {

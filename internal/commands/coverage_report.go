@@ -103,15 +103,6 @@ type captureReportProjection struct {
 	ProtocolGroupsOmitted  int  `json:"protocol_groups_omitted"`
 }
 
-// captureCoverageExport preserves collector metadata when an archive is selected.
-func captureCoverageExport(session *store.Session) store.Export {
-	if session == nil {
-		return store.Export{}
-	}
-	return store.Export{Requests: session.Requests, SessionID: session.CaptureSessionID,
-		BrowserSession: session.BrowserSession, CaptureDigest: session.CaptureDigest}
-}
-
 // buildCaptureCoverage requires the full selected capture, before display filters.
 // Counts copied from collector metadata are explicitly declared, not validated
 // payload integrity. Call body/stream --require-complete for individual evidence.

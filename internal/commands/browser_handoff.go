@@ -16,7 +16,6 @@ import (
 )
 
 const browserSnapshotMaxBytes = 64 << 20
-const scopedBrowserDescriptorLimit = 16
 
 type browserCaptureCaller interface {
 	Call(context.Context, string, interface{}, interface{}) error
@@ -78,88 +77,6 @@ func prepareBrowserCapture(ctx context.Context, client browserCaptureCaller) (br
 	return handoff, nil
 }
 
-func finishBrowserCapture(ctx context.Context, client browserCaptureCaller, result map[string]interface{}, handoff browserCaptureHandoff, note string, save bool) error {
-	var export store.Export
-	if handoff.Immutable {
-		var err error
-		export, err = readExactBrowserSnapshot(ctx, client, result, handoff.HostInstance, handoff.MaxSnapshotBytes)
-		if err != nil {
-			return err
-		}
-	} else {
-		if handoff.Scoped {
-			return fmt.Errorf("scoped capture cannot read global live data")
-		}
-		path, err := store.GetLiveFilePath()
-		if err != nil {
-			return err
-		}
-		export, err = loadLiveExport(path)
-		if err != nil {
-			return err
-		}
-		if err := validateBrowserCaptureResult(result, export, false); err != nil {
-			return err
-		}
-	}
-	if err := enrichBrowserCaptureSnapshot(result, export); err != nil {
-		return err
-	}
-	if handoff.Scoped {
-		if err := publishScopedBrowserCapture(export); err != nil {
-			return err
-		}
-	}
-	if handoff.Scoped || save {
-		// Saving this exact value avoids a second live-file read after another
-		// browser operation has started. Empty captures are useful scoped evidence.
-		session, err := archiveBrowserCaptureSnapshot(note, export)
-		if err != nil {
-			return err
-		}
-		result["saved_session_id"], result["saved_hash_id"] = session.ID, session.HashID
-	}
-	result["capture_snapshot_verified"] = handoff.Immutable
-	if export.CaptureDigest != "" {
-		result["capture_sha256"] = export.CaptureDigest
-	}
-	if handoff.Scoped {
-		selected, err := scope.Current()
-		if err != nil {
-			return err
-		}
-		result["workspace"], result["task"] = selected.Workspace, selected.Task
-		boundScopedBrowserCaptureResult(result)
-	}
-	return nil
-}
-
-// Persist every request first, then disclose a bounded chronological preview.
-// Archive IDs and omission counts make this projection explicitly incomplete.
-func boundScopedBrowserCaptureResult(result map[string]interface{}) {
-	descriptors, ok := result["captured_requests"].([]browserCapturedRequest)
-	if ok {
-		total := len(descriptors)
-		shown := min(total, scopedBrowserDescriptorLimit)
-		result["captured_requests"] = append([]browserCapturedRequest{}, descriptors[:shown]...)
-		result["captured_requests_total"] = total
-		result["captured_requests_omitted"] = total - shown
-		result["captured_requests_complete"] = shown == total
-	}
-	if outcome, ok := result["terminal_outcome"].(*browserTerminalOutcome); ok && outcome != nil {
-		outcome.RequestIDsTotal = len(outcome.RequestIDs)
-		if len(outcome.RequestIDs) > scopedBrowserDescriptorLimit {
-			outcome.RequestIDsOmitted = len(outcome.RequestIDs) - scopedBrowserDescriptorLimit
-			outcome.RequestIDs = append([]string(nil), outcome.RequestIDs[:scopedBrowserDescriptorLimit]...)
-		}
-		outcome.LaterFormFailureIDsTotal = len(outcome.LaterFormFailureIDs)
-		if len(outcome.LaterFormFailureIDs) > scopedBrowserDescriptorLimit {
-			outcome.LaterFormFailureIDsOmitted = len(outcome.LaterFormFailureIDs) - scopedBrowserDescriptorLimit
-			outcome.LaterFormFailureIDs = append([]string(nil), outcome.LaterFormFailureIDs[:scopedBrowserDescriptorLimit]...)
-		}
-	}
-}
-
 func readExactBrowserSnapshot(ctx context.Context, client browserCaptureCaller, result map[string]interface{}, host string, limits ...int64) (store.Export, error) {
 	var export store.Export
 	maxBytes := int64(browserSnapshotMaxBytes)
@@ -214,59 +131,4 @@ func validateBrowserCaptureResult(result map[string]interface{}, export store.Ex
 		return fmt.Errorf("browser capture request count mismatch")
 	}
 	return nil
-}
-
-func publishScopedBrowserCapture(export store.Export) error {
-	selected, err := scope.Current()
-	if err != nil {
-		return err
-	}
-	if !selected.Scoped {
-		return fmt.Errorf("task capture publication requires a task scope")
-	}
-	path, err := store.GetLiveFilePath()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	file, err := os.CreateTemp(filepath.Dir(path), ".capture-*.tmp")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(file.Name())
-	defer file.Close()
-	if err := file.Chmod(0600); err != nil {
-		return err
-	}
-	if err := store.EncodeExport(file, export); err != nil {
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	return os.Rename(file.Name(), path)
-}
-
-func archiveBrowserCaptureSnapshot(note string, export store.Export) (*store.Session, error) {
-	persistent, err := store.Get()
-	if err != nil {
-		return nil, err
-	}
-	id := store.GenerateSessionID(note)
-	if export.SessionID != "" {
-		id = "capture-" + export.SessionID
-	}
-	session, err := persistent.AddSession(id, note, export.Requests, &export)
-	if err != nil {
-		return nil, err
-	}
-	if err := persistent.Save(); err != nil {
-		return nil, err
-	}
-	return session, nil
 }

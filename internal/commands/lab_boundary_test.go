@@ -10,7 +10,6 @@ func TestLabCommandBuildBoundary(t *testing.T) {
 		"packets", "native-capture", "media", "watch", "android", "ig", "engine", "probe", "audit",
 		"locate", "element select", "element select-batch", "element validate", "element observe",
 		"step", "state", "jev config", "jev status", "jev doctor", "jev classify", "arc",
-		"browser locate", "browser element", "browser step", "browser state", "browser native-capture", "browser watch",
 	} {
 		t.Run(path, func(t *testing.T) {
 			args := strings.Fields(path)

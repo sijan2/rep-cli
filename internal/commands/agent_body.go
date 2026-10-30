@@ -15,30 +15,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var coreBodyOut string
-
-func init() {
-	legacy := bodyCmd.RunE
-	bodyCmd.Use = "body h_ID [POINTER|#EVENT|p_CURSOR]"
-	bodyCmd.Args = cobra.RangeArgs(1, 2)
-	bodyCmd.Flags().StringVar(&coreBodyOut, "out", "", "Write decoded raw bytes privately; refuse an existing file")
-	bodyCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		// Only explicit old spellings enter the compatibility resolver. A canonical
-		// new handle must never fall through on missing/corrupt registry evidence.
-		index, err := coreStore()
-		if err != nil {
+func newCoreBodyCommand() *cobra.Command {
+	var request bool
+	var find, out string
+	command := &cobra.Command{Use: "body h_ID [POINTER|#EVENT|p_CURSOR]", Short: "Read captured bytes and metadata", Args: cobra.RangeArgs(1, 2)}
+	command.Flags().BoolVar(&request, "request", false, "Read the request body")
+	command.Flags().StringVar(&find, "find", "", "Find text in the redacted body")
+	command.Flags().StringVar(&out, "out", "", "Write raw bytes privately; refuse an existing file")
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		if err := coreBody(cmd, args, request, find, out); err != nil {
 			return coreFailure(cmd, err)
 		}
-		_, known := index.Owner(args[0])
-		if known == nil || coreRequestHandle.MatchString(args[0]) || len(args) > 1 || coreBodyOut != "" {
-			if err = coreBody(cmd, args, bodyRequest, bodyView.Find, coreBodyOut); err != nil {
-				return coreFailure(cmd, err)
-			}
-			return nil
-		}
-		return legacy(cmd, args)
+		return nil
 	}
+	return command
 }
+
 func coreBody(command *cobra.Command, args []string, requestSide bool, find, out string) error {
 	capture, request, err := coreDataRequest(args[0])
 	if err != nil {
@@ -273,3 +265,5 @@ func coreStreamEvidence(request *store.Request, event int) ([]byte, string, stor
 	}
 	return data, "application/json", evidence, err
 }
+
+func init() { rootCmd.AddCommand(newCoreBodyCommand()) }

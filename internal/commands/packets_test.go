@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/repplus/rep-cli/internal/evidence"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/packetcapture"
 )
@@ -37,9 +38,7 @@ func packetTestScope(t *testing.T) {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	configureCaptureTestScope(t, "packets")
-	previous := evidenceRunID
-	evidenceRunID = ""
-	t.Cleanup(func() { evidenceRunID = previous })
+
 }
 
 func packetFixtureFile(t *testing.T, path string, count int) []byte {
@@ -263,7 +262,11 @@ func TestPacketsInspectionRejectsNoProgressBudgetAndInvalidFlags(t *testing.T) {
 
 func TestPacketsInvalidEvidenceRunPreventsCapture(t *testing.T) {
 	packetTestScope(t)
-	evidenceRunID = "missing-run"
+	previous := beginOperationRun
+	beginOperationRun = func(*evidence.Store, string, map[string]string) (evidence.Run, error) {
+		return evidence.Run{ID: "missing-run"}, nil
+	}
+	t.Cleanup(func() { beginOperationRun = previous })
 	called := false
 	backend := packetCommandBackend{capture: func(context.Context, packetcapture.Options) (packetcapture.Result, error) {
 		called = true

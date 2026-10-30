@@ -51,12 +51,6 @@ func readGoalBatch(path string) (goalBatch, error) {
 	return batch, nil
 }
 
-func newBrowserSelectBatchCommand(deps jevDOMDependencies) *cobra.Command {
-	command := newElementSelectBatchCommand(deps, nil)
-	addDecisionBrowserFlag(command)
-	return command
-}
-
 func newElementSelectBatchCommand(deps jevDOMDependencies, shared *elementFlags) *cobra.Command {
 	options := jevdom.DefaultOptions()
 	command := &cobra.Command{Use: "select-batch goals.json --tab ID", Short: "Resolve independent goals from one observation with shared Jev requests", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
@@ -127,12 +121,6 @@ func newElementSelectBatchCommand(deps jevDOMDependencies, shared *elementFlags)
 	command.Flags().BoolVar(&options.NoCache, "no-cache", false, "Bypass decision reuse")
 	command.Flags().StringVar(&options.Strategy, "strategy", "auto", "auto or legacy")
 	command.Flags().StringVar(&options.ObservationMode, "observation", "auto", "auto or legacy")
-	return command
-}
-
-func newBrowserObservationCommand(validate bool, deps jevDOMDependencies) *cobra.Command {
-	command := newElementObservationCommand(validate, deps, nil)
-	addDecisionBrowserFlag(command)
 	return command
 }
 

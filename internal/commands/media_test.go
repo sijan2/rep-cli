@@ -191,23 +191,6 @@ func TestMediaExportPinsLatestArchiveAndCoverage(t *testing.T) {
 	}
 }
 
-func TestMediaPreviewRetainsSourceWithoutPayload(t *testing.T) {
-	r := mediaTestRecord()
-	r.ResponseBodyCapture = &store.BodyCapture{State: "not_applicable"}
-	d := browserCapturedRequestDescriptors([]store.Request{*r})
-	if len(d) != 1 || d[0].Stream == nil || d[0].Stream.Source != "browser_media_recorder" || d[0].BodyState != "not_applicable" {
-		t.Fatalf("media preview lost native encoder source: %+v", d)
-	}
-	assembly, err := inspectMedia(r, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := encodeMediaResult(mediaResult(r, assembly, "archive-hash"), 8192)
-	if err != nil || strings.Contains(string(data), r.Stream.Events[2].Payload) || !strings.Contains(string(data), `"container_playability":"not_verified"`) {
-		t.Fatalf("media metadata leaked payload or asserted playability: %s %v", data, err)
-	}
-}
-
 func BenchmarkMediaAssembly(b *testing.B) {
 	data := bytes.Repeat([]byte{0x80, 0xff, 0x1a, 0x45}, 64<<10)
 	chunk := store.StreamEvent{Sequence: 1, Kind: "chunk", Bytes: int64(len(data)), Payload: base64.StdEncoding.EncodeToString(data), PayloadEncoding: "base64"}

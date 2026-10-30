@@ -18,9 +18,6 @@ import (
 
 func engineTestCommand(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	previousJSON, previousRaw, previousEnvelope := jsonOutput, rawJSON, forceEnvelope
-	jsonOutput, rawJSON, forceEnvelope = true, false, true
-	t.Cleanup(func() { jsonOutput, rawJSON, forceEnvelope = previousJSON, previousRaw, previousEnvelope })
 	root := &cobra.Command{Use: "rep", SilenceErrors: true, SilenceUsage: true}
 	root.AddCommand(engineNewCommand())
 	var buffer bytes.Buffer

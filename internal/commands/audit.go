@@ -234,7 +234,7 @@ func auditLoadRequests() ([]store.Request, string, []byte, error) {
 			ae := output.NewAgentError(
 				output.ErrCodeSessionNotFound, "audit",
 				fmt.Sprintf("no session matched %q", auditSaved),
-				"rep sessions  # list available sessions",
+				"rep net  # list available sessions",
 			)
 			return nil, "", nil, output.EmitAgentError(os.Stdout, ae, getOutputMode() == "json")
 		}
@@ -767,7 +767,7 @@ func emitAuditJSON(source, spillPath string, payload spillPayload, findings []Fi
 	}
 	env.Suggest = []string{
 		"rep body <id>  # inspect a finding's full request/response",
-		"rep curl <id>  # rebuild as curl for tamper testing",
+		"rep replay h_ID  # rebuild as curl for tamper testing",
 	}
 	out, err := sonic.MarshalIndent(env, "", "  ")
 	if err != nil {

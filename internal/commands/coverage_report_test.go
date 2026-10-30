@@ -171,29 +171,6 @@ func TestCaptureCoverageBodyMetadataCannotOverrideContradictoryEvidence(t *testi
 	}
 }
 
-func TestCaptureCoveragePreservesArchiveSourceAndBoundsMetadata(t *testing.T) {
-	expected := 1
-	session := &store.Session{CaptureSessionID: "session", CaptureDigest: "digest", Requests: []store.Request{{URL: "https://example.test"}},
-		BrowserSession: &store.BrowserSession{ExpectedRequests: &expected, ReceivedRequests: 1, FinishedAt: "done"}}
-	export := captureCoverageExport(session)
-	if export.BrowserSession != session.BrowserSession || export.SessionID != session.CaptureSessionID || export.CaptureDigest != session.CaptureDigest || len(export.Requests) != 1 {
-		t.Fatal("archive conversion dropped collector provenance")
-	}
-	for i := 0; i < 10000; i++ {
-		export.BrowserSession.CaptureWarnings = append(export.BrowserSession.CaptureWarnings, strings.Repeat("PRIVATE", 100))
-	}
-	report := buildCaptureCoverage(export, strings.Repeat("PRIVATE", 100))
-	encoded, err := json.Marshal(report)
-	if err != nil || len(encoded) > 8192 || strings.Contains(string(encoded), "PRIVATE") || report.Capture.WarningsTotal != 10000 || report.Capture.WarningsOmitted != 10000 || report.Source != "unknown" {
-		t.Fatalf("unbounded or secret-bearing metadata report: bytes=%d error=%v", len(encoded), err)
-	}
-	var total int64 = math.MaxInt64 - 1
-	captureAdd(&total, 5)
-	if total != math.MaxInt64 {
-		t.Fatal("collector counters overflowed")
-	}
-}
-
 func TestCaptureCoverageAllCollectorLabelsRemainBounded(t *testing.T) {
 	export := store.Export{BrowserSession: &store.BrowserSession{FinishedAt: "done",
 		CaptureWarnings: []string{"total_body_limit", "body_limit", "request_limit", "event_limit", "related_targets_unavailable",

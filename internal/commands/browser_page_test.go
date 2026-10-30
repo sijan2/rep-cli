@@ -11,23 +11,6 @@ import (
 	"testing"
 )
 
-func TestReadShotURLsKeepsOrderAndSkipsComments(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "urls.txt")
-	if err := os.WriteFile(file, []byte("# targets\nhttps://b.example\n\n  https://c.example  \n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	urls, err := readShotURLs([]string{"https://a.example"}, file, strings.NewReader("https://d.example\n#x\n"))
-	if err != nil || strings.Join(urls, ",") != "https://a.example,https://b.example,https://c.example,https://d.example" {
-		t.Fatalf("urls = %v, %v", urls, err)
-	}
-	if _, err := readShotURLs(nil, "", strings.NewReader("\n# only comments\n")); err == nil {
-		t.Fatal("an empty URL list was accepted")
-	}
-	if _, err := readShotURLs(nil, filepath.Join(t.TempDir(), "missing"), nil); err == nil {
-		t.Fatal("a missing URL file was accepted")
-	}
-}
-
 func TestShotFileNamesAreSafeAndOrdered(t *testing.T) {
 	for raw, want := range map[string]string{
 		"https://example.com/a/b?q=1#x":       "0001-example.com_a_b_q_1_x.png",
@@ -71,21 +54,6 @@ func TestImageDimensionsForEveryScreenshotFormat(t *testing.T) {
 	}
 	if width, height := imageDimensions("webp", []byte("not an image at all, long enough to parse")); width != 0 || height != 0 {
 		t.Fatal("garbage produced dimensions")
-	}
-}
-
-func TestShotsReportEscapesPageText(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "index.html")
-	summary := shotsSummary{Total: 1, Captured: 1, Parallel: 1, Results: []shotResult{{URL: `https://x.test/"><script>alert(1)</script>`, Title: "<img src=x onerror=alert(1)>", reportFile: "0001-x.png", HTTPStatus: 200}}}
-	if err := writeShotsReport(path, summary); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(path)
-	if strings.Contains(string(data), "<script>alert") || strings.Contains(string(data), "<img src=x") {
-		t.Fatalf("page-controlled text was not escaped:\n%s", data)
-	}
-	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0600 {
-		t.Fatalf("report is not private: %v %v", info, err)
 	}
 }
 

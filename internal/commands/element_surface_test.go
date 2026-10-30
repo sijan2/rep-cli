@@ -189,42 +189,14 @@ func TestElementFlagsHaveOneCanonicalOwner(t *testing.T) {
 	}
 }
 
-func TestElementRuntimeUsesInheritedBrowser(t *testing.T) {
-	for _, args := range [][]string{{"--browser", "headless", "runtime"}, {"runtime", "--browser", "headless"}} {
-		command := &cobra.Command{Use: "browser"}
-		command.PersistentFlags().String("browser", "arc", "Browser bridge")
-		command.AddCommand(newInheritedBrowserRuntimeCommand(jevDOMDependencies{browser: func(_ context.Context, name string) (jevdom.Browser, error) {
-			if name != "headless" {
-				t.Fatalf("inherited browser lost: %q", name)
-			}
-			return decisionBrowserFunc(func(_ context.Context, method string, params, out any) error {
-				if method != "jev.runtime" || params != nil {
-					t.Fatal("runtime changed its read-only request")
-				}
-				*out.(*map[string]any) = map[string]any{"version": 1}
-				return nil
-			}), nil
-		}}))
-		command.SetOut(&bytes.Buffer{})
-		command.SetErr(&bytes.Buffer{})
-		command.SetArgs(args)
-		if err := command.Execute(); err != nil {
-			t.Fatal(err)
-		}
+func TestElementRegisteredCommandsShareBrowserSelector(t *testing.T) {
+	element, rest, err := rootCmd.Find([]string{"element"})
+	if err != nil || len(rest) != 0 {
+		t.Fatal("element missing")
 	}
-}
-
-func TestElementRegisteredBrowserCommandsDoNotShadowSelector(t *testing.T) {
-	for _, path := range [][]string{{"runtime"}, {"interact"}, {"step"}, {"element", "select"}, {"element", "select-batch"}, {"element", "observe"}, {"element", "validate"}} {
-		command, _, err := browserCmd.Find(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if command.LocalNonPersistentFlags().Lookup("browser") != nil {
-			t.Fatalf("%s still shadows --browser", command.CommandPath())
-		}
-		if command.InheritedFlags().Lookup("browser") != browserCmd.PersistentFlags().Lookup("browser") {
-			t.Fatalf("%s does not share its browser parent selector", command.CommandPath())
+	for _, command := range element.Commands() {
+		if command.LocalNonPersistentFlags().Lookup("browser") != nil || command.InheritedFlags().Lookup("browser") != element.PersistentFlags().Lookup("browser") {
+			t.Fatalf("%s lost shared browser selection", command.CommandPath())
 		}
 	}
 }

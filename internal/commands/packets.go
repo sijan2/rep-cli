@@ -148,7 +148,7 @@ func requirePacketScope() error {
 		return err
 	}
 	if !selected.Scoped || selected.Task == "" || selected.TaskSource == "default" {
-		return fmt.Errorf("packets capture/inspect requires an explicit workspace and task; use --workspace PROJECT --task TASK")
+		return fmt.Errorf("packets capture/inspect requires an explicit workspace and task; use a post-verb --task PROJECT/TASK")
 	}
 	return nil
 }
@@ -243,19 +243,20 @@ type packetEvidence struct {
 }
 
 func beginPacketEvidence(open evidenceOpener, options packetcapture.Options) (*packetEvidence, error) {
-	if evidenceRunID == "" {
-		return nil, nil
-	}
 	s, identity, err := open()
 	if err != nil {
 		return nil, err
 	}
 	metadata := map[string]any{"collector": "rep-libpcap", "cli_version": Version, "workspace": identity["workspace"], "task": identity["task"], "duration_ms": options.Duration.Milliseconds()}
-	pending, err := s.BeginOperation(evidenceRunID, evidence.Operation{Kind: "packets.capture", Input: compactEvidenceJSON(options), Metadata: metadata})
+	run, err := beginOperationRun(s, "packets.capture", identity)
+	if err != nil {
+		return nil, err
+	}
+	pending, err := s.BeginOperation(run.ID, evidence.Operation{Kind: "packets.capture", Input: compactEvidenceJSON(options), Metadata: metadata})
 	if err != nil {
 		return nil, fmt.Errorf("record pending packet operation before capture: %w", err)
 	}
-	return &packetEvidence{store: s, runID: evidenceRunID, pending: pending}, nil
+	return &packetEvidence{store: s, runID: run.ID, pending: pending}, nil
 }
 
 func (record *packetEvidence) reference() *packetEvidenceRef {

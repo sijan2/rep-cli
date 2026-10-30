@@ -60,9 +60,3 @@ func newBrowserElementCommand(deps jevDOMDependencies) *cobra.Command {
 	)
 	return command
 }
-
-func init() {
-	deps := defaultJevDOMDependencies()
-	browserCmd.AddCommand(newBrowserElementCommand(deps))
-
-}

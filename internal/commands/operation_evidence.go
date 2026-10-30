@@ -12,8 +12,8 @@ import (
 	"github.com/repplus/rep-cli/internal/scope"
 )
 
-// Recording is opt-in. The nil recorder returns before filesystem access,
-// serialization, artifact hashing, or additional browser observations.
+// Isolated operations record evidence automatically. No run flag or stored
+// identity is needed; the ordinary task journal is the discovery entry point.
 type operationEvidenceRef struct {
 	RunID       string `json:"run_id"`
 	OperationID string `json:"operation_id"`
@@ -30,31 +30,46 @@ type browserOperationEvidence struct {
 	references          []evidence.Reference
 	referenceBytes      int
 	referencesOmitted   int
+	task                string
+	kind                string
+}
+
+// A narrow constructor seam lets tests simulate storage failures before work.
+var beginOperationRun = func(store *evidence.Store, kind string, identity map[string]string) (evidence.Run, error) {
+	return store.BeginRun(kind, "operation returns with an observed or explicitly unknown outcome", identity)
 }
 
 func beginBrowserEvidence(kind string, input any, browser string, tab int) (*browserOperationEvidence, error) {
-	if evidenceRunID == "" {
-		return nil, nil
-	}
 	selected, err := scope.Current()
 	if err != nil {
 		return nil, err
 	}
 	if !selected.Scoped {
-		return nil, errors.New("--run requires an explicit workspace and task")
+		return nil, nil
 	}
 	store, err := evidence.Open(selected.DataDir)
 	if err != nil {
 		return nil, err
 	}
-	op, err := store.BeginOperation(evidenceRunID, evidence.Operation{
+	run, err := beginOperationRun(store, kind, map[string]string{"task": selected.Identity()})
+	if err != nil {
+		return nil, err
+	}
+	op, err := store.BeginOperation(run.ID, evidence.Operation{
 		Kind: kind, Input: compactEvidenceJSON(input),
 		Metadata: map[string]any{"collector": "rep-cli", "cli_version": Version, "workspace": selected.Workspace, "task": selected.Task, "browser": browser, "tab_id": tab},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("record pending operation before browser work: %w", err)
 	}
-	return &browserOperationEvidence{store: store, runID: evidenceRunID, operation: op}, nil
+	registry, err := coreStore()
+	if err != nil {
+		return nil, err
+	}
+	if err := registry.Journal(selected.Identity(), "", kind, "started"); err != nil {
+		return nil, err
+	}
+	return &browserOperationEvidence{store: store, runID: run.ID, operation: op, task: selected.Identity(), kind: kind}, nil
 }
 
 func compactEvidenceJSON(value any) json.RawMessage {
@@ -175,6 +190,13 @@ func (record *browserOperationEvidence) finish(result any, status, verification,
 		return fmt.Errorf("operation %s may already have run; evidence completion failed (inspect the run and owned tab before retrying): %w", record.operation.ID, err)
 	}
 	record.finished = true
+	if registry, err := coreStore(); err == nil {
+		if err := registry.Journal(record.task, "", record.kind, status); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
 	return nil
 }
 
@@ -195,16 +217,6 @@ func (record *browserOperationEvidence) finishOnReturn(returnErr *error) {
 	if err := record.finish(nil, status, "unknown", "", cause); err != nil {
 		*returnErr = errors.Join(*returnErr, err)
 	}
-}
-
-func captureEvidenceSummary(result map[string]any) map[string]any {
-	summary := map[string]any{}
-	for _, key := range []string{"session_id", "saved_hash_id", "capture_sha256", "tab_id", "timed_out", "requests", "failed_requests", "body_capture_states", "incomplete_bodies", "capture_snapshot_verified", "duration_ms", "terminal_outcome"} {
-		if value, exists := result[key]; exists {
-			summary[key] = value
-		}
-	}
-	return summary
 }
 
 func attachOperationEvidence(result map[string]any, record *browserOperationEvidence) {

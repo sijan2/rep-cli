@@ -11,12 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newBrowserSelectCommand(dependencies jevDOMDependencies) *cobra.Command {
-	command := newElementSelectCommand(dependencies, nil)
-	addDecisionBrowserFlag(command)
-	return command
-}
-
 func newElementSelectCommand(dependencies jevDOMDependencies, shared *elementFlags) *cobra.Command {
 	options := jevdom.DefaultOptions()
 	command := &cobra.Command{
