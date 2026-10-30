@@ -90,7 +90,7 @@ func TestListPresetMigrationPreservesFilteredEvidence(t *testing.T) {
 	} {
 		run := func(options []string) (string, string) {
 			t.Helper()
-			args := []string{"-test.run=^TestEntryPointHelperProcess$", "--", "--global", "list", "--primary=false", "--raw-json"}
+			args := []string{"-test.run=^TestEntryPointHelperProcess$", "--", "list", "--global", "--primary=false", "--raw-json"}
 			args = append(args, test.extra...)
 			args = append(args, options...)
 			command := exec.Command(os.Args[0], args...)
@@ -129,11 +129,11 @@ func TestListPresetMigrationPreservesFilteredEvidence(t *testing.T) {
 }
 
 func TestAndroidLegacyBudgetIsTransparentNoOp(t *testing.T) {
-	baseline, stderr, code := runEntryPoint(t, "--global", "android", "-j")
+	baseline, stderr, code := runEntryPoint(t, "android", "--global", "-j")
 	if code != 0 || stderr != "" {
 		t.Fatalf("baseline code=%d stdout=%q stderr=%q", code, baseline, stderr)
 	}
-	legacy, stderr, code := runEntryPoint(t, "--global", "android", "--budget", "full", "-j")
+	legacy, stderr, code := runEntryPoint(t, "android", "--global", "--budget", "full", "-j")
 	if code != 0 || legacy != baseline || !strings.Contains(stderr, "--budget has no effect") {
 		t.Fatalf("legacy code=%d stdout=%q stderr=%q", code, legacy, stderr)
 	}

@@ -62,13 +62,13 @@ func runEntryPoint(t *testing.T, args ...string) (string, string, int) {
 
 func TestUsageErrorsAreNeverSilent(t *testing.T) {
 	stdout, stderr, code := runEntryPoint(t, "browser", "open", "https://example.test/", "--settle", "2s")
-	if code != 1 || stderr != "" || !json.Valid([]byte(stdout)) || !strings.Contains(stdout, "unknown flag: --settle") || !strings.Contains(stdout, "--settle is accepted by: rep browser capture action") {
+	if code != 2 || stderr != "" || !json.Valid([]byte(stdout)) || !strings.Contains(stdout, "unknown flag: --settle") || !strings.Contains(stdout, "--settle is accepted by: rep browser capture action") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	// -j after the failing flag is never parsed, but the caller still asked for JSON.
 	stdout, stderr, code = runEntryPoint(t, "browser", "select", "--tab", "3", "Find the seller", "--settle", "2s", "-j")
 	var payload struct{ Error output.AgentError }
-	if code != 1 || stderr != "" || json.Unmarshal([]byte(stdout), &payload) != nil || payload.Error.Code != output.ErrCodeInvalidArgument || payload.Error.Message != "unknown flag: --settle" {
+	if code != 2 || stderr != "" || json.Unmarshal([]byte(stdout), &payload) != nil || payload.Error.Code != output.ErrCodeInvalidArgument || payload.Error.Message != "unknown flag: --settle" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	for _, args := range [][]string{
@@ -78,7 +78,7 @@ func TestUsageErrorsAreNeverSilent(t *testing.T) {
 		{"no-such-command"},
 	} {
 		stdout, stderr, code := runEntryPoint(t, args...)
-		if code != 1 || strings.Contains(stderr, "error:") || !json.Valid([]byte(stdout)) || !strings.Contains(stdout, `"code": "invalid_argument"`) {
+		if code != 2 || strings.Contains(stderr, "error:") || !json.Valid([]byte(stdout)) || !strings.Contains(stdout, `"code":"invalid_argument"`) {
 			t.Fatalf("%v: code=%d stdout=%q stderr=%q", args, code, stdout, stderr)
 		}
 	}
@@ -86,13 +86,13 @@ func TestUsageErrorsAreNeverSilent(t *testing.T) {
 
 func TestCommandErrorsArePrintedExactlyOnce(t *testing.T) {
 	// A handler that returns a plain error used to exit 1 with no output at all.
-	stdout, stderr, code := runEntryPoint(t, "--workspace", "project", "--task", "agent", "detail", "missing-request")
-	if code != 1 || stderr != "" || !json.Valid([]byte(stdout)) || !strings.Contains(stdout, `"code": "command_failed"`) || strings.Count(stdout, `"error":`) != 1 {
+	stdout, stderr, code := runEntryPoint(t, "detail", "missing-request", "--workspace", "project", "--task", "agent")
+	if code != 1 || stderr != "" || !json.Valid([]byte(stdout)) || !strings.Contains(stdout, `"code":"command_failed"`) || strings.Count(stdout, `"error":`) != 1 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	// Errors a command already wrote are not repeated by the entry point.
-	stdout, stderr, code = runEntryPoint(t, "summary", "-j")
-	if code != 1 || strings.Count(stdout+stderr, "scope_required") != 1 {
+	stdout, stderr, code = runEntryPoint(t, "body", "missing-request", "--task", "fixture")
+	if code != 1 || strings.Count(stdout+stderr, "request_not_found") != 1 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }

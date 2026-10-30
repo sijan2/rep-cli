@@ -216,7 +216,7 @@ func TestAggregationUsageErrorsRemainStructured(t *testing.T) {
 		var result struct {
 			Error struct{ Code string }
 		}
-		if code != 1 || json.Unmarshal([]byte(stdout), &result) != nil || result.Error.Code != "invalid_argument" {
+		if code != 2 || json.Unmarshal([]byte(stdout), &result) != nil || result.Error.Code != "invalid_argument" {
 			t.Fatalf("invalid syntax lacks stable JSON error: %v: %s (exit %d)", args, stdout, code)
 		}
 	}

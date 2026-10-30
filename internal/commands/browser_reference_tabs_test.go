@@ -125,7 +125,7 @@ func TestFastBrowserJSONNeedsNoOutputFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 	var result map[string]any
-	if json.Unmarshal(stdout.Bytes(), &result) != nil || result["status"] != "ready" || result["data"] != nil || result["task"] != "action" {
+	if json.Unmarshal(stdout.Bytes(), &result) != nil || result["status"] != "ready" || result["data"] != nil || result["task"] != "fast-test/action" || result["task_source"] != "flag" {
 		t.Fatalf("bare browser output changed shape: %s", stdout.String())
 	}
 	if bytes.Contains(stdout.Bytes(), []byte(`\u0026`)) || !bytes.Contains(stdout.Bytes(), []byte(`A&B`)) {

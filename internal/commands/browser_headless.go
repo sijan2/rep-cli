@@ -17,9 +17,9 @@ func headlessTaskDir() (string, error) {
 		return "", err
 	}
 	if !selected.Scoped || selected.TaskSource == "default" {
-		return "", fmt.Errorf("headless browser requires --workspace and --task (or a project binding with REP_TASK)")
+		return "", fmt.Errorf("headless browser requires an isolated task")
 	}
-	return selected.DataDir, nil
+	return headless.NamedProfileDir("")
 }
 
 func init() {

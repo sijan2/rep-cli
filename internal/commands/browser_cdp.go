@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -260,7 +259,7 @@ func emitBrowserArgumentError(command string, err error) error {
 }
 
 func printBrowserJSON(value interface{}) {
-	data, err := sonic.MarshalIndent(value, "", "  ")
+	data, err := output.Marshal(output.Result(value))
 	if err == nil {
 		fmt.Println(string(data))
 	}

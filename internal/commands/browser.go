@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/scope"
@@ -724,7 +723,7 @@ func browserSafeHTTPMethod(value interface{}) (string, bool) {
 
 func emitBrowserResult(value interface{}, printText func()) error {
 	if getOutputMode() == "json" {
-		data, err := sonic.MarshalIndent(value, "", "  ")
+		data, err := output.Marshal(output.Result(value))
 		if err != nil {
 			return err
 		}

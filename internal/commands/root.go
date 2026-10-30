@@ -47,13 +47,17 @@ Low-level controls and specialized tools remain available in the groups below.`,
 }
 
 func Execute() {
+	if err := verbFirst(rootCmd, processArgs()); err != nil {
+		reportUnreported(rootCmd, err, false, processArgs(), os.Stdout, os.Stderr)
+		os.Exit(2)
+	}
 	configureCommandGroups()
 	runStarted := trackRuns(rootCmd)
 	if command, err := rootCmd.ExecuteC(); err != nil {
 		// SilenceErrors keeps cobra from printing raw text; every error that a
 		// command has not already written is reported here, never dropped.
 		reportUnreported(command, err, *runStarted, processArgs(), os.Stdout, os.Stderr)
-		os.Exit(1)
+		os.Exit(commandExit(err, *runStarted))
 	}
 }
 
@@ -81,6 +85,10 @@ func init() {
 			ae, ok := err.(output.AgentError)
 			if !ok {
 				ae = output.NewAgentError(output.ErrCodeInvalidArgument, cmd.CommandPath(), err.Error(), "rep scope")
+				if strings.HasPrefix(err.Error(), "task_required:") {
+					ae.Code = "task_required"
+					ae.Retry = "needs-agent"
+				}
 			}
 			return output.EmitAgentError(cmd.OutOrStdout(), ae, getOutputMode() == "json" || cmd.Name() == "summary" || cmd.Name() == "context" || cmd.Name() == "coverage")
 		}
@@ -89,10 +97,10 @@ func init() {
 }
 
 func configureInvocationScope(cmd *cobra.Command) error {
-	selected, err := scope.Configure(scope.Options{
+	selected, err := scope.ConfigureInvocation(scope.Options{
 		Workspace: workspaceName, Task: taskName, Global: globalScope,
 		WorkspaceSet: cmd.Flags().Changed("workspace"), TaskSet: cmd.Flags().Changed("task"),
-	})
+	}, "")
 	if err != nil {
 		return err
 	}

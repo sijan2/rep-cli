@@ -280,7 +280,7 @@ func writeListResult(writer io.Writer, source string, requests []output.RequestO
 	if requests == nil {
 		requests = []output.RequestOutput{}
 	}
-	return output.WriteJSON(writer, struct {
+	return output.WriteResult(writer, struct {
 		Requests []output.RequestOutput `json:"requests"`
 		Total    int                    `json:"total"`
 		Returned int                    `json:"returned"`

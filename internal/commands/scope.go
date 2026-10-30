@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/repplus/rep-cli/internal/headless"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/scope"
@@ -52,11 +51,17 @@ func inspectScopeBrowserProfiles(ctx context.Context, selected scope.Scope) scop
 	}
 	profile := &profiles.TaskHeadless
 	profile.Available = true
-	profile.ProfilePath = filepath.Join(selected.DataDir, "headless", "profile")
-	profile.StartCommand = fmt.Sprintf("rep --workspace %s --task %s browser headless start", selected.Workspace, selected.Task)
+	profile.SharedAcrossTasks = true
+	directory, err := headless.NamedProfileDir("")
+	if err != nil {
+		profile.Status = "unknown"
+		return profiles
+	}
+	profile.ProfilePath = filepath.Join(directory, "headless", "profile")
+	profile.StartCommand = quoteCommand("rep", "browser", "headless", "start", "--task", selected.Identity())
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	status, err := headless.GetStatus(ctx, selected.DataDir)
+	status, err := headless.GetStatus(ctx, directory)
 	if err != nil {
 		profile.Status = "unknown"
 		return profiles
@@ -107,7 +112,7 @@ var scopeCmd = &cobra.Command{
 			BrowserProfiles: inspectScopeBrowserProfiles(cmd.Context(), selected),
 		}
 		if getOutputMode() == "json" {
-			data, _ := sonic.MarshalIndent(result, "", "  ")
+			data, _ := output.Marshal(output.Result(result))
 			fmt.Fprintln(cmd.OutOrStdout(), string(data))
 		} else {
 			if selected.Scoped {

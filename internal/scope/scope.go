@@ -26,6 +26,7 @@ type Options struct {
 }
 
 type Scope struct {
+	SessionKey     string `json:"-"`
 	Scoped         bool   `json:"scoped"`
 	Workspace      string `json:"workspace,omitempty"`
 	Task           string `json:"task,omitempty"`
@@ -279,4 +280,14 @@ func InitProject(directory, workspace string) (string, error) {
 		return "", fmt.Errorf("create project binding: %w", err)
 	}
 	return path, nil
+}
+
+// Configured returns the fixed invocation without discovering a new identity.
+func Configured() (Scope, bool) {
+	active.RLock()
+	defer active.RUnlock()
+	if active.value == nil {
+		return Scope{}, false
+	}
+	return *active.value, true
 }

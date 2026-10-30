@@ -121,7 +121,7 @@ func emitFast(command *cobra.Command, result fastOutput, err error) error {
 	// Fast results are CLI JSON, never HTML. Keeping literal <, > and & avoids
 	// multiplying long link data into \u00xx escapes and wasting agent context.
 	encoder.SetEscapeHTML(false)
-	if encodeErr := encoder.Encode(data); encodeErr != nil {
+	if encodeErr := encoder.Encode(output.Result(data)); encodeErr != nil {
 		return encodeErr
 	}
 	if err != nil {

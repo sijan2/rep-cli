@@ -127,20 +127,26 @@ func requireScopeError(t *testing.T, raw []byte, err error, code string) {
 	}
 }
 
-func TestRootScopeGuardBeforeReadingOrCapturing(t *testing.T) {
+func TestRootDerivesTaskBeforeReadingOrCapturing(t *testing.T) {
 	dir := t.TempDir()
-	for _, args := range [][]string{{"summary"}, {"context"}, {"list"}, {"body", "some-request"}, {"primary"}, {"sessions"}, {"browser", "open", "https://example.test"}, {"browser", "action", "1+1", "--tab", "123"}, {"browser", "capture", "open", "https://example.test"}, {"browser", "capture", "fetch", "https://example.test"}, {"browser", "capture", "action", "1+1", "--tab", "123"}, {"browse", "https://example.test"}, {"jev", "classify", "some-request"}} {
-		raw, err := runScopeCLI(t, dir, nil, append(args, "-j")...)
-		requireScopeError(t, raw, err, "scope_required")
+	raw, err := runScopeCLI(t, dir, map[string]string{"CLAUDE_CODE_SESSION_ID": "synthetic-session", "CODEX_THREAD_ID": ""}, "scope", "-j")
+	var result struct {
+		Scoped bool   `json:"scoped"`
+		Task   string `json:"task"`
+		Source string `json:"task_source"`
 	}
-	for _, args := range [][]string{{"scope", "-j"}, {"primary", "--help"}, {"describe", "summary"}} {
-		if raw, err := runScopeCLI(t, dir, nil, args...); err != nil {
-			t.Fatalf("discovery/help unexpectedly guarded %v: %s %v", args, raw, err)
+	if err != nil || json.Unmarshal(raw, &result) != nil || !result.Scoped || result.Source != "agent" || !strings.HasPrefix(result.Task, "default/agent-") {
+		t.Fatalf("ambient scope = %s %v", raw, err)
+	}
+	for _, args := range [][]string{{"summary"}, {"list", "--primary=false"}, {"primary"}, {"sessions"}} {
+		raw, err := runScopeCLI(t, dir, nil, append(args, "-j")...)
+		if (err != nil && !strings.Contains(string(raw), `"code":"live_unavailable"`)) || strings.Contains(string(raw), `"legacy_global":true`) {
+			t.Fatalf("ambient read used legacy store: %s %v", raw, err)
 		}
 	}
 }
 
-func TestRootScopeRequiresExplicitTaskAndAllowsGlobalOptOut(t *testing.T) {
+func TestRootScopeDerivesTaskAndAllowsGlobalOptOut(t *testing.T) {
 	dir := t.TempDir()
 	legacyDir := filepath.Join(dir, "data", "rep-cli")
 	if err := os.MkdirAll(legacyDir, 0700); err != nil {
@@ -150,7 +156,9 @@ func TestRootScopeRequiresExplicitTaskAndAllowsGlobalOptOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, err := runScopeCLI(t, dir, nil, "--workspace", "project", "primary", "-j")
-	requireScopeError(t, raw, err, "task_required")
+	if err != nil || strings.TrimSpace(string(raw)) != "[]" {
+		t.Fatalf("ambient task saw legacy data: %s %v", raw, err)
+	}
 	raw, err = runScopeCLI(t, dir, nil, "--workspace", "project", "--task", "agent-a", "primary", "-j")
 	if err != nil || strings.TrimSpace(string(raw)) != "[]" {
 		t.Fatalf("scoped empty read saw legacy data: %s %v", raw, err)
@@ -169,7 +177,9 @@ func TestRootProjectBindingAndTaskIsolation(t *testing.T) {
 		t.Fatalf("project init: %s %v", raw, err)
 	}
 	raw, err := runScopeCLI(t, dir, nil, "primary", "-j")
-	requireScopeError(t, raw, err, "task_required")
+	if err != nil || strings.TrimSpace(string(raw)) != "[]" {
+		t.Fatalf("ambient task saw legacy data: %s %v", raw, err)
+	}
 	if raw, err := runScopeCLI(t, dir, map[string]string{"REP_TASK": "agent-a"}, "primary", "a.example", "-j"); err != nil {
 		t.Fatalf("agent a set primary: %s %v", raw, err)
 	}
@@ -207,21 +217,21 @@ func readScopeProfiles(t *testing.T, directory string, args ...string) scopeBrow
 	return result.BrowserProfiles
 }
 
-func TestScopeReportsSeparateTaskProfilesWithoutStartingBrowsers(t *testing.T) {
+func TestScopeReportsStableNamedProfileWithoutStartingBrowsers(t *testing.T) {
 	dir := t.TempDir()
-	paths := map[string]bool{}
+	var sharedPath string
 	for _, task := range []string{"account-a", "account-b"} {
 		profiles := readScopeProfiles(t, dir, "--workspace", "project", "--task", task)
 		profile := profiles.TaskHeadless
-		if !profile.Available || profile.SharedAcrossTasks || !profile.Persistent || profile.Selector != "headless" || profile.Status != "not_started" || profile.Running == nil || *profile.Running || profile.Connected == nil || *profile.Connected {
+		if !profile.Available || !profile.SharedAcrossTasks || !profile.Persistent || profile.Selector != "headless" || profile.Status != "not_started" || profile.Running == nil || *profile.Running || profile.Connected == nil || *profile.Connected {
 			t.Fatalf("incorrect unstarted private profile: %+v", profile)
 		}
-		wantPath := filepath.Join(dir, "data", "rep-cli", "workspaces", "project", "tasks", task, "headless", "profile")
-		if profile.ProfilePath != wantPath || paths[profile.ProfilePath] {
-			t.Fatalf("task profile paths collided or escaped the task: %+v", profile)
+		wantPath := filepath.Join(dir, "data", "rep-cli", "profiles", "default", "headless", "profile")
+		if profile.ProfilePath != wantPath || (sharedPath != "" && sharedPath != profile.ProfilePath) {
+			t.Fatalf("named profile was not stable across tasks: %+v", profile)
 		}
-		paths[profile.ProfilePath] = true
-		if profile.StartCommand != "rep --workspace project --task "+task+" browser headless start" {
+		sharedPath = profile.ProfilePath
+		if profile.StartCommand != "rep browser headless start --task project/"+task {
 			t.Fatalf("start guidance selected another task: %q", profile.StartCommand)
 		}
 	}
@@ -230,9 +240,9 @@ func TestScopeReportsSeparateTaskProfilesWithoutStartingBrowsers(t *testing.T) {
 	}
 }
 
-func TestScopeRequiresExplicitTaskForPrivateProfile(t *testing.T) {
+func TestGlobalScopeDoesNotClaimPrivateProfile(t *testing.T) {
 	dir := t.TempDir()
-	for _, args := range [][]string{nil, {"--global"}, {"--workspace", "project"}} {
+	for _, args := range [][]string{{"--global"}} {
 		profile := readScopeProfiles(t, dir, args...).TaskHeadless
 		if profile.Available || profile.Status != "requires_explicit_task" || profile.ProfilePath != "" || profile.StartCommand != "" {
 			t.Fatalf("missing task reported an available profile: %+v", profile)
@@ -242,7 +252,7 @@ func TestScopeRequiresExplicitTaskForPrivateProfile(t *testing.T) {
 
 func TestScopeReportsStoppedProfileWithoutConnectionDetails(t *testing.T) {
 	dir := t.TempDir()
-	taskDir := filepath.Join(dir, "data", "rep-cli", "workspaces", "project", "tasks", "account-a")
+	taskDir := filepath.Join(dir, "data", "rep-cli", "profiles", "default")
 	profileDir := filepath.Join(taskDir, "headless", "profile")
 	sum := sha256.Sum256([]byte(filepath.Clean(taskDir)))
 	state := headless.State{
@@ -284,7 +294,7 @@ func TestScopeReportsStoppedProfileWithoutConnectionDetails(t *testing.T) {
 
 func TestScopeReportsInvalidProfileStateAsUnknown(t *testing.T) {
 	dir := t.TempDir()
-	stateDir := filepath.Join(dir, "data", "rep-cli", "workspaces", "project", "tasks", "account-a", "headless")
+	stateDir := filepath.Join(dir, "data", "rep-cli", "profiles", "default", "headless")
 	if err := os.MkdirAll(stateDir, 0700); err != nil {
 		t.Fatal(err)
 	}

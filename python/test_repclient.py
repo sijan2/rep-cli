@@ -11,21 +11,21 @@ from repclient import Client, RepError, evaluation_value
 
 
 class ClientTests(unittest.TestCase):
-    def test_scope_is_post_verb_and_does_not_inherit_accidentally(self):
+    def test_scope_is_bound_in_child_environment_and_does_not_inherit_accidentally(self):
         env = {"REP_TASK": "parent", "REP_WORKSPACE": "parent-project", "PATH": "/test"}
         child = Client(environment=env, workspace="fixture", task="child", browser="headless")
         argv = child.argv(["browser", "eval", "1", "--tab", "1"])
         self.assertEqual(argv[1:3], ["browser", "eval"])
-        self.assertGreater(argv.index("--task"), 2)
+        self.assertNotIn("--task", argv)
         self.assertNotIn("parent", argv)
-        self.assertNotIn("REP_TASK", child.environment)
+        self.assertEqual(child.environment["REP_TASK"], "fixture/child")
         self.assertEqual(env["REP_TASK"], "parent")
         self.assertIsNone(Client(environment=env).task)
         self.assertEqual(Client(environment=env, inherit_scope=True).task, "parent")
 
     def test_literal_values_keep_double_dash_boundary(self):
         argv = Client(task="fixture").argv(["browser", "eval", "--", "-1"])
-        self.assertLess(argv.index("--task"), argv.index("--"))
+        self.assertLess(argv.index("--raw-json"), argv.index("--"))
         self.assertEqual(argv[-1], "-1")
 
     def test_result_and_nonzero_exit_are_checked(self):

@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/bytedance/sonic"
 )
 
 // AgentError is the structured error shape emitted in `--json` mode. Keeping
 // a stable schema here (code / message / suggest / chain) so tool harnesses
 // can pattern-match on `code` without brittle message parsing.
 type AgentError struct {
+	Next    string   `json:"next,omitempty"`
+	Retry   string   `json:"retry,omitempty"`
 	Code    string   `json:"code"`
 	Message string   `json:"message"`
 	Suggest []string `json:"suggest,omitempty"`
@@ -92,7 +92,7 @@ func (ae AgentError) Error() string { return ae.Message }
 func EmitAgentError(w io.Writer, ae AgentError, jsonMode bool) error {
 	if jsonMode {
 		payload := map[string]interface{}{"error": ae}
-		b, _ := sonic.MarshalIndent(payload, "", "  ")
+		b, _ := Marshal(Result(payload))
 		fmt.Fprintln(w, string(b))
 	} else {
 		fmt.Fprint(w, FormatErrorText(ae))
