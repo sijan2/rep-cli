@@ -172,7 +172,7 @@ type StreamOutput struct {
 }
 
 func FormatRequest(req *store.Request, mode store.OutputMode) RequestOutput {
-	requestHeaders := req.Headers
+	requestHeaders := RedactHeaders(req.Headers)
 	if mode == store.OutputMeta {
 		requestHeaders = filterMetaHeaders(req.Headers, false)
 	}
@@ -180,14 +180,14 @@ func FormatRequest(req *store.Request, mode store.OutputMode) RequestOutput {
 		RecordKind: req.RecordKind, FrameID: req.FrameID, LoaderID: req.LoaderID, SourceSessionID: req.SourceSessionID,
 		MonotonicTimestamp: req.MonotonicTimestamp, ResponseMonotonicTimestamp: req.ResponseMonotonicTimestamp,
 		CompletionMonotonicTimestamp: req.CompletionMonotonicTimestamp, InitiatorDetails: req.InitiatorDetails,
-		ID: req.ID, OriginalID: req.OriginalID, Method: req.Method, URL: req.URL,
-		PageURL: req.PageURL, ResourceType: req.ResourceType, Initiator: req.Initiator,
+		ID: req.ID, OriginalID: req.OriginalID, Method: req.Method, URL: RedactURL(req.URL),
+		PageURL: RedactURL(req.PageURL), ResourceType: req.ResourceType, Initiator: RedactURL(req.Initiator),
 		ResponseEncoding: req.ResponseEncoding, ResponseBodyTruncated: req.ResponseBodyTruncated,
 		ResponseBodyError: req.ResponseBodyError, ErrorText: req.ErrorText,
 		ResponseBodyCapture: req.ResponseBodyCapture, RequestBodyCapture: req.RequestBodyCapture, NetworkState: req.NetworkState,
 		CaptureSource: req.CaptureSource, TabID: req.TabID, Timestamp: req.Timestamp,
 		Domain: req.Domain, Path: req.Path,
-		Headers: requestHeaders, Body: req.Body,
+		Headers: requestHeaders, Body: RedactBody(req.Body, store.HeaderFirst(req.Headers, "content-type")),
 	}
 	if req.Stream != nil {
 		stream := req.Stream
@@ -206,7 +206,7 @@ func FormatRequest(req *store.Request, mode store.OutputMode) RequestOutput {
 		out.Body = ""
 	}
 	if req.Response != nil {
-		responseHeaders := req.Response.Headers
+		responseHeaders := RedactHeaders(req.Response.Headers)
 		if mode == store.OutputMeta {
 			responseHeaders = filterMetaHeaders(req.Response.Headers, true)
 		}
@@ -216,9 +216,9 @@ func FormatRequest(req *store.Request, mode store.OutputMode) RequestOutput {
 		switch mode {
 		case store.OutputMeta:
 		case store.OutputCompact:
-			resp.Body, _ = TruncateBody(req.Response.Body, store.HeaderFirst(req.Response.Headers, "content-type"), store.DefaultTruncateConfig())
+			resp.Body, _ = TruncateBody(RedactBody(req.Response.Body, store.HeaderFirst(req.Response.Headers, "content-type")), store.HeaderFirst(req.Response.Headers, "content-type"), store.DefaultTruncateConfig())
 		default:
-			resp.Body = req.Response.Body
+			resp.Body = RedactBody(req.Response.Body, store.HeaderFirst(req.Response.Headers, "content-type"))
 		}
 		out.Response = resp
 	}

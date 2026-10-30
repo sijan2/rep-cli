@@ -114,7 +114,7 @@ func emitFast(command *cobra.Command, result fastOutput, err error) error {
 	}
 	// Fast browser results are already structured agent output. Only an explicit
 	// envelope request changes their shape; ordinary pipes need no extra flag.
-	if forceEnvelope && !rawJSON {
+	if useEnvelope() {
 		data = output.WrapData(command.CommandPath(), "browser", data)
 	}
 	encoder := json.NewEncoder(command.OutOrStdout())

@@ -44,16 +44,13 @@ func TestEngineLocalCommandsDoNotCallModels(t *testing.T) {
 				t.Fatal(err)
 			}
 			var envelope struct {
-				Command string `json:"command"`
-				Data    struct {
-					Engines   []engine.EngineInfo `json:"engines"`
-					ModelCall bool                `json:"model_call"`
-				} `json:"data"`
+				Engines   []engine.EngineInfo `json:"engines"`
+				ModelCall bool                `json:"model_call"`
 			}
-			if sonic.UnmarshalString(text, &envelope) != nil || envelope.Command != "engine "+command || len(envelope.Data.Engines) != 2 || envelope.Data.ModelCall {
+			if sonic.UnmarshalString(text, &envelope) != nil || len(envelope.Engines) != 2 || envelope.ModelCall {
 				t.Fatalf("invalid local listing: %s", text)
 			}
-			for _, info := range envelope.Data.Engines {
+			for _, info := range envelope.Engines {
 				if info.Available || info.Reason == "" || len(info.Models) == 0 {
 					t.Fatalf("unavailable backend not described: %+v", info)
 				}
@@ -118,13 +115,11 @@ func TestEngineRunCommandTagsAndRedacts(t *testing.T) {
 				t.Fatal(err)
 			}
 			text, err := engineTestCommand(t, "run", "--job", "triage", "--input", "@"+input)
-			var envelope struct {
-				Data engine.EngineResult `json:"data"`
-			}
-			if err != nil || sonic.UnmarshalString(text, &envelope) != nil || envelope.Data.Assessment != "model_assessed" || envelope.Data.Timestamp.IsZero() || envelope.Data.Engine != "codex" || envelope.Data.Sanitization.HeadersDropped != 1 || strings.Contains(text, "NEVER_FORWARD_THIS") {
+			var envelope engine.EngineResult
+			if err != nil || sonic.UnmarshalString(text, &envelope) != nil || envelope.Assessment != "model_assessed" || envelope.Timestamp.IsZero() || envelope.Engine != "codex" || envelope.Sanitization.HeadersDropped != 1 || strings.Contains(text, "NEVER_FORWARD_THIS") {
 				t.Fatalf("incorrect tagged/scrubbed CLI output: %s %v", text, err)
 			}
-			if tc.inconclusive != (envelope.Data.Verdict == engine.EngineNeedsMoreEvidence) {
+			if tc.inconclusive != (envelope.Verdict == engine.EngineNeedsMoreEvidence) {
 				t.Fatalf("wrong fail-closed verdict: %s", text)
 			}
 		})

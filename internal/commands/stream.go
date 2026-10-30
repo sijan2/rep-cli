@@ -200,7 +200,7 @@ func renderStream(cmd *cobra.Command, request *store.Request, options streamOpti
 		}
 		out["remaining_events"], out["page_complete"] = len(stream.Events)-start-n, start+n == len(stream.Events)
 		var payload interface{} = out
-		if forceEnvelope && !rawJSON {
+		if useEnvelope() {
 			source := "live-or-saved"
 			if options.Saved != "" {
 				source = "saved"

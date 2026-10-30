@@ -335,7 +335,7 @@ func saveMedia(path string, chunks []store.StreamEvent) (int64, string, error) {
 
 func encodeMediaResult(result map[string]any, maxBytes int) ([]byte, error) {
 	var payload any = result
-	if forceEnvelope && !rawJSON {
+	if useEnvelope() {
 		payload = output.WrapData("media", "capture_archive", result)
 	}
 	data, err := json.Marshal(payload)

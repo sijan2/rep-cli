@@ -265,8 +265,8 @@ func TestProbeCLIBoundsFiltersAndText(t *testing.T) {
 	outputMode = "compact"
 	for _, args := range [][]string{{"next", "--limit", "1"}, {"coverage"}} {
 		raw, err := probeTestExecute(t, args...)
-		if err != nil || !strings.Contains(raw, "Suggest: rep --workspace probe-tests --task frontier") || !strings.Contains(raw, "untested") {
-			t.Fatalf("missing text projection or executable suggestion: %v\n%s", err, raw)
+		if err != nil || !strings.Contains(raw, "rep --workspace probe-tests --task frontier") || !strings.Contains(raw, "untested") {
+			t.Fatalf("missing JSON projection or executable suggestion: %v\n%s", err, raw)
 		}
 	}
 }

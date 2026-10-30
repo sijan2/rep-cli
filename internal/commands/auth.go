@@ -10,6 +10,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/pterm/pterm"
+	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -121,6 +122,9 @@ Extracted headers:
 		tokens := extractAuthTokens(requests, authDomain)
 
 		if len(tokens) == 0 {
+			if getOutputMode() == "json" {
+				return output.WriteJSON(cmd.OutOrStdout(), map[string]any{"tokens": []AuthToken{}})
+			}
 			pterm.Info.Println("No auth tokens found in captured requests")
 			return nil
 		}
@@ -166,7 +170,11 @@ Extracted headers:
 			}
 			fmt.Println("# Usage: eval \"$(rep auth --export)\"")
 		} else if getOutputMode() == "json" {
-			out, _ := sonic.MarshalIndent(tokens, "", "  ")
+			safe := append([]AuthToken(nil), tokens...)
+			for i := range safe {
+				safe[i].Value = output.Fingerprint(safe[i].Value)
+			}
+			out, _ := output.Marshal(map[string]any{"tokens": safe})
 			fmt.Println(string(out))
 		} else {
 			// Human-readable format
@@ -188,7 +196,7 @@ Extracted headers:
 				fmt.Printf("\n%s:\n", pterm.Bold.Sprint(domain))
 				for _, t := range byDomain[domain] {
 					// Truncate value for display
-					displayVal := t.Value
+					displayVal := output.Fingerprint(t.Value)
 					if len(displayVal) > 50 {
 						displayVal = displayVal[:25] + "..." + displayVal[len(displayVal)-15:]
 					}

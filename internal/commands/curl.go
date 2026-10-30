@@ -100,7 +100,14 @@ With --use-vars (saves tokens):
 		}
 
 		// Generate curl command
-		curlCmd := generateCurl(req, curlUseVars)
+		safe := *req
+		safe.URL = output.RedactURL(req.URL)
+		safe.Headers = output.RedactHeaders(req.Headers)
+		safe.Body = output.RedactBody(req.Body, store.HeaderFirst(req.Headers, "content-type"))
+		curlCmd := generateCurl(&safe, true)
+		if getOutputMode() == "json" {
+			return output.WriteJSON(cmd.OutOrStdout(), map[string]any{"command": curlCmd})
+		}
 		fmt.Println(curlCmd)
 
 		if curlUseVars {

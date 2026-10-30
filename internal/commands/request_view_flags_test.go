@@ -119,9 +119,11 @@ func TestListPresetMigrationPreservesFilteredEvidence(t *testing.T) {
 		if canonical != legacy || !strings.Contains(stderr, "deprecated:") {
 			t.Fatalf("migration changed JSON: canonical=%s legacy=%s stderr=%s", canonical, legacy, stderr)
 		}
-		var rows []json.RawMessage
-		if err := json.Unmarshal([]byte(canonical), &rows); err != nil || len(rows) != test.count {
-			t.Fatalf("%v: rows=%d want=%d err=%v", test.canonical, len(rows), test.count, err)
+		var result struct {
+			Requests []json.RawMessage `json:"requests"`
+		}
+		if err := json.Unmarshal([]byte(canonical), &result); err != nil || len(result.Requests) != test.count {
+			t.Fatalf("%v: rows=%d want=%d err=%v", test.canonical, len(result.Requests), test.count, err)
 		}
 	}
 }

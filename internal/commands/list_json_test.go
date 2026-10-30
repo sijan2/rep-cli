@@ -14,7 +14,7 @@ func TestEmitListNoPrimaryHonorsJSONMode(t *testing.T) {
 	if err := emitListNoPrimary(&buffer, "live.json", true, true); err != nil {
 		t.Fatal(err)
 	}
-	assertListJSONEnvelope(t, buffer.Bytes())
+	assertListJSONObject(t, buffer.Bytes())
 }
 
 func TestEmitListEmptyResultHonorsJSONMode(t *testing.T) {
@@ -29,7 +29,7 @@ func TestEmitListEmptyResultHonorsJSONMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertListJSONEnvelope(t, buffer.Bytes())
+	assertListJSONObject(t, buffer.Bytes())
 }
 
 func TestEmitListNoPrimaryHonorsRawJSONMode(t *testing.T) {
@@ -37,13 +37,7 @@ func TestEmitListNoPrimaryHonorsRawJSONMode(t *testing.T) {
 	if err := emitListNoPrimary(&buffer, "live.json", true, false); err != nil {
 		t.Fatal(err)
 	}
-	var payload []json.RawMessage
-	if err := json.Unmarshal(buffer.Bytes(), &payload); err != nil {
-		t.Fatalf("raw output is not one JSON array: %v\n%s", err, buffer.Bytes())
-	}
-	if len(payload) != 0 {
-		t.Fatalf("expected empty raw result, got %d entries", len(payload))
-	}
+	assertListJSONObject(t, buffer.Bytes())
 }
 
 func TestResolvedListOutputModeTreatsJSONFlagAsOutputJSON(t *testing.T) {
@@ -55,17 +49,17 @@ func TestResolvedListOutputModeTreatsJSONFlagAsOutputJSON(t *testing.T) {
 	}
 }
 
-func assertListJSONEnvelope(t *testing.T, data []byte) {
+func assertListJSONObject(t *testing.T, data []byte) {
 	t.Helper()
 	var payload struct {
-		Source  string            `json:"source"`
-		Command string            `json:"command"`
-		Data    []json.RawMessage `json:"data"`
+		Source   string            `json:"source"`
+		Requests []json.RawMessage `json:"requests"`
+		Complete bool              `json:"complete"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
 		t.Fatalf("output is not one JSON document: %v\n%s", err, data)
 	}
-	if payload.Source != "live.json" || payload.Command != "list" || len(payload.Data) != 0 {
-		t.Fatalf("unexpected envelope: %#v", payload)
+	if payload.Source != "live.json" || payload.Requests == nil || len(payload.Requests) != 0 || !payload.Complete {
+		t.Fatalf("unexpected result: %#v", payload)
 	}
 }

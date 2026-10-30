@@ -282,7 +282,7 @@ func newBrowserLocateCommand(deps jevDOMDependencies) *cobra.Command {
 			encoder := json.NewEncoder(command.OutOrStdout())
 			encoder.SetEscapeHTML(false)
 			var data any = result
-			if forceEnvelope && !rawJSON {
+			if useEnvelope() {
 				data = output.WrapData(command.CommandPath(), "browser", data)
 			}
 			if encodeErr := encoder.Encode(data); encodeErr != nil {

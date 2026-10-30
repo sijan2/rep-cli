@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bytedance/sonic"
 	"github.com/pterm/pterm"
 	"github.com/repplus/rep-cli/internal/cli"
 	"github.com/repplus/rep-cli/internal/output"
@@ -238,26 +237,7 @@ Examples:
 
 		if getOutputMode() == "json" {
 			formatted := output.FormatRequests(requests, mode)
-			var payload interface{} = formatted
-			if useEnvelope() {
-				env := output.WrapData("list", source, formatted)
-				env.Filters = buildListFilterMap(opts)
-				if opts.Limit > 0 && totalCount > len(formatted) {
-					nextOffset := opts.Offset + len(formatted)
-					env.Truncation = &output.TruncationInfo{
-						Reason:   "size-cap",
-						Returned: len(formatted),
-						Total:    totalCount,
-					}
-					env.Suggest = []string{
-						fmt.Sprintf("rep list --offset=%d --limit=%d", nextOffset, opts.Limit),
-					}
-				}
-				payload = env
-			}
-			out, _ := sonic.MarshalIndent(payload, "", "  ")
-			fmt.Println(string(out))
-			return nil
+			return writeListResult(cmd.OutOrStdout(), source, formatted, totalCount, opts.Offset)
 		}
 
 		// Disclose data source on the first non-JSON line.
@@ -294,28 +274,27 @@ func resolveListOutputMode(mode string, jsonFlag bool) store.OutputMode {
 	}
 }
 
+// list is an object even when it has no rows. Callers can consume the same
+// field set for empty captures, filtered captures and pages of results.
+func writeListResult(writer io.Writer, source string, requests []output.RequestOutput, total, offset int) error {
+	if requests == nil {
+		requests = []output.RequestOutput{}
+	}
+	return output.WriteJSON(writer, struct {
+		Requests []output.RequestOutput `json:"requests"`
+		Total    int                    `json:"total"`
+		Returned int                    `json:"returned"`
+		Complete bool                   `json:"complete"`
+		Source   string                 `json:"source"`
+	}{requests, total, len(requests), offset+len(requests) >= total, source})
+}
+
 func emitListNoPrimary(writer io.Writer, source string, jsonMode, envelopeMode bool) error {
 	if !jsonMode {
 		_, err := fmt.Fprintln(writer, "No primary domains set. Use 'rep primary <domain>' to add.")
 		return err
 	}
-	data := []output.RequestOutput{}
-	var payload interface{} = data
-	if envelopeMode {
-		envelope := output.WrapData("list", source, data)
-		envelope.Filters = map[string]interface{}{"primary": true}
-		envelope.Suggest = []string{
-			"rep primary <domain>",
-			"rep list --primary=false -o json",
-		}
-		payload = envelope
-	}
-	encoded, err := sonic.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(writer, string(encoded))
-	return err
+	return writeListResult(writer, source, nil, 0, 0)
 }
 
 func emitListEmptyResult(writer io.Writer, context output.EmptyResultContext, jsonMode, envelopeMode bool) error {
@@ -323,31 +302,7 @@ func emitListEmptyResult(writer io.Writer, context output.EmptyResultContext, js
 		_, err := fmt.Fprint(writer, output.FormatEmptyReason(context))
 		return err
 	}
-	data := []output.RequestOutput{}
-	var payload interface{} = data
-	if envelopeMode {
-		envelope := output.WrapData("list", context.Source, data)
-		envelope.Filters = buildListFilterMap(context.Filters)
-		if context.TotalCandidates == 0 {
-			envelope.Suggest = []string{
-				"rep browser status",
-				"rep browse <url>",
-				"rep summary",
-			}
-		} else {
-			envelope.Suggest = []string{"rep list --primary=false -o json"}
-			if len(context.SampleDomains) > 0 {
-				envelope.Suggest = append(envelope.Suggest, fmt.Sprintf("rep primary --clear && rep primary %s", context.SampleDomains[0]))
-			}
-		}
-		payload = envelope
-	}
-	encoded, err := sonic.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(writer, string(encoded))
-	return err
+	return writeListResult(writer, context.Source, nil, 0, 0)
 }
 
 // buildListFilterMap serializes active filter state into the envelope's

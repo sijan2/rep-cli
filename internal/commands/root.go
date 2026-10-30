@@ -62,15 +62,19 @@ func init() {
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 	rootCmd.PersistentFlags().StringVarP(&outputMode, "output", "o", "compact", "Output mode: compact, meta, full, json")
 	rootCmd.PersistentFlags().BoolVarP(&jsonOutput, "json", "j", false, "Output as JSON (shorthand for --output json)")
-	rootCmd.PersistentFlags().BoolVar(&forceEnvelope, "envelope", false, "Force envelope wrap on JSON output (default: auto-on for non-TTY stdout)")
+	rootCmd.PersistentFlags().BoolVar(&forceEnvelope, "envelope", false, "Compatibility spelling; machine output is plain JSON")
 	rootCmd.PersistentFlags().BoolVar(&rawJSON, "raw-json", false, "Output plain JSON; implies --json")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable ANSI color (also honors NO_COLOR env)")
 	rootCmd.PersistentFlags().StringVar(&workspaceName, "workspace", "", "Workspace namespace (or REP_WORKSPACE / nearest project binding)")
 	rootCmd.PersistentFlags().StringVar(&taskName, "task", "", "Agent task identity; required for scoped data (or REP_TASK)")
 	rootCmd.PersistentFlags().BoolVar(&globalScope, "global", false, "Explicitly use shared legacy data; bypass workspace bindings and environment")
 	rootCmd.PersistentFlags().StringVar(&evidenceRunID, "run", "", "Attach operation evidence to this task's explicit run ID")
+	// These spellings coexist for the staged migration and are deleted in step 9.
+	for _, name := range []string{"output", "json", "envelope", "raw-json", "no-color"} {
+		rootCmd.PersistentFlags().Lookup(name).Hidden = true
+	}
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if noColor || os.Getenv("NO_COLOR") != "" {
+		if !term.IsTerminal(int(os.Stdout.Fd())) || noColor || os.Getenv("NO_COLOR") != "" {
 			pterm.DisableColor()
 		}
 		if err := configureInvocationScope(cmd); err != nil {
@@ -163,18 +167,12 @@ func commandRequiresScope(cmd *cobra.Command) bool {
 }
 
 func getOutputMode() string {
-	if jsonOutput || rawJSON || forceEnvelope {
+	if !term.IsTerminal(int(os.Stdout.Fd())) || jsonOutput || rawJSON || forceEnvelope {
 		return "json"
 	}
 	return outputMode
 }
 
 func useEnvelope() bool {
-	if rawJSON {
-		return false
-	}
-	if forceEnvelope {
-		return true
-	}
-	return !term.IsTerminal(int(os.Stdout.Fd()))
+	return false // compatibility flags never change the machine result shape
 }

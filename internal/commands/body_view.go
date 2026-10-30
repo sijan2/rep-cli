@@ -106,7 +106,7 @@ func renderCapturedBody(cmd *cobra.Command, req *store.Request) error {
 	if flags.RequireComplete && evidence.State != "complete" && evidence.State != "not_applicable" {
 		return fmt.Errorf("body is %s (%s); a new authorized observation is required to obtain missing bytes", evidence.State, evidence.Reason)
 	}
-	out := map[string]interface{}{"id": req.ID, "url": req.URL, "method": req.Method, "body_capture": evidence, "body_bytes": len(data), "content_type": contentType, "network_state": req.NetworkState}
+	out := map[string]interface{}{"id": req.ID, "url": output.RedactURL(req.URL), "method": req.Method, "body_capture": evidence, "body_bytes": len(data), "content_type": contentType, "network_state": req.NetworkState}
 	if req.Response != nil && !bodyRequest {
 		out["status"] = req.Response.Status
 	}
@@ -115,6 +115,13 @@ func renderCapturedBody(cmd *cobra.Command, req *store.Request) error {
 	}
 	if flags.Info {
 		return writeBodyView(cmd, out, nil, false, flags.MaxBytes)
+	}
+	if !bodySave {
+		redacted := output.RedactBody(string(data), contentType)
+		if redacted != string(data) {
+			out["projection_redacted"] = true
+		}
+		data = []byte(redacted)
 	}
 	selection, err := bodyview.Select(data, bodyview.Options{Format: flags.Format, ContentType: contentType, Pointer: flags.Pointer, HasPointer: cmd.Flags().Changed("pointer"), RecordOffset: flags.RecordOffset, Records: flags.Records, Find: flags.Find, Complete: evidence.State == "complete" || evidence.State == "not_applicable"})
 	if err != nil {
@@ -222,7 +229,7 @@ func writePayloadView(cmd *cobra.Command, out map[string]interface{}, body []byt
 			}
 		}
 		var payload interface{} = out
-		if forceEnvelope && !rawJSON {
+		if useEnvelope() {
 			source := "live-or-saved"
 			if saved != "" {
 				source = "saved"

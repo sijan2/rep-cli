@@ -31,7 +31,7 @@ Use --saved HASH to inspect the same archive as a body or stream result.`,
 				Provenance observedCaptureProvenance `json:"provenance"`
 				Coverage   CaptureCoverageReport     `json:"coverage"`
 			}{capture.Provenance, capture.coverage()}
-			if forceEnvelope && !rawJSON {
+			if useEnvelope() {
 				result = output.WrapData("coverage", capture.Provenance.Source, result)
 			}
 			data, err := json.Marshal(result)

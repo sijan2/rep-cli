@@ -45,7 +45,7 @@ func TestEvaluationCommandsKeepIndependentDefaultsAndLegacyFlags(t *testing.T) {
 		t.Fatal("capture handoff grace changed")
 	}
 }
-func TestRawJSONAndEnvelopeEachSelectJSONWithoutSecondFlag(t *testing.T) {
+func TestLegacyOutputFlagsSelectPlainJSON(t *testing.T) {
 	oldMode, oldJSON, oldRaw, oldEnvelope := outputMode, jsonOutput, rawJSON, forceEnvelope
 	defer func() { outputMode, jsonOutput, rawJSON, forceEnvelope = oldMode, oldJSON, oldRaw, oldEnvelope }()
 	outputMode = "compact"
@@ -57,8 +57,8 @@ func TestRawJSONAndEnvelopeEachSelectJSONWithoutSecondFlag(t *testing.T) {
 	}
 	rawJSON = false
 	forceEnvelope = true
-	if getOutputMode() != "json" || !useEnvelope() {
-		t.Fatal("envelope flag did not select JSON")
+	if getOutputMode() != "json" || useEnvelope() {
+		t.Fatal("legacy envelope flag must select plain JSON")
 	}
 }
 func TestInteractionAcceptsPositionalPlanAndRejectsConflictingInputs(t *testing.T) {
