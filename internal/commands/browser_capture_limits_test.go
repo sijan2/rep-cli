@@ -24,3 +24,13 @@ func TestCaptureLimitsKeepSmallerExplicitBodyLimit(t *testing.T) {
 		t.Fatalf("negotiation expanded the explicit limit or defaults: %#v", params)
 	}
 }
+
+func TestCaptureRetentionExceedsBodySpillBoundaryWithinHostBudget(t *testing.T) {
+	handoff := browserCaptureHandoff{MaxRequests: 10000, MaxRequestBytes: 384 << 20, MaxSnapshotBytes: 512 << 20}
+	params := map[string]interface{}{"max_body_bytes": 64 << 20}
+	handoff.applyLimits(params)
+	retained := params["max_body_bytes"].(int)
+	if retained <= 8<<20 || int64(retained)*8 > handoff.MaxRequestBytes {
+		t.Fatalf("large body cannot spill completely within the host budget: %#v", params)
+	}
+}

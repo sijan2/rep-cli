@@ -19,7 +19,9 @@ Commands:
   eval JS|@FILE|@- [TAB]  Evaluate JavaScript
   shot [TAB|URL] [PATH]  Save screenshots
   reference URL|TAB|p_CURSOR  Save design evidence
+  net [QUERY...|s_CAPTURE|p_CURSOR]  Query captured traffic; terms are ANDed
   body h_ID [POINTER|#EVENT|p_CURSOR]  Read retained body bytes
+  fetch URL  Fetch in a private origin tab using browser credentials
   replay h_ID  Replay observed requests
   download h_ID|URL PATH  Save a file
   tabs  List live tabs and owners

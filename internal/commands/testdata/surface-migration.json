@@ -1477,6 +1477,11 @@
       "rep extract --no-color",
       "rep extract --output",
       "rep extract --raw-json",
+      "rep fetch --envelope",
+      "rep fetch --json",
+      "rep fetch --no-color",
+      "rep fetch --output",
+      "rep fetch --raw-json",
       "rep findings --envelope",
       "rep findings --json",
       "rep findings --no-color",
@@ -1639,6 +1644,11 @@
       "rep mute --no-color",
       "rep mute --output",
       "rep mute --raw-json",
+      "rep net --envelope",
+      "rep net --json",
+      "rep net --no-color",
+      "rep net --output",
+      "rep net --raw-json",
       "rep note --envelope",
       "rep note --json",
       "rep note --no-color",
@@ -1830,16 +1840,7 @@
       "rep workspace init --output",
       "rep workspace init --raw-json"
     ],
-    "pending_commands": [
-      "rep fetch",
-      "rep net"
-    ],
-    "pending_flags": [
-      "rep body --out",
-      "rep do --capture",
-      "rep eval --capture",
-      "rep page --capture",
-      "rep replay --write"
-    ]
+    "pending_commands": [],
+    "pending_flags": []
   }
 }

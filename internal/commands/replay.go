@@ -295,6 +295,11 @@ func applyMutations(src *store.Request, muts []mutation) (*store.Request, error)
 	for _, m := range muts {
 		switch m.kind {
 		case "header":
+			for name := range out.Headers {
+				if strings.EqualFold(name, m.key) {
+					delete(out.Headers, name)
+				}
+			}
 			out.Headers[m.key] = []string{m.value}
 		case "query":
 			newURL, err := setQueryParam(out.URL, m.key, m.value)
