@@ -103,10 +103,18 @@ func coreBrowserStart(cmd *cobra.Command, args []string, headed bool) error {
 			return e
 		}
 		closed := false
-		defer func() { _ = store.EndLifecycle(browser, reservation, closed) }()
+		defer func() {
+			if reservation != "" {
+				_ = store.EndLifecycle(browser, reservation, closed)
+			}
+		}()
 		if restart {
 			status, err = headless.Restart(ctx, dir, options)
-			closed = true
+			closed = err == nil
+			if err != nil {
+				after, e := headless.Inspect(dir)
+				closed = e == nil && (!after.Running || after.PID != current.PID)
+			}
 		} else {
 			status, err = headless.Start(ctx, dir, options)
 		}
@@ -117,6 +125,7 @@ func coreBrowserStart(cmd *cobra.Command, args []string, headed bool) error {
 		if err = store.EndLifecycle(browser, reservation, closed); err != nil {
 			return err
 		}
+		reservation = ""
 	} else {
 		status, err = headless.Start(ctx, dir, options)
 		if err != nil {

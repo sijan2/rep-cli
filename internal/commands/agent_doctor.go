@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/repplus/rep-cli/internal/output"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/repplus/rep-cli/internal/agentstate"
 	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/headless"
+	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +27,17 @@ func newCoreDoctorCommand() *cobra.Command {
 	}
 	return command
 }
+
+type coreDoctorOptions struct {
+	host          string
+	manifestPaths func(string) ([]string, error)
+	reconnectWait time.Duration
+}
+
 func coreDoctor(cmd *cobra.Command) error {
+	return coreDoctorWith(cmd, coreDoctorOptions{corePrivateOptions(false).Host, nativeManifestPaths, 5 * time.Second})
+}
+func coreDoctorWith(cmd *cobra.Command, options coreDoctorOptions) error {
 	store, err := coreStore()
 	if err != nil {
 		return err
@@ -62,9 +72,13 @@ func coreDoctor(cmd *cobra.Command) error {
 			return err
 		}
 		if local.Reason == "not_started" {
-			return emitCore(cmd, coreResult{Browser: browser.Name, Status: "browser_unavailable", Next: coreNext("browser", "start"), Meta: map[string]any{"healthy": false, "fixed": fixed, "bridges": []any{}, "blocking_frames": []any{}}})
+			result := coreResult{Browser: browser.Name, Status: "browser_unavailable", Error: &coreError{Code: "browser_unavailable", Message: "the private profile has not been started", Next: coreNext("browser", "start"), Retry: "needs-agent"}, Meta: map[string]any{"healthy": false, "fixed": fixed, "bridges": []any{}, "blocking_frames": []any{}}}
+			if e := emitCore(cmd, result); e != nil {
+				return e
+			}
+			return output.MarkReported(output.NewAgentError("browser_unavailable", cmd.CommandPath(), "the private profile has not been started"))
 		}
-		if changed, e := repairCoreManifest(filepath.Join(local.Profile, "NativeMessagingHosts", "com.repplus.host.json"), local.Host, local.ExtensionID); e != nil {
+		if changed, e := repairCoreManifest(filepath.Join(local.Profile, "NativeMessagingHosts", "com.repplus.host.json"), options.host, local.ExtensionID); e != nil {
 			return e
 		} else if changed {
 			fixed = append(fixed, "native_manifest")
@@ -78,8 +92,8 @@ func coreDoctor(cmd *cobra.Command) error {
 			if e != nil {
 				return e
 			}
-			host := corePrivateOptions(false).Host
-			paths, e := nativeManifestPaths(browser.Name)
+			host := options.host
+			paths, e := options.manifestPaths(browser.Name)
 			if e != nil {
 				return e
 			}
@@ -92,7 +106,7 @@ func coreDoctor(cmd *cobra.Command) error {
 			}
 		}
 	}
-	client, identity, err := waitCoreBrowser(ctx, store, 5*time.Second)
+	client, identity, err := waitCoreBrowser(ctx, store, options.reconnectWait)
 	if err == nil {
 		browser = identity
 	}
@@ -107,7 +121,11 @@ func coreDoctor(cmd *cobra.Command) error {
 				return e
 			}
 			closed := false
-			defer func() { _ = store.EndLifecycle(browser, reservation, closed) }()
+			defer func() {
+				if reservation != "" {
+					_ = store.EndLifecycle(browser, reservation, closed)
+				}
+			}()
 			if client != nil {
 				if e = coreReloadGuard(ctx, client); e != nil {
 					return e
@@ -118,13 +136,18 @@ func coreDoctor(cmd *cobra.Command) error {
 				return e
 			}
 			_, err = headless.Restart(ctx, dir, corePrivateOptions(local.Headed))
-			closed = true
+			closed = err == nil
+			if err != nil {
+				after, e := headless.Inspect(dir)
+				closed = e == nil && (!after.Running || after.PID != local.PID)
+			}
 			if err != nil {
 				return err
 			}
 			if err = store.EndLifecycle(browser, reservation, true); err != nil {
 				return err
 			}
+			reservation = ""
 			// A restart changes epoch. Retain profile selection but invalidate old tabs.
 			client, err = headless.Connection(ctx, dir)
 			if err != nil {
@@ -155,7 +178,7 @@ func coreDoctor(cmd *cobra.Command) error {
 				return e
 			}
 			previous := client.Registry
-			client, err = waitCoreReplacement(ctx, store, previous, 5*time.Second)
+			client, err = waitCoreReplacement(ctx, store, previous, digest, options.reconnectWait)
 			if err != nil {
 				human = "Open the selected browser's extension manager and reload rep+."
 			} else {
@@ -217,12 +240,12 @@ func waitCoreBrowser(ctx context.Context, store *agentstate.Store, budget time.D
 		}
 	}
 }
-func waitCoreReplacement(ctx context.Context, store *agentstate.Store, previous bridge.Registry, budget time.Duration) (*bridge.Client, error) {
+func waitCoreReplacement(ctx context.Context, store *agentstate.Store, previous bridge.Registry, expectedDigest string, budget time.Duration) (*bridge.Client, error) {
 	wait, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	for {
 		client, _, err := resolveCoreBrowserOnce(wait, store, nil)
-		if err == nil && client.Registry.ProfileID == previous.ProfileID && client.Registry.BuildDigest != previous.BuildDigest {
+		if err == nil && client.Registry.ProfileID == previous.ProfileID && client.Registry.BuildDigest == expectedDigest {
 			return client, nil
 		}
 		select {

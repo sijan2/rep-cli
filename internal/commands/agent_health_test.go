@@ -9,11 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/repplus/rep-cli/internal/agentstate"
 	"github.com/repplus/rep-cli/internal/bridge"
+	"github.com/repplus/rep-cli/internal/headless"
 	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/spf13/cobra"
 )
@@ -175,5 +177,127 @@ func TestCloseUserTabDoesNotAdoptIt(t *testing.T) {
 	tab, _ := store.Tab("t1")
 	if tab.Owner != "" {
 		t.Fatal("refused close adopted a user tab")
+	}
+}
+
+func TestDoctorUnstartedPrivateProfileEmitsOneFailureObject(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("REP_BROWSER", "headless")
+	t.Setenv("REP_PROFILE", "fixture")
+	_, _ = scope.ConfigureInvocation(scope.Options{Task: "fixture/a", TaskSet: true}, "")
+	t.Cleanup(scope.Reset)
+	cmd := newCoreDoctorCommand()
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	out := new(bytes.Buffer)
+	cmd.SetOut(out)
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs(nil)
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("unstarted profile claimed healthy")
+	}
+	var result coreResult
+	if json.Unmarshal(out.Bytes(), &result) != nil || result.Error.Code != "browser_unavailable" || result.Error.Next != "rep browser start --task fixture/a" {
+		t.Fatalf("doctor output: %s", out)
+	}
+}
+
+func TestDoctorRealProfileReloadRequiresLiveStaleUnleasedBridge(t *testing.T) {
+	for _, scenario := range []string{"current", "stale", "capture", "lease", "offline"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir, err := os.MkdirTemp("", "doc-")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(dir)
+			t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
+			t.Setenv("REP_BRIDGE_DIR", filepath.Join(dir, "bridges"))
+			t.Setenv("REP_BROWSER", "dia")
+			extension := filepath.Join(dir, "extension")
+			_ = os.MkdirAll(extension, 0700)
+			_ = os.WriteFile(filepath.Join(extension, "manifest.json"), []byte(`{"name":"rep+"}`), 0600)
+			_ = os.WriteFile(filepath.Join(extension, "background.js"), []byte("// synthetic"), 0600)
+			t.Setenv("REP_EXTENSION_PATH", extension)
+			host := filepath.Join(dir, "rep-host")
+			_ = os.WriteFile(host, []byte("synthetic"), 0700)
+			_, _ = scope.ConfigureInvocation(scope.Options{Task: "fixture/a", TaskSet: true}, "")
+			t.Cleanup(scope.Reset)
+			digest, _ := headless.ExtensionDigest(extension)
+			registry := bridge.Registry{PID: os.Getpid(), Browser: "dia", ProfileID: "profile", Epoch: "epoch", BuildDigest: digest, Socket: filepath.Join(dir, "s")}
+			if scenario != "current" {
+				registry.BuildDigest = "old"
+			}
+			registryDir := filepath.Join(dir, "bridges")
+			_ = os.MkdirAll(registryDir, 0700)
+			registryPath := filepath.Join(registryDir, "fixture.json")
+			publish := func() { data, _ := json.Marshal(registry); _ = os.WriteFile(registryPath, data, 0600) }
+			var reloads atomic.Int32
+			if scenario != "offline" {
+				listener, e := net.Listen("unix", registry.Socket)
+				if e != nil {
+					t.Fatal(e)
+				}
+				defer listener.Close()
+				publish()
+				go func() {
+					for {
+						conn, e := listener.Accept()
+						if e != nil {
+							return
+						}
+						func() {
+							defer conn.Close()
+							var req bridge.RPCRequest
+							if json.NewDecoder(conn).Decode(&req) != nil {
+								return
+							}
+							value := `{"connected":true}`
+							switch req.Method {
+							case "browser.status":
+								if scenario == "capture" {
+									value = `{"active_captures":1}`
+								} else if scenario == "lease" {
+									value = `{"active_leases":1}`
+								} else {
+									value = `{"active_captures":0,"active_leases":0}`
+								}
+							case "browser.reload-extension":
+								reloads.Add(1)
+								registry.BuildDigest = digest
+								publish()
+							}
+							_ = json.NewEncoder(conn).Encode(bridge.RPCResponse{ID: req.ID, Result: json.RawMessage(value)})
+						}()
+					}
+				}()
+			}
+			cmd := &cobra.Command{Use: "doctor"}
+			cmd.SetContext(context.Background())
+			out := new(bytes.Buffer)
+			cmd.SetOut(out)
+			err = coreDoctorWith(cmd, coreDoctorOptions{host, func(string) ([]string, error) { return []string{filepath.Join(dir, "native", "host.json")}, nil }, 150 * time.Millisecond})
+			if scenario == "stale" {
+				if err != nil || reloads.Load() != 1 || !strings.Contains(out.String(), "extension_reloaded") {
+					t.Fatalf("stale reload: %v %d %s", err, reloads.Load(), out)
+				}
+			} else if reloads.Load() != 0 {
+				t.Fatal("unnecessary/unsafe reload")
+			}
+			if scenario == "capture" || scenario == "lease" {
+				var problem *agentstate.Error
+				if !errors.As(err, &problem) || problem.Code != "browser_in_use" {
+					t.Fatalf("missing active-operation guard: %v", err)
+				}
+			}
+			if scenario == "offline" {
+				var result coreResult
+				if err == nil || json.Unmarshal(out.Bytes(), &result) != nil || result.Error.Retry != "needs-human" {
+					t.Fatalf("human-only recovery: %v %s", err, out)
+				}
+			}
+			if scenario == "current" && err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

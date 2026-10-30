@@ -61,6 +61,9 @@ func emitCore(command *cobra.Command, result coreResult) error {
 	return output.WriteJSON(command.OutOrStdout(), result)
 }
 func coreFailure(command *cobra.Command, err error) error {
+	if output.Reported(err) {
+		return err
+	}
 	problem := coreError{Code: "command_failed", Message: "operation failed", Next: coreNext("doctor"), Retry: "needs-agent"}
 	var stateError *agentstate.Error
 	var agentError output.AgentError
