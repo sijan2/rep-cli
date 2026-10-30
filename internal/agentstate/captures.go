@@ -67,6 +67,9 @@ func (s *Store) ReserveTransport(browser Browser, owner, session, origin string,
 	var result *Tab
 	lease := Token("l_")
 	err := s.Update(func(state *State) error {
+		if lifecycleBusy(state, browser, s.now()) {
+			return Failure("browser_in_use", "browser lifecycle operation is active", "rep scope")
+		}
 		parsed, err := url.Parse(origin)
 		if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || origin != parsed.Scheme+"://"+parsed.Host {
 			return Failure("invalid_argument", "transport requires an HTTP(S) origin", "rep fetch --help")
