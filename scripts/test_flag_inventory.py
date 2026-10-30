@@ -28,12 +28,12 @@ Task, browser and profile are inferred.
 Make a request.
 
 Flags:
-  -X, --method string  Method
-  -H, --header stringArray  Header
-  -d, --data string  Body
+  -X, --X string  Method
+  -H, --H stringArray  Header
+  -d, --d string  Body
 """)
         self.assertEqual(children, [])
-        self.assertEqual(local, ["method", "header", "data"])
+        self.assertEqual(local, ["X", "H", "d"])
         self.assertEqual(inherited, [])
 
     def test_long_help_fields_are_not_subcommands(self):

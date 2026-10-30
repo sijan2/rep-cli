@@ -46,7 +46,7 @@ def parse_help(help_text):
             if match:
                 commands.append(match.group(1))
         elif mode in ("local", "inherited"):
-            match = re.match(r"^  (?:-[A-Za-z?], )?\s*--([a-z][a-z0-9-]*)\b", line)
+            match = re.match(r"^  (?:-[A-Za-z?], )?\s*--([A-Za-z][A-Za-z0-9-]*)\b", line)
             if match:
                 (local if mode == "local" else inherited).append(match.group(1))
     # The compact core contract declares its sole inherited flag in the grammar,

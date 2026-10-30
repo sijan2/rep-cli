@@ -25,7 +25,7 @@ var contractFlags = map[string][]string{
 	"rep": {"task"}, "rep page": {"section", "find", "reload", "viewport", "capture"},
 	"rep do": {"press", "file", "capture"}, "rep eval": {"timeout", "capture"},
 	"rep shot": {"urls", "viewport", "full-page", "selector"}, "rep reference": {"selector"},
-	"rep net": {}, "rep body": {"request", "find", "out"}, "rep fetch": {"request", "header", "data"},
+	"rep net": {}, "rep body": {"request", "find", "out"}, "rep fetch": {"X", "H", "d"},
 	"rep replay": {"set", "matrix", "write", "timeout"}, "rep download": {"overwrite", "timeout"},
 	"rep tabs": {}, "rep close": {}, "rep scope": {}, "rep doctor": {}, "rep browser": {},
 	"rep browser start": {"headed"}, "rep browser stop": {}, "rep cdp": {},
