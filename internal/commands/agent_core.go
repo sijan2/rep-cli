@@ -108,7 +108,7 @@ func invocationHandle(command *cobra.Command, args []string) string {
 		if strings.HasPrefix(candidate, "@") && len(args) > 1 {
 			candidate = args[len(args)-1]
 		}
-	case "page", "shot", "reference", "body", "close":
+	case "page", "shot", "reference", "body", "close", "replay", "download":
 		if len(args) > 0 {
 			candidate = args[0]
 		}

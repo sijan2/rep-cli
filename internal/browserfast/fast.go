@@ -284,7 +284,7 @@ func (s *Session) CloseRead() error {
 }
 
 // Capture starts recording without surrendering this command's execute lease.
-func (s *Session) Capture(ctx context.Context, url string, out any) error {
+func (s *Session) Capture(ctx context.Context, url string, out any, limits ...map[string]any) error {
 	timeout := int64(30000)
 	if deadline, ok := ctx.Deadline(); ok {
 		timeout = time.Until(deadline).Milliseconds()
@@ -292,5 +292,57 @@ func (s *Session) Capture(ctx context.Context, url string, out any) error {
 	if timeout < 1000 {
 		timeout = 1000
 	}
-	return s.Call(ctx, "browser.capture.begin", map[string]any{"tab_id": s.Tab, "owner": s.lease.Owner, "lease_id": s.lease.LeaseID, "generation": s.lease.Generation, "url": url, "timeout_ms": timeout}, out)
+	params := map[string]any{"tab_id": s.Tab, "owner": s.lease.Owner, "lease_id": s.lease.LeaseID, "generation": s.lease.Generation, "url": url, "timeout_ms": timeout}
+	if len(limits) > 0 {
+		for _, key := range []string{"capture_limits", "max_body_bytes"} {
+			if value, ok := limits[0][key]; ok {
+				params[key] = value
+			}
+		}
+	}
+	return s.Call(ctx, "browser.capture.begin", params, out)
+}
+
+// CaptureCaller lends the existing execute lease to a synchronous plan engine.
+// It does not acquire or release another lease while recording owns the tab;
+// Session.Close remains the sole owner of the lease lifetime.
+func (s *Session) CaptureCaller() browserrpc.Caller { return captureCaller{s} }
+
+type captureCaller struct{ session *Session }
+
+func (c captureCaller) Call(ctx context.Context, method string, params any, out any) error {
+	if method != "browser.lease.acquire" && method != "browser.lease.release" {
+		return c.session.Call(ctx, method, params, out)
+	}
+	bytes, err := json.Marshal(params)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Tab     int    `json:"tab_id"`
+		Owner   string `json:"owner"`
+		Purpose string `json:"purpose"`
+		ID      string `json:"lease_id"`
+	}
+	if err = json.Unmarshal(bytes, &request); err != nil {
+		return err
+	}
+	lease := c.session.lease
+	if lease.LeaseID == "" || request.Tab != c.session.Tab || request.Owner != lease.Owner {
+		return errors.New("capture plan cannot change its execute target")
+	}
+	if method == "browser.lease.release" {
+		if request.ID != lease.LeaseID {
+			return errors.New("capture plan cannot release another lease")
+		}
+		return nil
+	}
+	if request.Purpose != "execute" {
+		return errors.New("capture plan requires an execute lease")
+	}
+	bytes, err = json.Marshal(lease)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(bytes, out)
 }
