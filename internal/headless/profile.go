@@ -25,3 +25,23 @@ func NamedProfileDir(name string) (string, error) {
 	}
 	return filepath.Join(base, "profiles", name), nil
 }
+
+// Inspect reads local lifecycle facts without probing a socket or endpoint.
+func Inspect(dataDir string) (Status, error) {
+	state, err := readState(dataDir)
+	if os.IsNotExist(err) {
+		return Status{IsolatedProfile: true, Reason: "not_started"}, nil
+	}
+	if err != nil {
+		return Status{}, err
+	}
+	running := ownedProcess(state)
+	reason := "stopped"
+	if running {
+		reason = "not_probed"
+	}
+	return Status{State: state, Running: running, IsolatedProfile: true, Reason: reason}, nil
+}
+
+// ExtensionDigest uses the same source digest advertised by extension hello.
+func ExtensionDigest(directory string) (string, error) { return extensionDigest(directory) }

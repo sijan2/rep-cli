@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/repplus/rep-cli/internal/agentstate"
+	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/browserflow"
 	"github.com/repplus/rep-cli/internal/scope"
@@ -185,6 +186,10 @@ func coreDo(command *cobra.Command, args []string, key string, files []string) e
 		operation = spec.Action
 		prepared, e := session.Eval(ctx, spec)
 		if e != nil {
+			if bridge.PossibleDispatch(e) {
+				outcome = "outcome_unknown"
+				return e
+			}
 			outcome = "performed"
 			return coreDoUnobserved(command, tab, operation, "outcome_unknown; verify before continuing")
 		}
@@ -218,6 +223,10 @@ func coreDo(command *cobra.Command, args []string, key string, files []string) e
 			err = session.Press(ctx, k, reference.Raw, prepared.URL)
 		}
 		if err != nil {
+			if bridge.PossibleDispatch(err) {
+				outcome = "outcome_unknown"
+				return err
+			}
 			outcome = "performed"
 			return coreDoUnobserved(command, tab, operation, "input may have been dispatched; verify before continuing")
 		}

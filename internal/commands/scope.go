@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/repplus/rep-cli/internal/headless"
 	"github.com/repplus/rep-cli/internal/output"
@@ -58,10 +57,8 @@ func inspectScopeBrowserProfiles(ctx context.Context, selected scope.Scope) scop
 		return profiles
 	}
 	profile.ProfilePath = filepath.Join(directory, "headless", "profile")
-	profile.StartCommand = quoteCommand("rep", "browser", "headless", "start", "--task", selected.Identity())
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	status, err := headless.GetStatus(ctx, directory)
+	profile.StartCommand = quoteCommand("rep", "browser", "start", "--task", selected.Identity())
+	status, err := headless.Inspect(directory)
 	if err != nil {
 		profile.Status = "unknown"
 		return profiles
@@ -72,8 +69,8 @@ func inspectScopeBrowserProfiles(ctx context.Context, selected scope.Scope) scop
 		profile.Status = "not_started"
 	case !status.Running:
 		profile.Status = "stopped"
-	case !status.Connected:
-		profile.Status = "disconnected"
+	case status.Running:
+		profile.Status = "not_probed"
 	default:
 		profile.Status = "ready"
 	}
@@ -98,8 +95,13 @@ var scopeCmd = &cobra.Command{
 		} else if !os.IsNotExist(err) {
 			status = "unreadable"
 		}
+		inventory, err := readCoreScope(selected)
+		if err != nil {
+			return coreFailure(cmd, err)
+		}
 		result := struct {
 			scope.Scope
+			coreScopeInventory
 			CaptureStatus string `json:"capture_status"`
 			// Retained for compatibility; this describes the shared extension
 			// selectors. Task headless isolation is reported separately below.
@@ -107,7 +109,7 @@ var scopeCmd = &cobra.Command{
 			NeedsSelection  bool                 `json:"needs_selection"`
 			BrowserProfiles scopeBrowserProfiles `json:"browser_profiles"`
 		}{
-			Scope: selected, CaptureStatus: status, SharedBrowser: true,
+			Scope: selected, coreScopeInventory: inventory, CaptureStatus: status, SharedBrowser: true,
 			NeedsSelection:  (!selected.Scoped && !selected.ExplicitGlobal) || (selected.Scoped && selected.TaskSource == "default"),
 			BrowserProfiles: inspectScopeBrowserProfiles(cmd.Context(), selected),
 		}

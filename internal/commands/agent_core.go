@@ -66,6 +66,9 @@ func coreFailure(command *cobra.Command, err error) error {
 	var agentError output.AgentError
 	var rpcError *bridge.RPCError
 	switch {
+	case bridge.PossibleDispatch(err):
+		problem.Code, problem.Message, problem.Retry = "outcome_unknown", "the browser may have executed the request; verify its state before acting again", "do-not-retry"
+		problem.Next = coreVerificationNext(command)
 	case errors.As(err, &stateError):
 		problem = coreError{stateError.Code, stateError.Message, stateError.Next, stateError.Retry, stateError.Candidates}
 	case errors.As(err, &agentError):
@@ -88,7 +91,14 @@ func coreFailure(command *cobra.Command, err error) error {
 	if selected, ok := scope.Configured(); ok && selected.TaskSource == "flag" && !strings.Contains(problem.Next, "--task") {
 		problem.Next += " --task " + quoteCommand(selected.Identity())
 	}
-	if writeErr := emitCore(command, coreResult{Error: &problem}); writeErr != nil {
+	result := coreResult{Error: &problem}
+	if state, e := coreStore(); e == nil {
+		selected, _ := scope.Current()
+		if browser, e := state.Remembered(selected.Identity()); e == nil && browser != nil {
+			result.Browser, result.Profile = browser.Name, browser.Profile
+		}
+	}
+	if writeErr := emitCore(command, result); writeErr != nil {
 		return writeErr
 	}
 	return output.MarkReported(output.NewAgentError(problem.Code, command.CommandPath(), problem.Message))
@@ -131,7 +141,7 @@ func invocationHandle(command *cobra.Command, args []string) string {
 func browserIdentity(client *bridge.Client, name, privateName string) agentstate.Browser {
 	return agentstate.Browser{Name: name, Profile: client.Registry.ProfileID, Epoch: client.Registry.Epoch, PrivateName: privateName}
 }
-func resolveCoreBrowser(ctx context.Context, store *agentstate.Store, tab *agentstate.Tab) (*bridge.Client, agentstate.Browser, error) {
+func resolveCoreBrowserOnce(ctx context.Context, store *agentstate.Store, tab *agentstate.Tab) (*bridge.Client, agentstate.Browser, error) {
 	selected, _ := scope.Current()
 	remembered, err := store.Remembered(selected.Identity())
 	if err != nil {
@@ -174,10 +184,10 @@ func resolveCoreBrowser(ctx context.Context, store *agentstate.Store, tab *agent
 		}
 		var matches []*bridge.Client
 		for _, registry := range registries {
-			if choice != nil && registry.ProfileID != choice.Profile {
+			if choice != nil && choice.Profile != "" && registry.ProfileID != choice.Profile {
 				continue
 			}
-			if choice == nil && name != "any" && registry.Browser != name && registry.ProfileID != name {
+			if (choice == nil || choice.Profile == "") && name != "any" && registry.Browser != name && registry.ProfileID != name {
 				continue
 			}
 			candidate := &bridge.Client{Registry: registry}
@@ -206,7 +216,7 @@ func resolveCoreBrowser(ctx context.Context, store *agentstate.Store, tab *agent
 	if identity.Profile == "" || identity.Epoch == "" {
 		return nil, identity, agentstate.Failure("bridge_outdated", "the extension does not report a profile identity", "rep doctor")
 	}
-	if choice != nil && (choice.Profile != identity.Profile || tab != nil && choice.Epoch != identity.Epoch) {
+	if choice != nil && choice.Profile != "" && (choice.Profile != identity.Profile || tab != nil && choice.Epoch != identity.Epoch) {
 		return nil, identity, agentstate.Failure("tab_gone", "the browser profile or session changed", "rep tabs")
 	}
 	if err := store.ObserveEpoch(identity.Profile, identity.Epoch); err != nil {

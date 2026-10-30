@@ -98,7 +98,7 @@ func runScopeCLI(t *testing.T, directory string, extra map[string]string, args .
 			env[name] = value
 		}
 	}
-	for _, name := range []string{"REP_WORKSPACE", "REP_TASK", "REPLIVE_PATH", "REPANDROID_PATH"} {
+	for _, name := range []string{"REP_WORKSPACE", "REP_TASK", "REPLIVE_PATH", "REPANDROID_PATH", "REP_PROFILE", "XDG_RUNTIME_DIR"} {
 		delete(env, name)
 	}
 	env["REP_SCOPE_CLI_TEST"] = "1"
@@ -231,7 +231,7 @@ func TestScopeReportsStableNamedProfileWithoutStartingBrowsers(t *testing.T) {
 			t.Fatalf("named profile was not stable across tasks: %+v", profile)
 		}
 		sharedPath = profile.ProfilePath
-		if profile.StartCommand != "rep browser headless start --task project/"+task {
+		if profile.StartCommand != "rep browser start --task project/"+task {
 			t.Fatalf("start guidance selected another task: %q", profile.StartCommand)
 		}
 	}

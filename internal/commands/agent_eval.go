@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/repplus/rep-cli/internal/agentstate"
+	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/scope"
@@ -183,6 +184,9 @@ func coreEvaluate(command *cobra.Command, args []string, timeout time.Duration, 
 	result.Untrusted = map[string]any{"url": tab.URL}
 	if err = session.Inspect(ctx, "", method, params, &wire); err != nil {
 		outcome = "outcome_unknown"
+		if bridge.PossibleDispatch(err) {
+			return err
+		}
 		result.Status = "performed"
 		result.Next = coreNext("page", tab.Handle)
 		result.Meta = map[string]any{"operation": operation, "observation_error": "outcome_unknown; verify before continuing"}
