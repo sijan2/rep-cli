@@ -751,6 +751,10 @@ func (engine *Engine) Run(ctx context.Context, tab int, plan Plan, apply bool) (
 				event, _ := KeyEvent(key)
 				for _, kind := range []string{"keyDown", "keyUp"} {
 					event["type"] = kind
+					if kind == "keyUp" {
+						delete(event, "text")
+						delete(event, "unmodifiedText")
+					}
 					var ignored any
 					if keyErr := engine.cdpRoute(ctx, tab, bound.route, "Input.dispatchKeyEvent", event, &ignored); keyErr != nil {
 						if code, rejected := preDispatchRejection(keyErr); rejected && !keyMayHaveDispatched {

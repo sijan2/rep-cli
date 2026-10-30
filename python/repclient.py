@@ -8,6 +8,8 @@ import hashlib
 import json
 import os
 import subprocess
+import stat
+from pathlib import Path
 
 
 class RepError(RuntimeError):
@@ -82,7 +84,18 @@ class Client:
 
 
 def evaluation_value(response):
-    """Decode the legacy result until eval's untrusted-value contract lands."""
+    """Decode the version-matched value; retain the staged legacy spelling."""
+    if response.get("error"):
+        raise RepError(response["error"].get("code", "evaluation_exception"), "page evaluation failed")
+    artifact = response.get("meta", {}).get("artifact")
+    if artifact:
+        path = Path(artifact["path"])
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o777 != 0o600 or info.st_size > 16 * 1024 * 1024:
+            raise RepError("invalid_artifact", "eval artifact is not a bounded private file")
+        return json.loads(path.read_text())
+    if "untrusted" in response:
+        return response["untrusted"].get("value")
     result = response.get("result", {})
     if result.get("exceptionDetails"):
         raise RepError("evaluation_exception", "page evaluation threw an exception")

@@ -24,6 +24,9 @@ var contentRenderer string
 var referenceRenderer string
 
 type Spec struct {
+	Readable      bool   `json:"readable,omitempty"`
+	Section       string `json:"section,omitempty"`
+	Find          string `json:"find,omitempty"`
 	Owner         string `json:"owner"`
 	TextOffset    int    `json:"text_offset,omitempty"`
 	ControlOffset int    `json:"control_offset,omitempty"`
@@ -43,6 +46,7 @@ type Spec struct {
 }
 
 type Result struct {
+	Focus              json.RawMessage `json:"focus,omitempty"`
 	Generation         string          `json:"generation,omitempty"`
 	ContentHash        string          `json:"content_hash,omitempty"`
 	Status             string          `json:"status"`
@@ -223,6 +227,10 @@ func (s *Session) Press(ctx context.Context, key, ref, page string) error {
 			}
 		}
 		event["type"] = kind
+		if kind == "keyUp" {
+			delete(event, "text")
+			delete(event, "unmodifiedText")
+		}
 		var ignored any
 		if err := browserrpc.CDPRoute(callCtx, s, s.Tab, route, "Input.dispatchKeyEvent", event, &ignored); err != nil && first == nil {
 			first = err
@@ -254,4 +262,23 @@ func (s *Session) Click(ctx context.Context, point Point, page string) error {
 		}
 	}
 	return first
+}
+
+// UploadTrigger intercepts a native chooser only for this owned execution lease.
+func (s *Session) UploadTrigger(ctx context.Context, point Point, page string, files []string) error {
+	var result any
+	return s.Call(ctx, "browser.file.upload", map[string]any{"tab_id": s.Tab, "owner": s.lease.Owner, "lease_id": s.lease.LeaseID, "generation": s.lease.Generation, "expected_root_url": page, "point": point, "files": files}, &result)
+}
+
+// CloseRead releases and detaches an otherwise idle read attachment immediately.
+func (s *Session) CloseRead() error {
+	if s.lease.LeaseID == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var ignored any
+	err := s.Call(ctx, "browser.lease.release", map[string]any{"tab_id": s.Tab, "owner": s.lease.Owner, "lease_id": s.lease.LeaseID, "detach_if_idle": true}, &ignored)
+	s.lease = browserrpc.Lease{}
+	return err
 }

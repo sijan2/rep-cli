@@ -1,40 +1,32 @@
 [
   {
     "argv": [
-      "browser",
-      "navigate",
-      "https://fixture.invalid/",
-      "--wait",
-      "domcontentloaded",
-      "--timeout",
-      "45s"
+      "page",
+      "https://fixture.invalid/"
     ],
     "fields": [
-      "tab_id",
-      "url",
-      "duration_ms"
+      "tab",
+      "untrusted.url"
     ]
   },
   {
     "argv": [
-      "browser",
       "eval",
       "@fixture.js",
-      "--tab",
-      "1",
+      "t1",
       "--timeout",
       "90s"
     ],
     "fields": [
-      "result.result.value",
-      "result.exceptionDetails"
+      "untrusted.value",
+      "untrusted.exception",
+      "meta.artifact"
     ]
   },
   {
     "argv": [
-      "browser",
       "close",
-      "1"
+      "t1"
     ],
     "fields": []
   },
@@ -211,32 +203,26 @@
   },
   {
     "argv": [
-      "browser",
-      "navigate",
-      "https://fixture.invalid/",
-      "--tab",
-      "1",
-      "--wait",
-      "domcontentloaded",
-      "--timeout",
-      "45s"
+      "page",
+      "https://fixture.invalid/"
     ],
     "fields": [
-      "tab_id"
+      "tab",
+      "untrusted.url"
     ]
   },
   {
     "argv": [
-      "browser",
       "eval",
-      "1",
-      "--tab",
-      "1",
+      "@fixture.js",
+      "t1",
       "--timeout",
-      "3s"
+      "90s"
     ],
     "fields": [
-      "result.result.value"
+      "untrusted.value",
+      "untrusted.exception",
+      "meta.artifact"
     ]
   },
   {
@@ -310,28 +296,26 @@
   },
   {
     "argv": [
-      "browser",
       "eval",
       "@fixture.js",
-      "--tab",
-      "1",
+      "t1",
       "--timeout",
-      "120s"
+      "90s"
     ],
     "fields": [
-      "result.result.value"
+      "untrusted.value",
+      "untrusted.exception",
+      "meta.artifact"
     ]
   },
   {
     "argv": [
-      "browser",
-      "navigate",
-      "https://fixture.invalid/",
-      "--wait",
-      "load"
+      "page",
+      "https://fixture.invalid/"
     ],
     "fields": [
-      "tab_id"
+      "tab",
+      "untrusted.url"
     ]
   }
 ]

@@ -107,7 +107,7 @@ func RedactValue(value any) any {
 		}
 		return result
 	case string:
-		return RedactURL(value)
+		return RedactBody(RedactURL(value), "text/plain")
 	default:
 		return value
 	}

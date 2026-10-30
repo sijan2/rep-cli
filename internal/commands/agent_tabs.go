@@ -1,10 +1,6 @@
 package commands
 
 import (
-	"encoding/base64"
-	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/repplus/rep-cli/internal/agentstate"
@@ -118,86 +114,6 @@ func coreClose(command *cobra.Command, args []string) error {
 	result := coreTabResult(tab)
 	result.Status = "closed"
 	result.Meta = map[string]any{"closed": []string{tab.Handle}, "refused": []any{}}
-	return emitCore(command, result)
-}
-func newCoreShotCommand() *cobra.Command {
-	command := &cobra.Command{Use: "shot [TAB] [PATH]", Short: "Write a screenshot artifact", Args: cobra.MaximumNArgs(2)}
-	command.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := coreShot(cmd, args); err != nil {
-			return coreFailure(cmd, err)
-		}
-		return nil
-	}
-	return command
-}
-func coreShot(command *cobra.Command, args []string) error {
-	store, err := coreStore()
-	if err != nil {
-		return err
-	}
-	target, path := "", ""
-	var addressed *agentstate.Tab
-	if len(args) > 0 {
-		target = args[0]
-		if !agentstate.TabPattern.MatchString(target) {
-			return coreArgument("shot requires a tab handle")
-		}
-		addressed, err = store.Tab(target)
-		if err != nil {
-			return err
-		}
-	}
-	if len(args) > 1 {
-		path = args[1]
-	}
-	ctx, cancel := coreTimeout(command, 10*time.Second)
-	defer cancel()
-	client, browser, err := resolveCoreBrowser(ctx, store, addressed)
-	if err != nil {
-		return err
-	}
-	selected, _ := scope.Current()
-	tab, lease, err := store.Reserve(browser, selected.Identity(), selected.SessionKey, target, selected.TaskSource == "flag", false, 11*time.Second)
-	if err != nil {
-		return err
-	}
-	defer store.Release(tab.Handle, lease)
-	session := &browserfast.Session{Browser: client, Tab: tab.ChromeID, Owner: tab.Owner}
-	defer session.Close()
-	if err := session.Acquire(ctx); err != nil {
-		return err
-	}
-	var shot struct {
-		Data string `json:"data"`
-	}
-	if err := session.Inspect(ctx, "", "Page.captureScreenshot", map[string]any{"format": "png", "captureBeyondViewport": false}, &shot); err != nil {
-		return err
-	}
-	data, err := base64.StdEncoding.DecodeString(shot.Data)
-	if err != nil {
-		return err
-	}
-	if path == "" {
-		path = filepath.Join(selected.DataDir, "shots", fmt.Sprintf("%s-%d.png", tab.Handle, time.Now().UnixNano()))
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	_, err = file.Write(data)
-	closeErr := file.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	result := coreTabResult(tab)
-	result.Status = "saved"
-	result.Meta = map[string]any{"path": path, "bytes": len(data)}
 	return emitCore(command, result)
 }
 func init() {

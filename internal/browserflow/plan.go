@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const MaxPlanBytes = 256 * 1024
@@ -255,14 +258,69 @@ func (plan Plan) Validate() error {
 	return nil
 }
 func KeyEvent(key string) (map[string]any, bool) {
-	codes := map[string]int{"Enter": 13, "Tab": 9, "Escape": 27, "Space": 32, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40, "Backspace": 8, "Delete": 46, "Home": 36, "End": 35}
-	code, ok := codes[key]
-	if !ok {
-		return nil, false
+	parts := strings.Split(key, "+")
+	if key == "+" {
+		parts = []string{"+"}
+	} else if strings.HasSuffix(key, "++") {
+		parts = strings.Split(strings.TrimSuffix(key, "+"), "+")
+		parts[len(parts)-1] = "+"
 	}
-	name := key
+	modifiers := 0
+	for _, part := range parts[:len(parts)-1] {
+		bit := map[string]int{"Alt": 1, "Control": 2, "Ctrl": 2, "Meta": 4, "Cmd": 4, "Shift": 8}[part]
+		if bit == 0 || modifiers&bit != 0 {
+			return nil, false
+		}
+		modifiers |= bit
+	}
+	key = parts[len(parts)-1]
+	codes := map[string]int{"Enter": 13, "Tab": 9, "Escape": 27, "Space": 32, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40, "Backspace": 8, "Delete": 46, "Home": 36, "End": 35, "PageUp": 33, "PageDown": 34, "Insert": 45}
+	code, ok := codes[key]
+	name, physical := key, key
 	if key == "Space" {
 		name = " "
 	}
-	return map[string]any{"key": name, "code": key, "windowsVirtualKeyCode": code}, true
+	if !ok && len(key) == 1 && (key[0] >= 'a' && key[0] <= 'z' || key[0] >= 'A' && key[0] <= 'Z' || key[0] >= '0' && key[0] <= '9') {
+		upper := strings.ToUpper(key)
+		code = int(upper[0])
+		ok = true
+		if code >= 65 {
+			physical = "Key" + upper
+			if modifiers&8 != 0 {
+				name = upper
+			}
+		} else {
+			physical = "Digit" + key
+		}
+	}
+	if !ok && strings.HasPrefix(key, "F") {
+		n, err := strconv.Atoi(key[1:])
+		if err == nil && n >= 1 && n <= 24 {
+			code = 111 + n
+			ok = true
+		}
+	}
+	if !ok && utf8.RuneCountInString(key) == 1 {
+		r, _ := utf8.DecodeRuneInString(key)
+		if !unicode.IsControl(r) {
+			ok = true
+			name = key
+			physical = ""
+			code = 0
+		}
+	}
+	if !ok {
+		return nil, false
+	}
+	event := map[string]any{"key": name, "code": physical, "windowsVirtualKeyCode": code, "modifiers": modifiers}
+	if modifiers&7 == 0 {
+		if key == "Enter" {
+			event["text"] = "\r"
+			event["unmodifiedText"] = "\r"
+		} else if utf8.RuneCountInString(name) == 1 {
+			event["text"] = name
+			event["unmodifiedText"] = name
+		}
+	}
+	return event, true
 }

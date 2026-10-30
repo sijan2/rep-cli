@@ -157,3 +157,14 @@ func TestTabCapNeverEvictsAndCorruptionNeverResetsCounter(t *testing.T) {
 		t.Fatal("registry clobbered")
 	}
 }
+
+func TestRegisteredWorkersCannotBypassTabCap(t *testing.T) {
+	store := fixtureStore(t)
+	for i := 0; i < TabCap; i++ {
+		if _, err := store.Register(fixtureBrowser(), i+1, "default/worker", "session", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := store.Register(fixtureBrowser(), 1000, "default/worker", "session", true)
+	requireCode(t, err, "tab_cap")
+}

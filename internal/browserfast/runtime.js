@@ -32,6 +32,7 @@ async function repFast(spec) {
     scan: for (let i=0;i<trees.length;i++) for (const el of trees[i].querySelectorAll('*')) {
       if (domScan.nodes >= domScan.nodeLimit) { domScan.limited=true; break scan; }
       domScan.nodes++;
+      try { if (el.tagName === 'IFRAME' && el.contentDocument && trees.length < domScan.treeLimit) trees.push(el.contentDocument); } catch {}
       if (el.shadowRoot) {
         if (trees.length >= domScan.treeLimit) domScan.shadowLimited=true;
         else { trees.push(el.shadowRoot); domScan.shadowRoots++; }
@@ -44,7 +45,7 @@ async function repFast(spec) {
   // The CLI disables HTML escaping for these JSON-only results. Go still
   // escapes the two JavaScript line separators, so include those rare bytes.
   const wireBytes = value => new TextEncoder().encode(JSON.stringify(value).replace(/[\u2028\u2029]/g, c => ({'\u2028':'\\u2028','\u2029':'\\u2029'}[c]))).length;
-  const controlOutputBudget = 16384;
+  const controlOutputBudget = spec.readable ? 2000 : 16384;
   // ---- Page physics shared by every site: which stack rendered it, which
   // requests fed it, and whether it is content, loading, a wall or an error.
   const hasGlobal = key => { try { return globalThis[key] !== undefined; } catch (_) { return false; } };
@@ -161,11 +162,11 @@ async function repFast(spec) {
   const owner = state.owners.get(spec.owner);
   owner.pages ||= new Map();
   const rowContext = el => norm(el.closest('tr,li,[role="row"],[role="listitem"]')?.innerText || '').slice(0,512);
-  const binding = el => ({el,parent:el.parentNode,generation:performance.timeOrigin,context:rowContext(el),url:location.href,name:name(el),role:role(el),type:el.getAttribute('type') || '',href:el.getAttribute('href') || '',at:Date.now()});
+  const binding = el => ({el,parent:el.parentNode,generation:performance.timeOrigin,context:rowContext(el),value:typeof el.value==='string' ? el.value : null,childGeneration:el.ownerDocument?.defaultView?.performance.timeOrigin,url:location.href,name:name(el),role:role(el),type:el.getAttribute('type') || '',href:el.getAttribute('href') || '',at:Date.now()});
   // Applications rewrite the query and fragment (tabs, filters, scroll state);
   // the same origin and path is the same document for a reference.
   const sameDocument = (a,b) => { try { const x=new URL(a), y=new URL(b); return x.origin===y.origin && x.pathname===y.pathname; } catch(_) { return a===b; } };
-  const unchanged = bound => bound.generation===performance.timeOrigin && bound.context===rowContext(bound.el) && sameDocument(bound.url,location.href) && bound.el.isConnected && bound.parent===bound.el.parentNode &&
+  const unchanged = bound => bound.generation===performance.timeOrigin && bound.childGeneration===bound.el.ownerDocument?.defaultView?.performance.timeOrigin && bound.context===rowContext(bound.el) && sameDocument(bound.url,location.href) && bound.el.isConnected && bound.parent===bound.el.parentNode &&
     bound.name===name(bound.el) && bound.role===role(bound.el) && bound.type===(bound.el.getAttribute('type') || '') && bound.href===(bound.el.getAttribute('href') || '');
   const remember = el => {
     const ref = 'e_' + crypto.randomUUID().replaceAll('-','');
@@ -185,7 +186,7 @@ async function repFast(spec) {
   const guard = el => {
     el.scrollIntoView({block:'center',inline:'nearest'});
     if (!visible(el) || !enabled(el)) fail('target_changed');
-    const r=el.getBoundingClientRect(), x=r.left+r.width/2, y=r.top+r.height/2;
+    const r=el.getBoundingClientRect(); let x=r.left+r.width/2, y=r.top+r.height/2;
     if(x<0||y<0||x>=innerWidth||y>=innerHeight) fail('target_outside_viewport');
     let target=el, root=el.getRootNode();
     while(root) {
@@ -194,6 +195,8 @@ async function repFast(spec) {
       if(!root.host) break;
       target=root.host;root=target.getRootNode();
     }
+    let frame=el.ownerDocument?.defaultView?.frameElement;
+    while(frame) { const box=frame.getBoundingClientRect(); x+=box.left+frame.clientLeft; y+=box.top+frame.clientTop; const hit=frame.ownerDocument.elementFromPoint(x,y); if(hit!==frame) fail('target_occluded'); frame=frame.ownerDocument.defaultView.frameElement; }
     return {x,y};
   };
   const fill = (el, value, replace) => {
@@ -266,7 +269,7 @@ async function repFast(spec) {
         const settledLooking=document.readyState==='complete' && (main?.innerText || '').trim().length>0;
         const pageState=await stateSignals(settledLooking ? 0 : 150);
         physics={stack:fingerprint(),data_requests:dataRequests(),page_state:pageState};
-        const all=query('input:not([type=hidden]):not([type=file]),textarea,select,button,a[href],summary,[role="button"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="option"],[role="checkbox"],[role="radio"],[role="tab"],[role="combobox"],[contenteditable="true"]').filter(visible);
+        let all=query('input:not([type=hidden]),textarea,select,button,a[href],summary,[role="button"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="option"],[role="checkbox"],[role="radio"],[role="tab"],[role="combobox"],[contenteditable="true"]').filter(visible);
         const overlays=query('[role="dialog"],[role="alertdialog"],[role="menu"]').filter(visible), overlay=overlays.at(-1);
         const composer=chatComposer();
         const inViewport=el=>{const r=el.getBoundingClientRect();return r.bottom>0 && r.right>0 && r.top<innerHeight && r.left<innerWidth;};
@@ -276,10 +279,25 @@ async function repFast(spec) {
         const transcript=chatSupported() && composer ? messages() : [];
         const mains=query('main,[role="main"]').filter(visible);
         const isDocument=location.hostname==='docs.google.com' && /^\/document\/(?:u\/\d+\/)?d\/[^/]+\/(?:edit|view|preview)\/?$/.test(location.pathname);
-        const documentContent=isDocument && !overlay ? await repReadContent({wait_ms:spec.read_ms || spec.wait_ms}) : null;
-        const body=(documentContent ? documentContent.text : overlay ? overlay.innerText : chatSupported() && composer ? transcript.slice(-12).map(messageText).join('\n\n') : (mains.length===1 ? mains[0].innerText : document.body?.innerText)) || '';
+        const documentContent=(isDocument || spec.readable) && !overlay ? await repReadContent({wait_ms:spec.read_ms || spec.wait_ms}) : null;
+        let body=(documentContent ? documentContent.text : overlay ? overlay.innerText : chatSupported() && composer ? transcript.slice(-12).map(messageText).join('\n\n') : (mains.length===1 ? mains[0].innerText : document.body?.innerText)) || '';
+        if(spec.readable) for(const live of query('[aria-live],[role=status],[role=alert]').filter(visible)) {const value=text(live);if(value&&!body.includes(value))body+='\n\n'+value;}
+        if (documentContent?.complete && pageState.kind==='loading' && documentContent.text) pageState.kind='content';
+        if (spec.find) {
+          let matched;
+          if (spec.find.startsWith('css:')) { try { matched=query(spec.find.slice(4)).filter(visible); } catch { fail('invalid_find'); } }
+          else if (spec.find.startsWith('role:')) { const [want,...label]=spec.find.slice(5).split(' '); matched=query('*').filter(el=>visible(el) && role(el)===want && (!label.length || name(el).includes(label.join(' ')))); }
+          else { matched=query('*').filter(el=>visible(el) && text(el).includes(spec.find) && ![...el.children].some(child=>text(child).includes(spec.find))); matched=[...new Set(matched.map(el=>el.closest('tr,li,[role="row"],[role="listitem"]') || el))]; }
+          all=[...new Set([...matched, ...all.filter(el=>matched.some(m=>m.contains(el)))])];
+          body=matched.map(el=>text(el)).join('\n');
+        }
+        if (spec.section) {
+          const lines=body.split('\n'); let start=-1, level=0, end=lines.length;
+          for(let i=0;i<lines.length;i++) { const h=lines[i].match(/^(#{1,6}) (.+)$/); if(!h) continue; if(start<0 && h[2]===spec.section) {start=i;level=h[1].length;} else if(start>=0 && h[1].length<=level) {end=i;break;} }
+          if(start<0) fail('section_not_found'); body=lines.slice(start,end).join('\n').trim();
+        }
         const contentMeta=documentContent ? {...documentContent} : null;
-        if(contentMeta) {delete contentMeta.text; delete contentMeta.headings; delete contentMeta.links;}
+        if(contentMeta) {delete contentMeta.text; if(!spec.readable && contentMeta.format!=='text') delete contentMeta.headings; delete contentMeta.links;}
         page={url:location.href,title:document.title,at:Date.now(),status:awaitingChatUI || pageState.kind==='loading'?'loading':'ready',body:new TextEncoder().encode(body),
           content:contentMeta,
           bindings:all.map(el=>({...binding(el),enabled:enabled(el),...(el.matches('input,textarea,select') && el.type!=='password' ? {has_value:!!el.value} : {})})),
@@ -298,7 +316,7 @@ async function repFast(spec) {
       if(selected.some(bound=>!unchanged(bound) || !visible(bound.el))) fail('page_snapshot_stale');
       const controls=[];let controlBytes=2, controlsLimitedByBytes=false;
       for(const bound of selected) {
-        const projected={ref:'e_00000000000000000000000000000000',role:clip(bound.role,80),name:clip(bound.name,200),enabled:bound.enabled,
+        const projected={ref:'e_00000000000000000000000000000000',role:clip(bound.role || (bound.el.tagName==='TR' ? 'row' : 'text'),80),name:clip(bound.name || (spec.find ? text(bound.el) : ''),200),enabled:bound.enabled,
           ...('has_value' in bound ? {has_value:bound.has_value} : {}),
           ...(bound.el.tagName==='A' && /^https?:/.test(bound.el.href) ? {url:clip(bound.el.href,2048)} : {})};
         const bytes=wireBytes(projected), separator=controls.length ? 1 : 0;
@@ -316,7 +334,7 @@ async function repFast(spec) {
       }
       const contentHash=globalThis.crypto?.subtle ? [...new Uint8Array(await crypto.subtle.digest('SHA-256',page.body))].map(x=>x.toString(16).padStart(2,'0')).join('') : String(page.body.length);
       return {status:page.status,generation:String(performance.timeOrigin),content_hash:contentHash,url:page.url,title:page.title,text:new TextDecoder().decode(page.body.slice(textOffset,end)),controls,
-        observed_at:new Date(page.at).toISOString(),next_cursor:nextCursor,content:page.content || undefined,...physics,
+        focus:document.activeElement ? {role:role(document.activeElement),name:name(document.activeElement)} : undefined,observed_at:new Date(page.at).toISOString(),next_cursor:nextCursor,content:page.content || undefined,...physics,
         coverage:{...page.coverage,read:spec.cursor?'snapshot_continuation':'live',control_offset:controlOffset,text_offset:textOffset,
           omitted_controls:Math.max(0,page.bindings.length-controls.length),remaining_controls:remainingControls,
           control_output_budget_bytes:controlOutputBudget,returned_control_bytes:controlBytes,controls_limited_by_bytes:controlsLimitedByBytes,
@@ -329,12 +347,19 @@ async function repFast(spec) {
     if(spec.operation==='focus_guard') {
       const el=resolve(spec.ref);guard(el);
       if(el.getRootNode().activeElement!==el) fail('focus_changed');
-      owner.refs.delete(spec.ref);
       return {status:'verified',url:location.href};
     }
     if(spec.operation==='do') {
       const el=resolve(spec.ref);
-      if(spec.action==='fill') return {status:'verified',evidence:'input_readback',changed:fill(el,spec.text,spec.replace),url:location.href};
+      if(spec.action==='fill') {
+        if(owner.refs.get(spec.ref).value!==null && owner.refs.get(spec.ref).value!==el.value) fail('draft_changed');
+        let changed=false;
+        if(el.matches('select')) { const options=[...el.options].filter(o=>o.value===spec.text || norm(o.label)===spec.text); if(options.length!==1 || options[0].disabled) fail('option_not_unique'); guard(el); attempted=true; changed=el.value!==options[0].value; el.value=options[0].value; el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));if(el.value!==options[0].value) fail('input_readback_mismatch'); }
+        else if(el.matches('input[type=checkbox],input[type=radio]')) { if(!['true','false','checked','unchecked'].includes(spec.text)) fail('invalid_checked_value'); const want=['true','checked'].includes(spec.text); guard(el); if(el.checked!==want) {attempted=true;el.click();changed=true;} if(el.checked!==want) fail('input_readback_mismatch'); }
+        else changed=fill(el,spec.text,el===chatComposer() ? false : spec.replace);
+        owner.refs.set(spec.ref,binding(el));return {status:'verified',evidence:'input_readback',changed,url:location.href};
+      }
+      if(spec.action==='file') { if(!el.matches('input[type=file]')) {const point=guard(el);return {status:'prepared_file_trigger',point,url:location.href};}guard(el);return {status:'verified',url:location.href}; }
       if(spec.action==='click') {const point=guard(el);owner.refs.delete(spec.ref);return {status:'prepared_pointer',point,url:location.href};}
       if(spec.action==='press') {guard(el);el.focus();if(el.getRootNode().activeElement!==el) fail('focus_changed');return {status:'prepared',url:location.href};}
       fail('unsupported_action');

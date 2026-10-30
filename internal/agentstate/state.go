@@ -300,6 +300,15 @@ func (s *Store) Register(browser Browser, chromeID int, owner, session string, c
 				return nil
 			}
 		}
+		count := 0
+		for _, t := range state.Tabs {
+			if t.Owner == owner && sameBrowser(t.Browser, browser) && !t.Closed {
+				count++
+			}
+		}
+		if count >= TabCap {
+			return Failure("tab_cap", "task tab cap reached; close an idle tab", "rep tabs")
+		}
 		state.NextTab++
 		result = &Tab{Handle: fmt.Sprintf("t%d", state.NextTab), Browser: browser, ChromeID: chromeID, Owner: owner, Session: session, Created: s.now(), LastUsed: s.now(), CreatedByRep: created, Refs: map[string]Ref{}}
 		state.Tabs[result.Handle] = result

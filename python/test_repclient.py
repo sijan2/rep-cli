@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -54,6 +55,20 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(evaluation_value({"result": {"result": {"value": [1, 2]}}}), [1, 2])
         with self.assertRaises(RepError):
             evaluation_value({"result": {"exceptionDetails": {"text": "synthetic error"}}})
+
+    def test_new_eval_value_and_private_artifact(self):
+        self.assertEqual(evaluation_value({"untrusted": {"value": 42}}), 42)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "value.json"
+            path.write_text('[1,2]')
+            path.chmod(0o600)
+            response = {"meta": {"artifact": {"path": str(path)}}}
+            self.assertEqual(evaluation_value(response), [1,2])
+            path.chmod(0o644)
+            with self.assertRaises(RepError):
+                evaluation_value(response)
+        with self.assertRaises(RepError):
+            evaluation_value({"error": {"code":"evaluation_exception"}, "untrusted":{"exception":{}}})
 
 
 if __name__ == "__main__":

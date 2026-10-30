@@ -14,7 +14,7 @@ ARTICLE = """<article><h1>Reliable observation</h1><p>A fixture article about me
 <h2>Method</h2><p>Keep source text, code, tables and links intact.</p>
 <pre><code>if (a &lt; b) {\n  return \"two  spaces\";\n}\n</code></pre>
 <table><tr><th>Item</th><th>Value</th></tr><tr><td>Alpha</td><td>42</td></tr></table>
-<h2>Sources</h2><a href='/paper'>Research paper</a><img alt='Fixture diagram' src='/image.svg'></article>"""
+<p>Inline <code>a  +  b</code> preserves spacing.</p><svg><text>SVG evidence</text></svg><h2>Sources</h2><a href='/paper'>Research paper</a><img alt='Fixture diagram' src='/image.svg'></article>"""
 DOCUMENT = "Plain-text fixture document\n\n" + "Document evidence must remain complete. " * 90
 FILE_BYTES = b"%PDF-1.4\n% synthetic authenticated artifact\n" + b"fixture\n" * 128
 
@@ -78,6 +78,10 @@ class Handler(BaseHTTPRequestHandler):
             "/long": "<article><h1>Persistent cursor fixture</h1>" + "".join("<p>Paragraph {0}: " .format(i) + "Evidence remains readable after the renderer expires. " * 10 + "</p>" for i in range(90)) + "</article>",
             "/form": """<main><h1>Search fixture</h1><form onsubmit="event.preventDefault(); document.querySelector('[role=status]').textContent='Saved: '+this.query.value;">
                 <label>Query <input name='query'></label><button>Submit</button></form><p role='status'></p></main>""",
+            "/controls": """<main><h1>Control fixture</h1><label>Choice<select onchange="document.querySelector('[role=status]').textContent='Choice saved '+this.value"><option>A</option><option>B</option></select></label>
+                <label>Enabled<input type='checkbox' onchange="document.querySelector('[role=status]').textContent='Enabled '+this.checked"></label>
+                <button onclick="document.querySelector('#hidden-upload').click()">Choose hidden file</button><input id='hidden-upload' type='file' hidden onchange="document.querySelector('[role=status]').textContent='Hidden upload '+this.files.length"><label>Upload<input type='file' multiple onchange="document.querySelector('[role=status]').textContent='Uploaded '+this.files.length"></label><p role='status'></p></main>""",
+            "/frame": "<main><h1>Frame parent</h1><iframe title='Local form' src='/form' style='width:800px;height:300px'></iframe></main>",
             "/flow": """<main><h1>Five-step flow</h1><p role='status'>Step 1</p><button onclick="let n=Number(this.dataset.n||1); document.querySelector('[role=status]').textContent=n===5?'Flow complete':'Step '+(n+1); this.dataset.n=n+1; this.textContent=n===5?'Done':'Continue '+(n+1); this.disabled=n===5;">Continue 1</button></main>""",
             "/rows": "<main><h1>Products</h1><table>" + "".join("<tr><td>Product {0}</td><td>Price ${1}</td></tr>".format(i, i * 10) for i in range(1, 11)) + "</table></main>",
             "/api": """<main><h1>API fixture</h1><p aria-busy='true'>Loading results</p></main><script>fetch('/api/items?q=alpha').then(r=>r.json()).then(x=>{let p=document.querySelector('p');p.textContent='Result '+x.data[0].id+' price '+x.data[0].price;p.removeAttribute('aria-busy')})</script>""",

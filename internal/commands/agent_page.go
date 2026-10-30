@@ -24,6 +24,10 @@ type corePageOptions struct {
 func newCorePageCommand() *cobra.Command {
 	options := corePageOptions{}
 	command := &cobra.Command{Use: "page [TAB] [URL|/path|p_CURSOR]", Short: "Read or navigate a page; continue with its returned cursor", Args: cobra.MaximumNArgs(2)}
+	command.Flags().StringVar(&options.Section, "section", "", "Read one heading section")
+	command.Flags().StringVar(&options.Find, "find", "", "Find text, css:SELECTOR, or role:ROLE NAME")
+	command.Flags().BoolVar(&options.Reload, "reload", false, "Reload before reading")
+	command.Flags().StringVar(&options.Viewport, "viewport", "", "Sticky desktop, mobile, or WIDTHxHEIGHT")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := corePage(cmd, args, options); err != nil {
 			return coreFailure(cmd, err)
@@ -33,6 +37,11 @@ func newCorePageCommand() *cobra.Command {
 	return command
 }
 func corePage(command *cobra.Command, args []string, options corePageOptions) error {
+	if options.Viewport != "" {
+		if _, _, err := coreViewport(options.Viewport); err != nil {
+			return err
+		}
+	}
 	store, err := coreStore()
 	if err != nil {
 		return err
@@ -142,9 +151,18 @@ func corePage(command *cobra.Command, args []string, options corePageOptions) er
 		}
 	}
 	session := &browserfast.Session{Browser: client, Tab: tab.ChromeID, Owner: selected.Identity()}
-	defer session.Close()
+	defer session.CloseRead()
 	if err := session.Acquire(ctx); err != nil {
 		return err
+	}
+	if err := applyCoreViewport(ctx, store, tab, lease, session, options.Viewport); err != nil {
+		return err
+	}
+	if options.Reload {
+		var ignored any
+		if err := session.Inspect(ctx, "", "Page.reload", map[string]any{}, &ignored); err != nil {
+			return err
+		}
 	}
 	if rawURL != "" {
 		var ignored any
@@ -158,8 +176,10 @@ func corePage(command *cobra.Command, args []string, options corePageOptions) er
 	return coreReadPage(ctx, command, store, tab, lease, session, cursor, options)
 }
 func coreReadPage(ctx context.Context, command *cobra.Command, store *agentstate.Store, tab *agentstate.Tab, lease string, session *browserfast.Session, cursor *agentstate.Cursor, options corePageOptions) error {
-	spec := browserfast.Spec{Operation: "page", MaxText: 10000, Limit: 40, WaitMS: 4000, ReadMS: 4000}
+	spec := browserfast.Spec{Operation: "page", Readable: true, Section: options.Section, Find: options.Find, MaxText: 8000, Limit: 40, WaitMS: 4000, ReadMS: 4000}
 	if cursor != nil {
+		spec.Section, spec.Find = cursor.Section, cursor.Find
+		options.Section, options.Find = cursor.Section, cursor.Find
 		spec.TextOffset = cursor.Offset
 		spec.ControlOffset = cursor.Controls
 		if cursor.Budget > 0 {
@@ -180,13 +200,20 @@ func coreReadPage(ctx context.Context, command *cobra.Command, store *agentstate
 	return projectCorePage(command, store, tab, lease, observed, cursor, options)
 }
 func projectCorePage(command *cobra.Command, store *agentstate.Store, tab *agentstate.Tab, lease string, observed browserfast.Result, cursor *agentstate.Cursor, options corePageOptions) error {
+	result, err := buildCorePage(store, tab, lease, observed, cursor, options)
+	if err != nil {
+		return err
+	}
+	return emitCore(command, result)
+}
+func buildCorePage(store *agentstate.Store, tab *agentstate.Tab, lease string, observed browserfast.Result, cursor *agentstate.Cursor, options corePageOptions) (coreResult, error) {
 	raw := make([]string, len(observed.Controls))
 	for i, control := range observed.Controls {
 		raw[i] = control.Ref
 	}
 	refs, err := store.MintRefs(tab.Handle, lease, observed.Generation, raw)
 	if err != nil {
-		return err
+		return coreResult{}, err
 	}
 	controls := make([]map[string]any, len(raw))
 	hasInput := false
@@ -213,7 +240,7 @@ func projectCorePage(command *cobra.Command, store *agentstate.Store, tab *agent
 	_ = jsonDecode(observed.Coverage, &coverage)
 	result := coreTabResult(tab)
 	result.Status = observed.Status
-	result.PageState = decodeObject(observed.PageState)
+	result.PageState = map[string]any{"kind": fastPageStateKind(&observed)}
 	kind := fastPageStateKind(&observed)
 	complete := observed.Status == "ready" && kind == "content" && coverage.Remaining == 0 && coverage.RemainingControls == 0
 	result.Complete = boolPointer(complete)
@@ -224,16 +251,16 @@ func projectCorePage(command *cobra.Command, store *agentstate.Store, tab *agent
 		if cursor != nil && cursor.Kind == "loading" {
 			result.Next = coreNext("shot", tab.Handle)
 		} else {
-			id, e := store.SaveCursor(agentstate.Cursor{Tab: tab.Handle, Owner: tab.Owner, Kind: "loading", URL: observed.URL, Digest: observed.ContentHash, Budget: 10000})
+			id, e := store.SaveCursor(agentstate.Cursor{Tab: tab.Handle, Owner: tab.Owner, Kind: "loading", URL: observed.URL, Digest: observed.ContentHash, Budget: 8000})
 			if e != nil {
-				return e
+				return coreResult{}, e
 			}
 			result.Next = coreNext("page", id)
 		}
 	} else if coverage.Remaining > 0 || coverage.RemainingControls > 0 {
-		id, e := store.SaveCursor(agentstate.Cursor{Tab: tab.Handle, Owner: tab.Owner, Kind: "page", URL: observed.URL, Digest: observed.ContentHash, Offset: coverage.Offset + len(observed.Text), Controls: coverage.Controls + len(controls), Budget: 10000, Section: options.Section, Find: options.Find})
+		id, e := store.SaveCursor(agentstate.Cursor{Tab: tab.Handle, Owner: tab.Owner, Kind: "page", URL: observed.URL, Digest: observed.ContentHash, Offset: coverage.Offset + len(observed.Text), Controls: coverage.Controls + len(controls), Budget: 8000, Section: options.Section, Find: options.Find})
 		if e != nil {
-			return e
+			return coreResult{}, e
 		}
 		result.Next = coreNext("page", id)
 	} else if kind != "content" {
@@ -245,10 +272,50 @@ func projectCorePage(command *cobra.Command, store *agentstate.Store, tab *agent
 		stored.Dialog = strings.Contains(string(observed.PageState), `"dialogs":1`)
 		return nil
 	}); err != nil {
-		return err
+		return coreResult{}, err
 	}
 	result.Untrusted = map[string]any{"url": observed.URL, "title": observed.Title, "controls": controls, "text": observed.Text}
-	return emitCore(command, result)
+
+	if !complete && result.Next == "" {
+		result.Next = coreNext("shot", tab.Handle)
+	}
+	if len(observed.Content) > 0 {
+		var content map[string]any
+		_ = json.Unmarshal(observed.Content, &content)
+		if content["source"] != "rendered_dom" {
+			if u, ok := content["source_url"]; ok {
+				result.Untrusted.(map[string]any)["source_url"] = u
+				delete(content, "source_url")
+			}
+			result.Meta = map[string]any{"content": content}
+		}
+	}
+	if coverage.Remaining > 0 {
+		headings := []string{}
+		for _, line := range strings.Split(observed.Text, "\n") {
+			if strings.HasPrefix(line, "#") && len(headings) < 20 {
+				headings = append(headings, line)
+			}
+		}
+		var content struct {
+			Headings []struct {
+				Level int    `json:"level"`
+				Text  string `json:"text"`
+			} `json:"headings"`
+		}
+		_ = json.Unmarshal(observed.Content, &content)
+		if len(content.Headings) > 0 {
+			headings = []string{}
+			for i, h := range content.Headings {
+				if i >= 20 {
+					break
+				}
+				headings = append(headings, strings.Repeat("#", h.Level)+" "+h.Text)
+			}
+		}
+		result.Untrusted.(map[string]any)["outline"] = headings
+	}
+	return result, nil
 }
 
 func jsonDecode(raw []byte, out any) error { return json.Unmarshal(raw, out) }

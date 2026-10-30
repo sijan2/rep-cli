@@ -51,7 +51,13 @@ func coreNext(verb string, handles ...string) string {
 func emitCore(command *cobra.Command, result coreResult) error {
 	selected, _ := scope.Current()
 	result.Task, result.TaskSource = selected.Identity(), selected.TaskSource
-	result.Untrusted = output.RedactValue(result.Untrusted)
+	if result.Untrusted != nil {
+		encoded, err := json.Marshal(result.Untrusted)
+		if err != nil {
+			return err
+		}
+		result.Untrusted = output.RedactValue(decodeObject(encoded))
+	}
 	return output.WriteJSON(command.OutOrStdout(), result)
 }
 func coreFailure(command *cobra.Command, err error) error {
@@ -94,7 +100,14 @@ func coreStore() (*agentstate.Store, error) { return agentstate.Default() }
 func invocationHandle(command *cobra.Command, args []string) string {
 	var candidate string
 	switch rootCommandName(command) {
-	case "page", "do", "shot", "reference", "body", "close":
+	case "do":
+		if len(args) > 0 {
+			candidate = args[0]
+		}
+		if strings.HasPrefix(candidate, "@") && len(args) > 1 {
+			candidate = args[len(args)-1]
+		}
+	case "page", "shot", "reference", "body", "close":
 		if len(args) > 0 {
 			candidate = args[0]
 		}
