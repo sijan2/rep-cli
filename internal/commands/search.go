@@ -80,7 +80,9 @@ Examples:
 			tempStore.IgnoredDomains = s.IgnoredDomains
 			tempStore.MutedPaths = s.MutedPaths
 		}
-		requests := tempStore.Filter(searchFilter)
+		candidateFilter := searchFilter
+		candidateFilter.Limit, candidateFilter.Offset = 0, 0
+		requests := tempStore.Filter(candidateFilter)
 
 		if len(requests) == 0 {
 			pterm.Info.Println("No requests match the filter (search skipped)")
@@ -88,9 +90,18 @@ Examples:
 		}
 
 		// Search
-		var results []SearchResult
+		results := []SearchResult{}
+		matched := 0
 		for i := range requests {
-			req := &requests[i]
+			safe := redactedSearchRequest(&requests[i])
+			req := &safe
+			if matchesRequest(req, re, searchIn) == searchInvert {
+				continue
+			}
+			matched++
+			if matched <= searchFilter.Offset {
+				continue
+			}
 			if searchInvert {
 				if !matchesRequest(req, re, searchIn) {
 					results = append(results, SearchResult{

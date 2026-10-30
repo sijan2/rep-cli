@@ -48,3 +48,19 @@ func TestBodyCredentialProjectionAndFidelity(t *testing.T) {
 		}
 	}
 }
+
+func TestStructuredStreamRedactionPreservesRecordBoundaries(t *testing.T) {
+	for _, sample := range []struct{ body, contentType string }{
+		{"{\"credentials\":{\"value\":\"stream-fake\"},\"ok\":1}\n{\"password\":\"prefix\\\"stream-fake\"}\n", "application/x-ndjson"},
+		{"event: message\r\ndata: {\"credentials\":\r\ndata: {\"value\":\"stream-fake\"}}\r\n\r\n", "text/event-stream"},
+	} {
+		got := RedactBody(sample.body, sample.contentType)
+		if strings.Contains(got, "stream-fake") || !strings.Contains(got, "REDACTED") {
+			t.Fatalf("stream leaked: %s", got)
+		}
+	}
+	plain := "data: {\"count\":1}\r\n\r\n"
+	if RedactBody(plain, "text/event-stream") != plain {
+		t.Fatal("non-sensitive SSE lost exact bytes")
+	}
+}

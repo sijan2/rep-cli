@@ -120,6 +120,35 @@ var credentialPair = regexp.MustCompile(`(?i)(["']?[a-z0-9_.-]*(?:password|passw
 // RedactBody runs before pointer selection/truncation, so selecting a token
 // scalar or cutting through its field cannot remove the redaction context.
 func RedactBody(body, contentType string) string {
+	lowerType := strings.ToLower(contentType)
+	if strings.Contains(lowerType, "event-stream") {
+		return redactSSE(body)
+	}
+	if strings.Contains(lowerType, "ndjson") || strings.Contains(lowerType, "jsonl") {
+		lines := strings.SplitAfter(body, "\n")
+		changed := false
+		for i, line := range lines {
+			end := ""
+			value := line
+			if strings.HasSuffix(value, "\n") {
+				value = strings.TrimSuffix(value, "\n")
+				end = "\n"
+			}
+			if strings.HasSuffix(value, "\r") {
+				value = strings.TrimSuffix(value, "\r")
+				end = "\r" + end
+			}
+			safe := RedactBody(value, "application/json")
+			if safe != value {
+				changed = true
+				lines[i] = safe + end
+			}
+		}
+		if changed {
+			return strings.Join(lines, "")
+		}
+		return body
+	}
 	var value any
 	decoder := json.NewDecoder(strings.NewReader(body))
 	decoder.UseNumber()
@@ -185,4 +214,48 @@ func WriteJSON(writer io.Writer, value any) error {
 	}
 	_, err = writer.Write(append(data, '\n'))
 	return err
+}
+
+// SSE data may span several data: lines. Reconstruct the application payload
+// before redacting it, then serialize changed payloads back into valid events.
+// Preserve original bytes when no change is necessary.
+func redactSSE(body string) string {
+	normalized := strings.ReplaceAll(strings.ReplaceAll(body, "\r\n", "\n"), "\r", "\n")
+	lines := strings.Split(normalized, "\n")
+	changed := false
+	flush := func(start, end int) {
+		positions := []int{}
+		values := []string{}
+		for i := start; i < end; i++ {
+			if strings.HasPrefix(lines[i], "data:") {
+				positions = append(positions, i)
+				values = append(values, strings.TrimPrefix(strings.TrimPrefix(lines[i], "data:"), " "))
+			}
+		}
+		if len(positions) == 0 {
+			return
+		}
+		value := strings.Join(values, "\n")
+		safe := RedactBody(value, "application/json")
+		if safe == value {
+			return
+		}
+		changed = true
+		lines[positions[0]] = "data: " + strings.ReplaceAll(safe, "\n", "\ndata: ")
+		for _, i := range positions[1:] {
+			lines[i] = ":"
+		}
+	}
+	start := 0
+	for i, line := range lines {
+		if line == "" {
+			flush(start, i)
+			start = i + 1
+		}
+	}
+	flush(start, len(lines))
+	if !changed {
+		return body
+	}
+	return strings.Join(lines, "\n")
 }
