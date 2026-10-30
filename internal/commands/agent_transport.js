@@ -17,14 +17,11 @@
       const retryAfter = response.headers.get('retry-after') || '';
       result.retry_ms = Math.min(5000, Math.max(250, Number(retryAfter) * 1000 || Date.parse(retryAfter) - Date.now() || 250));
       if (response.body) {
-        const reader = response.body.getReader();
-        try {
-          for (;;) {
-            const chunk = await reader.read();
-            if (chunk.done) break;
-            result.bytes += chunk.value.byteLength;
-          }
-        } finally { reader.releaseLock(); }
+        // Keep Chromium's native body consumer alive through load completion.
+        // Draining/discarding a JS reader can race its loader's completion and
+        // report ERR_ABORTED to CDP even after reader EOF. Native consumption
+        // avoids that race without serializing the body through the RPC.
+        result.bytes = (await response.arrayBuffer()).byteLength;
       }
     } catch (_) {
       result.error = controller.signal.aborted ? 'request_timeout' : 'request_failed';

@@ -40,7 +40,9 @@ func beginCoreCapture(ctx context.Context, command *cobra.Command, client *bridg
 		ID    string `json:"session_id"`
 		Token string `json:"capture_token"`
 	}
-	limits := map[string]any{"max_body_bytes": 8 << 20}
+	// Retention is independent of body's 8 MiB inline/spill boundary. Keep
+	// larger responses intact, within the negotiated host serialization budget.
+	limits := map[string]any{"max_body_bytes": 64 << 20}
 	handoff.applyLimits(limits)
 	if err = session.Capture(ctx, url, &begun, limits); err != nil {
 		return nil, err
@@ -84,10 +86,17 @@ func attachCoreCapture(command *cobra.Command, result *coreResult) {
 	if recording.err != nil {
 		meta["capture_error"] = "capture evidence unavailable; input was not retried"
 		result.Complete = boolPointer(false)
-		result.Next = coreNext("doctor")
+		if result.Error == nil {
+			result.Next = coreNext("doctor")
+		}
 		return
 	}
 	meta["capture"] = recording.result
+	// A failed/uncertain input already has its single verification continuation.
+	if result.Error != nil {
+		result.Next = ""
+		return
+	}
 	if previous, ok := command.Context().Value(coreCapturePrevious{}).(string); ok && previous != "" {
 		recording.result["extends"] = previous
 		recording.result["observation_gap"] = true
