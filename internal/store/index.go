@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -45,10 +46,12 @@ func (idx *RequestIndex) Add(req *Request) {
 		ComputeRequestFields(req)
 	}
 
-	if previous, exists := idx.semanticForID[req.ID]; exists {
-		delete(idx.bySemantic[previous], req.ID)
-		if len(idx.bySemantic[previous]) == 0 {
-			delete(idx.bySemantic, previous)
+	if _, exists := idx.semanticForID[req.ID]; exists {
+		for alias, ids := range idx.bySemantic {
+			delete(ids, req.ID)
+			if len(ids) == 0 {
+				delete(idx.bySemantic, alias)
+			}
 		}
 	}
 	idx.byID[req.ID] = req
@@ -56,6 +59,21 @@ func (idx *RequestIndex) Add(req *Request) {
 		idx.bySemantic[req.SemanticID] = make(map[string]struct{})
 	}
 	idx.bySemantic[req.SemanticID][req.ID] = struct{}{}
+	// Compatibility-only lookup for previously printed four-hex labels.
+	legacy := req.ID
+	if len(legacy) > 6 {
+		legacy = legacy[:6]
+	}
+	legacy = strings.TrimPrefix(legacy, "h_")
+	status := 0
+	if req.Response != nil {
+		status = req.Response.Status
+	}
+	alias := SemanticID(fmt.Sprintf("%s_%s_%d", legacy, req.Method, status))
+	if idx.bySemantic[alias] == nil {
+		idx.bySemantic[alias] = map[string]struct{}{}
+	}
+	idx.bySemantic[alias][req.ID] = struct{}{}
 	idx.semanticForID[req.ID] = req.SemanticID
 	idx.requestSlice = append(idx.requestSlice, req)
 }

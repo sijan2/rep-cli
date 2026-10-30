@@ -2,6 +2,9 @@ package commands
 
 import (
 	"fmt"
+	"github.com/repplus/rep-cli/internal/agentstate"
+	"github.com/repplus/rep-cli/internal/output"
+	"os"
 	"regexp"
 	"strings"
 
@@ -65,11 +68,12 @@ Examples:
 		}
 
 		// Extract matches
-		var results []ExtractResult
+		results := []ExtractResult{}
 		seen := make(map[string]bool)
 
 		for i := range requests {
-			req := &requests[i]
+			safe := redactedSearchRequest(&requests[i])
+			req := &safe
 			matches := extractFromRequest(req, re, extractFrom, extractContext)
 
 			for _, m := range matches {
@@ -114,25 +118,30 @@ type ExtractResult struct {
 }
 
 func loadRequestsForExtract() ([]store.Request, error) {
-	// Try live.json first
+	// Read exactly one source. Empty or unreadable live evidence must not be
+	// replaced by unrelated archived traffic, and archives are never unioned.
 	livePath, err := store.GetLiveFilePath()
-	if err == nil {
-		if export, err := loadLiveExport(livePath); err == nil && len(export.Requests) > 0 {
-			return export.Requests, nil
-		}
-	}
-
-	// Fall back to store
-	s, err := store.Get()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load store: %w", err)
+		return nil, err
 	}
-
-	var requests []store.Request
-	for _, session := range s.Sessions {
-		requests = append(requests, session.Requests...)
+	export, err := loadLiveExport(livePath)
+	if err == nil {
+		return export.Requests, nil
 	}
-	return requests, nil
+	if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("this task's live capture is unreadable")
+	}
+	persistent, err := store.Get()
+	if err != nil {
+		return nil, err
+	}
+	if len(persistent.Sessions) > 1 {
+		return nil, agentstate.Failure("ambiguous_target", "multiple archives require an explicit capture handle", "rep net")
+	}
+	if len(persistent.Sessions) == 1 {
+		return persistent.Sessions[0].Requests, nil
+	}
+	return []store.Request{}, nil
 }
 
 func extractFromRequest(req *store.Request, re *regexp.Regexp, from string, contextLen int) []ExtractResult {
@@ -280,4 +289,21 @@ func init() {
 	extractCmd.Flags().BoolVarP(&extractUnique, "unique", "u", false, "Show only unique values")
 	extractCmd.Flags().IntVarP(&extractContext, "context", "c", 0, "Show N characters of context around match")
 	extractCmd.Flags().IntVarP(&extractLimit, "limit", "l", 0, "Limit number of results")
+}
+
+// Projection precedes matching and slicing, so regex groups and match context
+// cannot strip a credential's key and accidentally disclose its value.
+func redactedSearchRequest(request *store.Request) store.Request {
+	safe := *request
+	safe.URL = output.RedactURL(request.URL)
+	safe.Headers = output.RedactHeaders(request.Headers)
+	safe.Body = output.RedactBody(request.Body, store.HeaderFirst(request.Headers, "content-type"))
+	if request.Response != nil {
+		response := *request.Response
+		response.Headers = output.RedactHeaders(response.Headers)
+		response.Body = output.RedactBody(response.Body, store.HeaderFirst(response.Headers, "content-type"))
+		safe.Response = &response
+	}
+	store.ComputeRequestFields(&safe)
+	return safe
 }

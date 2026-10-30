@@ -48,3 +48,43 @@ func TestBodyCredentialProjectionAndFidelity(t *testing.T) {
 		}
 	}
 }
+
+func TestStructuredStreamRedactionPreservesRecordBoundaries(t *testing.T) {
+	for _, sample := range []struct{ body, contentType string }{
+		{"{\"credentials\":{\"value\":\"stream-fake\"},\"ok\":1}\n{\"password\":\"prefix\\\"stream-fake\"}\n", "application/x-ndjson"},
+		{"event: message\r\ndata: {\"credentials\":\r\ndata: {\"value\":\"stream-fake\"}}\r\n\r\n", "text/event-stream"},
+	} {
+		got := RedactBody(sample.body, sample.contentType)
+		if strings.Contains(got, "stream-fake") || !strings.Contains(got, "REDACTED") {
+			t.Fatalf("stream leaked: %s", got)
+		}
+	}
+	plain := "data: {\"count\":1}\r\n\r\n"
+	if RedactBody(plain, "text/event-stream") != plain {
+		t.Fatal("non-sensitive SSE lost exact bytes")
+	}
+}
+
+func TestPartialBodiesDoNotLeakEscapedCredentialTails(t *testing.T) {
+	for _, body := range []string{
+		`{"password":"prefix\"partial-secret",`,
+		`{"password":"prefix\"partial-secret`,
+		`request authorization: Bearer partial-secret`,
+	} {
+		if got := RedactBody(body, "text/plain"); strings.Contains(got, "partial-secret") {
+			t.Fatalf("partial credential leaked: %s", got)
+		}
+	}
+}
+
+func TestURLCredentialFragmentsAreFingerprinted(t *testing.T) {
+	for _, raw := range []string{"https://fixture.test/#access_token=fragment-secret", "https://fixture.test/#/route?refresh_token=fragment-secret"} {
+		if got := RedactURL(raw); strings.Contains(got, "fragment-secret") || !strings.Contains(got, "REDACTED") {
+			t.Fatal("fragment credential leaked", got)
+		}
+	}
+	raw := "https://fixture.test/path?q=literal#section"
+	if RedactURL(raw) != raw {
+		t.Fatal("ordinary URL lost fidelity")
+	}
+}

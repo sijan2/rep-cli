@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -11,23 +12,14 @@ import (
 type SemanticID string
 
 // GenerateSemanticID creates a semantic ID from a request
-// Format: shortHash_METHOD_status (e.g., h6f2d0_POST_201)
+// Format: fullHash_METHOD_status. Never truncate the canonical request hash.
 func GenerateSemanticID(r *Request) SemanticID {
 	status := 0
 	if r.Response != nil {
 		status = r.Response.Status
 	}
 
-	// Get short hash from ID (first 6 chars, or full ID if shorter)
-	shortHash := r.ID
-	if len(shortHash) > 6 {
-		shortHash = shortHash[:6]
-	}
-	// Remove any prefix like "h_" for cleaner IDs
-	shortHash = strings.TrimPrefix(shortHash, "h_")
-	if len(shortHash) > 6 {
-		shortHash = shortHash[:6]
-	}
+	shortHash := strings.TrimPrefix(r.ID, "h_")
 
 	return SemanticID(fmt.Sprintf("%s_%s_%d", shortHash, r.Method, status))
 }
@@ -40,11 +32,11 @@ func ParseSemanticID(sid SemanticID) (hash string, method string, status int, ok
 		return "", "", 0, false
 	}
 
-	hash = parts[0]
-	method = parts[1]
+	hash = strings.Join(parts[:len(parts)-2], "_")
+	method = parts[len(parts)-2]
 
 	// Parse status from last part
-	_, err := fmt.Sscanf(parts[2], "%d", &status)
+	status, err := strconv.Atoi(parts[len(parts)-1])
 	if err != nil {
 		return "", "", 0, false
 	}
