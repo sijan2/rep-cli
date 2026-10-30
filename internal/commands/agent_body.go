@@ -85,8 +85,8 @@ func coreBody(command *cobra.Command, args []string, requestSide bool, find, out
 	if find != "" && selector != "" {
 		return coreArgument("--find cannot be combined with a pointer or event selector")
 	}
-	if out != "" && (selector != "" || find != "" || offset != 0 || recordOffset != 0) {
-		return coreArgument("--out exports the full body; omit selection and --find")
+	if out != "" && ((selector != "" && !(store.IsStreamKind(request.RecordKind) && !requestSide && event >= 0)) || find != "" || offset != 0 || recordOffset != 0) {
+		return coreArgument("--out exports a full body or captured stream event; omit pointer, cursor, and --find")
 	}
 	data, contentType, evidence, err := bodyEvidence(request, requestSide)
 	streamEvent := false
@@ -150,13 +150,13 @@ func coreBody(command *cobra.Command, args []string, requestSide bool, find, out
 		options.Pointer, options.HasPointer = selector, true
 	}
 	if len(safe) == 0 {
-		if selector != "" {
+		if selector != "" && !streamEvent {
 			return agentstate.Failure("body_selection_failed", "the selected body is empty", coreNext("body", request.ID))
 		}
 		untrusted["data"] = ""
 		return emitCore(command, result)
 	}
-	if (len(data) > 8<<20 || !utf8.Valid(safe)) && selector == "" && find == "" {
+	if (!utf8.Valid(safe) && (selector == "" || streamEvent)) || (len(data) > 8<<20 && selector == "" && find == "") {
 		artifact, e := coreArtifact("", ".body", safe)
 		if e != nil {
 			return e

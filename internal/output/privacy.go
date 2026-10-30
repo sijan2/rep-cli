@@ -76,6 +76,29 @@ func RedactURL(raw string) string {
 			query[name] = values
 		}
 	}
+	// OAuth-style credential fragments are not transmitted as HTTP query
+	// parameters, but can still appear in captured page URLs or initiators.
+	prefix, fragment := "", u.Fragment
+	if before, after, ok := strings.Cut(fragment, "?"); ok {
+		prefix, fragment = before+"?", after
+	}
+	if fields, err := url.ParseQuery(fragment); err == nil {
+		fragmentChanged := false
+		for name, values := range fields {
+			if !SensitiveName(name) {
+				continue
+			}
+			for index, value := range values {
+				values[index] = Fingerprint(value)
+			}
+			fields[name] = values
+			fragmentChanged = true
+		}
+		if fragmentChanged {
+			u.Fragment, u.RawFragment = prefix+fields.Encode(), ""
+			changed = true
+		}
+	}
 	if !changed {
 		return raw
 	}
@@ -115,7 +138,7 @@ func RedactValue(value any) any {
 
 var credentialLine = regexp.MustCompile(`(?im)^((?:authorization|proxy-authorization|cookie|set-cookie)\s*:\s*)([^\r\n]+)`)
 
-var credentialPair = regexp.MustCompile(`(?i)(["']?[a-z0-9_.-]*(?:password|passwd|token|secret|authorization|cookie|api[-_]?key|csrf|xsrf)[a-z0-9_.-]*["']?\s*[:=]\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s&;,<>]+)`)
+var credentialPair = regexp.MustCompile(`(?i)(["']?[a-z0-9_.-]*(?:password|passwd|token|secret|authorization|cookie|api[-_]?key|csrf|xsrf)[a-z0-9_.-]*["']?\s*[:=]\s*)("(?:\\.|[^"\\\r\n])*(?:"|$)|'(?:\\.|[^'\\\r\n])*(?:'|$)|(?:Bearer|Basic)\s+[^\s&;,<>]+|[^\s&;,<>]+)`)
 
 // RedactBody runs before pointer selection/truncation, so selecting a token
 // scalar or cutting through its field cannot remove the redaction context.

@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -389,5 +390,49 @@ func TestLegacySearchPaginatesMatchesAndExtractNeverUnionsArchives(t *testing.T)
 	got, err := loadRequestsForExtract()
 	if err != nil || len(got) != 0 {
 		t.Fatal("empty live capture fell through to saved history")
+	}
+}
+
+func TestCoreNetTruncatedProjectionPointsToBodyAndKeepsCaptureHealth(t *testing.T) {
+	request := netRequest("/projection", `{"text":"`+strings.Repeat("x", 3000)+`"}`)
+	capture, snapshot := netFixture(t, []store.Request{request})
+	result, _ := netResult(t, capture.ID, "~x+", "in:body")
+	if result["complete"] != false || !strings.HasPrefix(result["next"].(string), "rep body ") {
+		t.Fatal("truncated regex projection claimed completion")
+	}
+	snapshot.BrowserSession.TimedOut = true
+	encoded, _ := json.Marshal(snapshot)
+	if err := os.WriteFile(capture.Archive, encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, _ = netResult(t, capture.ID, "GET")
+	if result["complete"] != false || result["meta"].(map[string]any)["source_complete"] != false {
+		t.Fatal("incomplete capture claimed complete query evidence")
+	}
+}
+
+func TestCoreBodyCapturedStreamEventUsesPrivateBinaryArtifact(t *testing.T) {
+	payload := []byte{0, 1, 255, 254, 2}
+	request := store.Request{RecordKind: "websocket", URL: "ws://fixture.test/stream", Stream: &store.StreamCapture{Version: 1, Protocol: "websocket", State: "closed", Events: []store.StreamEvent{{Sequence: 1, Kind: "message", Payload: base64.StdEncoding.EncodeToString(payload), PayloadEncoding: "base64", Bytes: int64(len(payload))}}, Capture: store.StreamCoverage{State: "complete", CapturedEvents: 1, ObservedEvents: 1, CapturedBytes: int64(len(payload)), ObservedBytes: int64(len(payload))}}}
+	_, snapshot := netFixture(t, []store.Request{request})
+	id := snapshot.Requests[0].ID
+	result, _, err := bodyResult(t, id, "#1", false, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := result["meta"].(map[string]any)["artifact_path"].(string)
+	data, _ := os.ReadFile(path)
+	if !bytes.Equal(data, payload) {
+		t.Fatal("binary event was lossy inline text")
+	}
+	destination := filepath.Join(t.TempDir(), "event.bin")
+	_, _, err = bodyResult(t, id, "#1", false, "", destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ = os.ReadFile(destination)
+	info, _ := os.Stat(destination)
+	if !bytes.Equal(data, payload) || info.Mode().Perm() != 0600 {
+		t.Fatal("raw stream export not exact/private")
 	}
 }

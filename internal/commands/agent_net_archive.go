@@ -16,6 +16,9 @@ var coreCaptureHandle = regexp.MustCompile(`^s_[0-9a-f]{32}$`)
 // The registry is the only archive selector. Never consult live.json, latest,
 // display-ID prefixes, or another archive after an addressed handle fails.
 func loadCoreDataCapture(handle string) (agentstate.Capture, store.Export, error) {
+	if handle != "" && !coreCaptureHandle.MatchString(handle) && !coreRequestHandle.MatchString(handle) {
+		return agentstate.Capture{}, store.Export{}, coreArgument("provide an exact s_ capture handle")
+	}
 	capture, snapshot, err := loadCoreCapture(handle)
 	if err != nil {
 		return capture, snapshot, err
@@ -35,6 +38,11 @@ func loadCoreDataCapture(handle string) (agentstate.Capture, store.Export, error
 			return capture, snapshot, agentstate.Failure("archive_invalid", "request IDs do not match their retained capture index", coreNext("scope"))
 		}
 		seen[r.ID] = true
+	}
+	for _, registered := range state.Captures {
+		if registered.ID == capture.ID && registered.Request != "" && !seen[registered.Request] {
+			return capture, snapshot, agentstate.Failure("archive_invalid", "retained capture is missing indexed request evidence", coreNext("scope"))
+		}
 	}
 	return capture, snapshot, nil
 }

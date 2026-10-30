@@ -282,6 +282,7 @@ func coreNet(command *cobra.Command, args []string) error {
 	rows := []map[string]any{}
 	used := 0
 	nextOffset := offset
+	projectionNext := ""
 	budget := 6500
 	if len(terms) == 0 && offset == 0 {
 		budget = 3500
@@ -313,13 +314,23 @@ func coreNet(command *cobra.Command, args []string) error {
 		if used+len(encoded) > budget && len(rows) > 0 {
 			break
 		}
+		if projectionNext == "" && (row["path_truncated"] == true || row["matches_complete"] == false) {
+			projectionNext = coreNext("body", r.ID)
+		}
 		rows = append(rows, row)
 		used += len(encoded)
 		nextOffset = i + 1
 	}
 	meta := map[string]any{"capture": capture.ID, "source_archive": capture.ID, "total": len(matches), "returned": len(rows), "offset": offset}
 	untrusted := map[string]any{"requests": rows}
-	result := coreResult{Browser: capture.Browser.Name, Profile: capture.Browser.Profile, Status: "ready", Complete: boolPointer(nextOffset == len(matches)), Meta: meta, Untrusted: untrusted}
+	sourceComplete := true
+	if health := snapshot.BrowserSession; health != nil {
+		sourceComplete = !health.TimedOut && health.CaptureError == "" && health.DroppedRequests == 0 && len(health.CaptureWarnings) == 0
+		meta["capture_health"] = map[string]any{"timed_out": health.TimedOut, "received": health.ReceivedRequests, "dropped": health.DroppedRequests, "warnings": len(health.CaptureWarnings), "failed": health.CaptureError != ""}
+	}
+	meta["source_complete"] = sourceComplete
+	result := coreResult{Browser: capture.Browser.Name, Profile: capture.Browser.Profile, Status: "ready", Complete: boolPointer(nextOffset == len(matches) && sourceComplete && projectionNext == ""), Meta: meta, Untrusted: untrusted}
+	result.Next = projectionNext
 	if nextOffset < len(matches) {
 		encoded, _ := json.Marshal(terms)
 		cursor, e := index.SaveCursor(agentstate.Cursor{Owner: capture.Owner, Tab: capture.Tab, Kind: "net", Source: capture.ID, Offset: nextOffset, Find: string(encoded), Section: now.Format(time.RFC3339Nano), Digest: sourceDigest, Budget: budget})

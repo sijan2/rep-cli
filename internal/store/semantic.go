@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -31,11 +32,11 @@ func ParseSemanticID(sid SemanticID) (hash string, method string, status int, ok
 		return "", "", 0, false
 	}
 
-	hash = parts[0]
-	method = parts[1]
+	hash = strings.Join(parts[:len(parts)-2], "_")
+	method = parts[len(parts)-2]
 
 	// Parse status from last part
-	_, err := fmt.Sscanf(parts[2], "%d", &status)
+	status, err := strconv.Atoi(parts[len(parts)-1])
 	if err != nil {
 		return "", "", 0, false
 	}

@@ -64,3 +64,27 @@ func TestStructuredStreamRedactionPreservesRecordBoundaries(t *testing.T) {
 		t.Fatal("non-sensitive SSE lost exact bytes")
 	}
 }
+
+func TestPartialBodiesDoNotLeakEscapedCredentialTails(t *testing.T) {
+	for _, body := range []string{
+		`{"password":"prefix\"partial-secret",`,
+		`{"password":"prefix\"partial-secret`,
+		`request authorization: Bearer partial-secret`,
+	} {
+		if got := RedactBody(body, "text/plain"); strings.Contains(got, "partial-secret") {
+			t.Fatalf("partial credential leaked: %s", got)
+		}
+	}
+}
+
+func TestURLCredentialFragmentsAreFingerprinted(t *testing.T) {
+	for _, raw := range []string{"https://fixture.test/#access_token=fragment-secret", "https://fixture.test/#/route?refresh_token=fragment-secret"} {
+		if got := RedactURL(raw); strings.Contains(got, "fragment-secret") || !strings.Contains(got, "REDACTED") {
+			t.Fatal("fragment credential leaked", got)
+		}
+	}
+	raw := "https://fixture.test/path?q=literal#section"
+	if RedactURL(raw) != raw {
+		t.Fatal("ordinary URL lost fidelity")
+	}
+}
