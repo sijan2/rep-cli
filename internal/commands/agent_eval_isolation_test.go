@@ -19,7 +19,7 @@ func TestCoreEvalDerivedSiblingRequiresTargetBeforeBrowserDispatch(t *testing.T)
 	}
 	t.Cleanup(scope.Reset)
 	command := newCoreEvalCommand()
-	err := coreEvaluate(command, []string{"document.body.textContent='changed'"}, time.Second, false)
+	err := coreEvaluate(command, []string{"document.body.textContent='changed'"}, time.Second, false, false)
 	var problem *agentstate.Error
 	if !errors.As(err, &problem) || problem.Code != "ambiguous_target" {
 		t.Fatalf("bare sibling script reached browser resolution: %v", err)

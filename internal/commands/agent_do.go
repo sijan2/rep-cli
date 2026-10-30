@@ -12,25 +12,28 @@ import (
 	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/browserflow"
+	"github.com/repplus/rep-cli/internal/browserrpc"
 	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/spf13/cobra"
 )
 
 func newCoreDoCommand() *cobra.Command {
+	var capture bool
 	var key string
 	var files []string
 	command := &cobra.Command{Use: "do REF [VALUE] | @PLAN [TAB]", Short: "Act and return verified changes and fresh controls", Args: cobra.RangeArgs(1, 33)}
 	command.Flags().StringVar(&key, "press", "", "Key, chord, or space-separated sequence after filling")
 	command.Flags().StringArrayVar(&files, "file", nil, "Upload a local file to the observed file input")
+	command.Flags().BoolVar(&capture, "capture", false, "Record traffic triggered by this action")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := coreDo(cmd, args, key, files); err != nil {
+		if err := coreDo(cmd, args, key, files, capture); err != nil {
 			return coreFailure(cmd, err)
 		}
 		return nil
 	}
 	return command
 }
-func coreDo(command *cobra.Command, args []string, key string, files []string) error {
+func coreDo(command *cobra.Command, args []string, key string, files []string, capture bool) error {
 	keys := []string{}
 	if key != "" {
 		keys = strings.FieldsFunc(key, func(r rune) bool { return r == ',' || r == ' ' })
@@ -142,6 +145,13 @@ func coreDo(command *cobra.Command, args []string, key string, files []string) e
 	if err = applyCoreViewport(ctx, store, tab, lease, session, ""); err != nil {
 		return err
 	}
+	if capture {
+		recording, e := beginCoreCapture(ctx, command, client, session, tab, tab.URL)
+		if e != nil {
+			return e
+		}
+		defer recording.finish()
+	}
 	before, err := session.Eval(ctx, browserfast.Spec{Operation: "page", Readable: true, MaxText: 8000, Limit: 40, WaitMS: 500, ReadMS: 1500})
 	if err != nil {
 		return err
@@ -150,10 +160,15 @@ func coreDo(command *cobra.Command, args []string, key string, files []string) e
 	verified := false
 	observationError := ""
 	if plan != nil {
-		_ = session.Close()
-		session = &browserfast.Session{Browser: client, Tab: tab.ChromeID, Owner: tab.Owner}
-		defer session.Close()
-		engine := browserflow.Engine{Browser: client, Owner: tab.Owner}
+		var engineBrowser browserrpc.Caller = client
+		if capture {
+			engineBrowser = session.CaptureCaller()
+		} else {
+			_ = session.Close()
+			session = &browserfast.Session{Browser: client, Tab: tab.ChromeID, Owner: tab.Owner}
+			defer session.Close()
+		}
+		engine := browserflow.Engine{Browser: engineBrowser, Owner: tab.Owner}
 		report, runErr := engine.Run(ctx, tab.ChromeID, *plan, true)
 		attempted := false
 		for _, step := range report.Steps {
@@ -167,9 +182,11 @@ func coreDo(command *cobra.Command, args []string, key string, files []string) e
 		}
 		verified = report.Status == "verified" || report.Status == "complete"
 		operation = "plan"
-		if err = session.Acquire(ctx); err != nil {
-			outcome = "performed"
-			return coreDoUnobserved(command, tab, operation, "plan dispatched; observation unavailable")
+		if !capture {
+			if err = session.Acquire(ctx); err != nil {
+				outcome = "performed"
+				return coreDoUnobserved(command, tab, operation, "plan dispatched; observation unavailable")
+			}
 		}
 	} else {
 		if before.Generation != reference.Generation {
