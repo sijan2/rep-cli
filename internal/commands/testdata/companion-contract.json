@@ -1,0 +1,337 @@
+[
+  {
+    "argv": [
+      "browser",
+      "navigate",
+      "https://fixture.invalid/",
+      "--wait",
+      "domcontentloaded",
+      "--timeout",
+      "45s"
+    ],
+    "fields": [
+      "tab_id",
+      "url",
+      "duration_ms"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "eval",
+      "@fixture.js",
+      "--tab",
+      "1",
+      "--timeout",
+      "90s"
+    ],
+    "fields": [
+      "result.result.value",
+      "result.exceptionDetails"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "close",
+      "1"
+    ],
+    "fields": []
+  },
+  {
+    "argv": [
+      "detail",
+      "h_fixture",
+      "--saved",
+      "s_fixture",
+      "--output",
+      "meta"
+    ],
+    "fields": [
+      "id",
+      "method",
+      "url",
+      "headers",
+      "response.status"
+    ]
+  },
+  {
+    "argv": [
+      "body",
+      "h_fixture",
+      "--saved",
+      "s_fixture",
+      "--info",
+      "--require-complete"
+    ],
+    "fields": [
+      "body_capture.state",
+      "body_capture.sha256",
+      "body_bytes"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "headless",
+      "start",
+      "--host",
+      "/fixture/rep-host",
+      "--extension",
+      "/fixture/extension"
+    ],
+    "fields": [
+      "connected"
+    ]
+  },
+  {
+    "argv": [
+      "summary",
+      "--max-bytes",
+      "4096"
+    ],
+    "fields": [
+      "status"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "action",
+      "1",
+      "--tab",
+      "1",
+      "--timeout",
+      "10s"
+    ],
+    "fields": [
+      "saved_hash_id"
+    ]
+  },
+  {
+    "argv": [
+      "list",
+      "--saved",
+      "s_fixture",
+      "--primary=false",
+      "--pattern",
+      "/graphql",
+      "--output",
+      "meta"
+    ],
+    "fields": [
+      "id"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "headless",
+      "stop"
+    ],
+    "fields": []
+  },
+  {
+    "argv": [
+      "browser",
+      "status"
+    ],
+    "fields": [
+      "connected"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "create",
+      "about:blank"
+    ],
+    "fields": [
+      "tab_id"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "attach",
+      "--tab",
+      "1"
+    ],
+    "fields": []
+  },
+  {
+    "argv": [
+      "browser",
+      "detach",
+      "--tab",
+      "1"
+    ],
+    "fields": []
+  },
+  {
+    "argv": [
+      "browser",
+      "cdp",
+      "Page.getFrameTree",
+      "--tab",
+      "1"
+    ],
+    "fields": [
+      "result.frameTree.frame.id"
+    ]
+  },
+  {
+    "argv": [
+      "jev",
+      "config",
+      "--env-file",
+      "/fixture/fake.env"
+    ],
+    "fields": []
+  },
+  {
+    "argv": [
+      "jev",
+      "status"
+    ],
+    "fields": []
+  },
+  {
+    "argv": [
+      "browser",
+      "download",
+      "h_fixture",
+      "/fixture/file.pdf"
+    ],
+    "fields": [
+      "path",
+      "bytes",
+      "sha256"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "navigate",
+      "https://fixture.invalid/",
+      "--tab",
+      "1",
+      "--wait",
+      "domcontentloaded",
+      "--timeout",
+      "45s"
+    ],
+    "fields": [
+      "tab_id"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "eval",
+      "1",
+      "--tab",
+      "1",
+      "--timeout",
+      "3s"
+    ],
+    "fields": [
+      "result.result.value"
+    ]
+  },
+  {
+    "argv": [
+      "body",
+      "h_fixture",
+      "--saved",
+      "s_fixture",
+      "--save",
+      "--require-complete"
+    ],
+    "fields": [
+      "path"
+    ]
+  },
+  {
+    "argv": [
+      "body",
+      "h_fixture",
+      "--saved",
+      "s_fixture",
+      "--request",
+      "--save",
+      "--require-complete"
+    ],
+    "fields": [
+      "path"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "cdp",
+      "Network.loadNetworkResource",
+      "--tab",
+      "1",
+      "--params",
+      "{}"
+    ],
+    "fields": [
+      "result.resource"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "cdp",
+      "IO.read",
+      "--tab",
+      "1",
+      "--params",
+      "{}"
+    ],
+    "fields": [
+      "result.data",
+      "result.base64Encoded",
+      "result.eof"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "cdp",
+      "IO.close",
+      "--tab",
+      "1",
+      "--params",
+      "{}"
+    ],
+    "fields": []
+  },
+  {
+    "argv": [
+      "browser",
+      "eval",
+      "@fixture.js",
+      "--tab",
+      "1",
+      "--timeout",
+      "120s"
+    ],
+    "fields": [
+      "result.result.value"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "navigate",
+      "https://fixture.invalid/",
+      "--wait",
+      "load"
+    ],
+    "fields": [
+      "tab_id"
+    ]
+  }
+]

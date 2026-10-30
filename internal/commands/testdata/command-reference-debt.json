@@ -1,0 +1,14 @@
+[
+  "rep-cli/docs/android-skills.md: android com.target.app --api: unknown flag --api",
+  "rep-cli/docs/android-skills.md: android netflix --api: unknown flag --api",
+  "rep-cli/docs/android-skills.md: android netflix -t api: unknown flag -t",
+  "rep-cli/internal/commands/descriptions/sites.md: site: unknown command site",
+  "rep-cli/internal/commands/note.go: notes --export: unknown command notes",
+  "rep-cli/internal/commands/note.go: notes: unknown command notes",
+  "rep-cli/skills/rep-cli/SKILL.md: clear --live: unknown flag --live",
+  "rep-cli/skills/rep-cli/SKILL.md: clear --no-checkpoint: unknown flag --no-checkpoint",
+  "rep-cli/skills/rep-cli/SKILL.md: sync --since 0: unknown command sync",
+  "rep-cli/skills/rep-cli/SKILL.md: sync --watch: unknown command sync",
+  "rep-cli/skills/rep-cli/SKILL.md: sync: unknown command sync",
+  "rep-workspace/tools/sitelearn/README.md: site: unknown command site"
+]

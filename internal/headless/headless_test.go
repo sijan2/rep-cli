@@ -10,6 +10,7 @@ import (
 )
 
 func TestTaskTransportPathsArePrivateDistinctAndShort(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "")
 	_, profileA, bridgeA := paths("/very/long/" + strings.Repeat("workspace", 30) + "/tasks/a")
 	_, profileB, bridgeB := paths("/very/long/" + strings.Repeat("workspace", 30) + "/tasks/b")
 	if profileA == profileB || bridgeA == bridgeB || len(filepath.Join(bridgeA, "bridge-123456789.sock")) >= 100 {
@@ -29,6 +30,15 @@ func TestTaskTransportPathsArePrivateDistinctAndShort(t *testing.T) {
 	}
 	if privateDir(link) == nil {
 		t.Fatal("accepted a shared directory symlink")
+	}
+}
+
+func TestRuntimeDirectoryKeepsPrivateBridgeUnderCallerRoot(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "/private/rep-fixture/ipc")
+	_, _, first := paths("/fixture/tasks/first")
+	_, _, second := paths("/fixture/tasks/second")
+	if filepath.Dir(first) != "/private/rep-fixture/ipc" || first == second {
+		t.Fatalf("runtime paths escaped isolation or collided: %q %q", first, second)
 	}
 }
 

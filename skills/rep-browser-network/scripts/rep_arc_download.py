@@ -15,6 +15,9 @@ import time
 from urllib.parse import urlparse
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python"))
+from repclient import Client, RepError
+
 DEFAULT_REP = "~/.local/bin/rep"
 
 BINARY_OUTPUT_SUFFIXES = frozenset({
@@ -44,32 +47,10 @@ def run_rep(rep, args, deadline):
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise DownloadError("download timed out")
-    env = os.environ.copy()
-    env["NO_COLOR"] = "1"
     try:
-        completed = subprocess.run(
-            [rep, *args, "-j", "--raw-json"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=max(1.0, remaining),
-            env=env,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise DownloadError("rep command timed out") from error
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "unknown rep failure"
-        raise DownloadError(detail)
-    try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError as error:
-        raise DownloadError("rep returned non-JSON output") from error
-    if isinstance(payload, dict) and payload.get("error"):
-        problem = payload["error"]
-        if isinstance(problem, dict):
-            raise DownloadError(str(problem.get("message") or problem.get("code") or "rep command failed"))
-        raise DownloadError(str(problem))
-    return payload
+        return Client(binary=rep, inherit_scope=True).call(*args, timeout=max(1.0, remaining))
+    except RepError as error:
+        raise DownloadError(str(error)) from error
 
 
 def best_effort(rep, args):

@@ -79,7 +79,12 @@ func paths(dataDir string) (root, profile, bridgeDir string) {
 	sum := sha256.Sum256([]byte(filepath.Clean(dataDir)))
 	// macOS Unix sockets have a short path limit. Keep transport paths short
 	// even when the workspace/task data directory has a long name.
-	bridgeDir = filepath.Join("/tmp", fmt.Sprintf("rep-headless-%d-%x", os.Getuid(), sum[:10]))
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" || !filepath.IsAbs(runtimeDir) {
+		bridgeDir = filepath.Join("/tmp", fmt.Sprintf("rep-headless-%d-%x", os.Getuid(), sum[:10]))
+	} else {
+		bridgeDir = filepath.Join(runtimeDir, fmt.Sprintf("r-%x", sum[:10]))
+	}
 	return
 }
 
