@@ -43,7 +43,7 @@ type coreResult struct {
 
 func coreNext(verb string, handles ...string) string {
 	args := append([]string{"rep", verb}, handles...)
-	if selected, ok := scope.Configured(); ok && (selected.TaskSource == "flag" || selected.TaskSource == "handle" && !coreHasHandle(handles)) && !selected.ExplicitGlobal {
+	if selected, ok := scope.Configured(); ok && verb != "" && !strings.HasPrefix(verb, "-") && (selected.TaskSource == "flag" || selected.TaskSource == "handle" && !coreHasHandle(handles)) && !selected.ExplicitGlobal {
 		args = append(args, "--task", selected.Identity())
 	}
 	return quoteCommand(args...)
@@ -106,7 +106,8 @@ func coreFailure(command *cobra.Command, err error) error {
 	if problem.Retry == "" {
 		problem.Retry = "needs-agent"
 	}
-	if selected, ok := scope.Configured(); ok && (selected.TaskSource == "flag" || selected.TaskSource == "handle" && !coreHasHandle(strings.Fields(problem.Next))) && !strings.Contains(problem.Next, "--task") {
+	nextArgs := strings.Fields(problem.Next)
+	if selected, ok := scope.Configured(); ok && len(nextArgs) > 1 && !strings.HasPrefix(nextArgs[1], "-") && (selected.TaskSource == "flag" || selected.TaskSource == "handle" && !coreHasHandle(nextArgs)) && !strings.Contains(problem.Next, "--task") {
 		problem.Next += " --task " + quoteCommand(selected.Identity())
 	}
 	result := coreResult{Error: &problem}
