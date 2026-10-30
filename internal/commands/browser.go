@@ -62,8 +62,8 @@ var (
 )
 
 var browserCmd = &cobra.Command{
-	Use:   "browser",
-	Short: "Control a connected Dia/Arc/Chrome session through rep+",
+	Use:   "browser start [NAME] | stop",
+	Short: "Manage browser choice",
 	Long: `Run verified workflows through the connected browser profile.
 
   rep browser page <url>

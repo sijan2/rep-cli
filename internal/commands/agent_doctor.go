@@ -7,7 +7,7 @@ import (
 
 // The health migration adds repairs to this read-only identity diagnostic.
 func newCoreDoctorCommand() *cobra.Command {
-	command := &cobra.Command{Use: "doctor", Short: "Check the selected browser bridge and build identity", Args: cobra.NoArgs}
+	command := &cobra.Command{Use: "doctor", Short: "Repair the selected browser", Args: cobra.NoArgs}
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		store, err := coreStore()
 		if err != nil {
