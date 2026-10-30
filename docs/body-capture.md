@@ -1,6 +1,6 @@
 # Captured network evidence
 
-Record the request that supplies the desired data with `rep page URL --capture`, `rep do REF --capture`, or `rep eval @script.js t3 --capture`. Capture is optional because browsers serialize capture work. A page capture stays open through readiness continuation; an addressed page with capture reloads to observe a fresh load.
+Record the request that supplies the desired data with `rep page URL --capture`, `rep do REF --capture`, or `rep eval @script.js t3 --capture`. Capture is optional because browsers serialize capture work. An addressed page with capture reloads to observe a fresh load. Each readiness continuation can record another bounded window; the capture identifies its predecessor with extends and marks observation_gap and incomplete network evidence across the idle gap. It does not claim to have recorded while the CLI was absent.
 
 `rep net` returns a bounded overview. Query terms are positional and ANDed:
 

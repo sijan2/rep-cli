@@ -49,16 +49,27 @@ def parse_help(help_text):
             match = re.match(r"^  (?:-[A-Za-z?], )?\s*--([a-z][a-z0-9-]*)\b", line)
             if match:
                 (local if mode == "local" else inherited).append(match.group(1))
+    # The compact core contract declares its sole inherited flag in the grammar,
+    # without a repeated Global Flags block in every verb's help.
+    if "rep VERB [POSITIONAL...] [--flag ...] [--task NAME]" in help_text:
+        if "task" not in local:
+            local.append("task")
     return commands, local, inherited
 
 
 def inventory(binary):
     rows = []
+    compact_contract = False
 
     def walk(path):
+        nonlocal compact_contract
         result = subprocess.run([binary, *path, "--help"], text=True,
                                 capture_output=True, timeout=20, check=True)
         children, local, inherited = parse_help(result.stdout)
+        if not path:
+            compact_contract = "rep VERB [POSITIONAL...]" in result.stdout
+        elif compact_contract and "task" not in inherited:
+            inherited.append("task")
         children = [child for child in children if child not in ("help", "completion")]
         rows.append({"path": " ".join(path), "children": children,
                      "local_flags": sorted(local), "inherited_flags": sorted(inherited)})
@@ -70,10 +81,11 @@ def inventory(binary):
     frequencies = Counter(flag for row in commands for flag in row["local_flags"])
     return {
         "binary": str(Path(binary).resolve()),
-        "method": "generated help sections after Usage; excludes help/completion commands; includes implicit help flags; visible surface only",
+        "method": "generated help sections and compact task grammar; excludes help/completion commands; visible surface only",
         "metrics": {
             "root_flags": len(root["local_flags"]),
             "commands": len(commands),
+            "top_level_verbs": len(root["children"]),
             "commands_with_local_flags": sum(bool(row["local_flags"]) for row in commands),
             "leaf_commands": sum(not row["children"] for row in commands),
             "local_flag_occurrences": sum(frequencies.values()),
