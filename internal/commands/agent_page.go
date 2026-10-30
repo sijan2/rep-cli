@@ -28,7 +28,6 @@ func newCorePageCommand() *cobra.Command {
 	command.Flags().StringVar(&options.Find, "find", "", "Find text, css:SELECTOR, or role:ROLE NAME")
 	command.Flags().BoolVar(&options.Reload, "reload", false, "Reload before reading")
 	command.Flags().StringVar(&options.Viewport, "viewport", "", "Sticky desktop, mobile, or WIDTHxHEIGHT")
-	command.Flags().BoolVar(&options.Capture, "capture", false, "Record traffic during this read or navigation")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := corePage(cmd, args, options); err != nil {
 			return coreFailure(cmd, err)
@@ -90,13 +89,6 @@ func corePage(command *cobra.Command, args []string, options corePageOptions) er
 	}
 	if cursor != nil && cursor.Kind == "reference-sections" {
 		return coreReferenceContinuation(command, store, *cursor)
-	}
-	if cursor != nil && strings.HasPrefix(cursor.Source, "s_") {
-		options.Capture = true
-		command.SetContext(context.WithValue(command.Context(), coreCapturePrevious{}, cursor.Source))
-	}
-	if options.Capture && rawURL == "" && cursor == nil {
-		options.Reload = true
 	}
 	var addressed *agentstate.Tab
 	if target != "" {
@@ -162,13 +154,6 @@ func corePage(command *cobra.Command, args []string, options corePageOptions) er
 	defer session.CloseRead()
 	if err := session.Acquire(ctx); err != nil {
 		return err
-	}
-	if options.Capture {
-		recording, e := beginCoreCapture(ctx, command, client, session, tab, rawURL)
-		if e != nil {
-			return e
-		}
-		defer recording.finish()
 	}
 	if err := applyCoreViewport(ctx, store, tab, lease, session, options.Viewport); err != nil {
 		return err
