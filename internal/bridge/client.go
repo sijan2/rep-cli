@@ -66,6 +66,10 @@ type RPCResponse struct {
 
 type Client struct {
 	Registry Registry
+	// Reconnect may only locate the same profile and epoch. It must never launch
+	// a host/browser or replay an already dispatched request.
+	Reconnect func(context.Context, Registry) (Registry, error)
+	Health    func(bool)
 }
 
 func DataDir() (string, error) {
@@ -175,9 +179,9 @@ func Select(ctx context.Context, browser string) (*Client, error) {
 	return nil, fmt.Errorf("no responsive rep+ browser bridge: %s", strings.Join(dialErrors, "; "))
 }
 
-func (c *Client) Call(ctx context.Context, method string, params interface{}, out interface{}) error {
+func (c *Client) callOnce(ctx context.Context, method string, params interface{}, out interface{}) error {
 	if c == nil || c.Registry.Socket == "" {
-		return fmt.Errorf("browser bridge has no socket")
+		return &TransportError{Cause: errors.New("browser bridge has no socket")}
 	}
 	deadline, ok := ctx.Deadline()
 	if !ok {
@@ -189,7 +193,7 @@ func (c *Client) Call(ctx context.Context, method string, params interface{}, ou
 	dialer := net.Dialer{}
 	conn, err := dialer.DialContext(ctx, "unix", c.Registry.Socket)
 	if err != nil {
-		return fmt.Errorf("connect %s bridge: %w", c.Registry.Browser, err)
+		return &TransportError{Cause: fmt.Errorf("connect browser bridge: %w", err)}
 	}
 	defer conn.Close()
 	stopCancel := context.AfterFunc(ctx, func() { _ = conn.Close() })
@@ -203,16 +207,19 @@ func (c *Client) Call(ctx context.Context, method string, params interface{}, ou
 		TimeoutMS: max(1, time.Until(deadline).Milliseconds()),
 	}
 	if err := json.NewEncoder(conn).Encode(request); err != nil {
-		return fmt.Errorf("send bridge request: %w", err)
+		return &TransportError{Dispatched: true, Cause: fmt.Errorf("send bridge request: %w", err)}
 	}
 	var response RPCResponse
 	if err := json.NewDecoder(conn).Decode(&response); err != nil {
-		return fmt.Errorf("read bridge response: %w", err)
+		return &TransportError{Dispatched: true, Cause: fmt.Errorf("read bridge response: %w", err)}
 	}
 	if response.ID != request.ID {
-		return fmt.Errorf("bridge response id mismatch: got %q want %q", response.ID, request.ID)
+		return &TransportError{Dispatched: true, Cause: errors.New("bridge response id mismatch")}
 	}
 	if response.Error != nil {
+		if response.Error.Code == "rpc_timeout" || response.Error.Code == "native_write_failed" {
+			return &TransportError{Dispatched: true, Cause: response.Error}
+		}
 		return response.Error
 	}
 	if out == nil || len(response.Result) == 0 || string(response.Result) == "null" {

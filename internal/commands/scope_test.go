@@ -209,7 +209,7 @@ func TestScopeReportsStableNamedProfileWithoutStartingBrowsers(t *testing.T) {
 			t.Fatalf("named profile was not stable across tasks: %+v", profile)
 		}
 		sharedPath = profile.ProfilePath
-		if profile.StartCommand != "rep browser headless start --task project/"+task {
+		if profile.StartCommand != "rep browser start --task project/"+task {
 			t.Fatalf("start guidance selected another task: %q", profile.StartCommand)
 		}
 	}

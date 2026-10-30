@@ -1234,6 +1234,11 @@
       "rep browser shots --quality",
       "rep browser shots --raw-json",
       "rep browser shots --report",
+      "rep browser start --envelope",
+      "rep browser start --json",
+      "rep browser start --no-color",
+      "rep browser start --output",
+      "rep browser start --raw-json",
       "rep browser state --envelope",
       "rep browser state --json",
       "rep browser state --no-color",
@@ -1256,6 +1261,11 @@
       "rep browser step --raw-json",
       "rep browser step --root-node",
       "rep browser step --values-file",
+      "rep browser stop --envelope",
+      "rep browser stop --json",
+      "rep browser stop --no-color",
+      "rep browser stop --output",
+      "rep browser stop --raw-json",
       "rep browser tabs --envelope",
       "rep browser tabs --json",
       "rep browser tabs --no-color",
@@ -1821,8 +1831,6 @@
       "rep workspace init --raw-json"
     ],
     "pending_commands": [
-      "rep browser start",
-      "rep browser stop",
       "rep fetch",
       "rep net"
     ],

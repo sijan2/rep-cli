@@ -6,6 +6,7 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION_FILE="${VERSION_FILE:-$ROOT_DIR/VERSION}"
 BUILD_HOST=false
 BUILD_LAB=false
+source "$ROOT_DIR/scripts/install-extension-path.sh"
 
 usage() {
   cat <<'EOF'
@@ -21,6 +22,8 @@ Options:
 
 Environment:
   INSTALL_DIR          Alternative to --install-dir.
+  REP_EXTENSION_PATH   Unpacked extension (defaults to the adjacent rep/ tree).
+  XDG_CONFIG_HOME      Override the platform config directory for extension discovery.
 EOF
 }
 
@@ -49,6 +52,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+EXTENSION_SOURCE="$(rep_extension_source "$ROOT_DIR")"
 mkdir -p "$INSTALL_DIR"
 
 VERSION_VALUE="${VERSION:-}"
@@ -78,6 +82,7 @@ if [[ -z "${REP_SKIP_TESTS:-}" ]]; then
   fi
 fi
 
+node "$EXTENSION_SOURCE/scripts/build-info.js"
 CGO_ENABLED=0 go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" "$ROOT_DIR/cmd/rep"
 # Verify the new executable now so the agent's first browser command does not
 # also pay macOS's first-execution validation cost.
@@ -94,3 +99,5 @@ if [[ "$BUILD_LAB" == "true" ]]; then
   "$INSTALL_DIR/rep-lab" --version >/dev/null
   echo "Installed: $INSTALL_DIR/rep-lab"
 fi
+
+rep_record_extension_path "$EXTENSION_SOURCE"
