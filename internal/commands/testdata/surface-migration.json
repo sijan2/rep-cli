@@ -4,9 +4,9 @@
   "entries": {
     "advanced_calls": [
       "body.go:init(bodyCmd,\"record-offset\",\"records\")",
-      "browser_cdp.go:newBrowserEvaluationCommandWithCapture(command,\"await\",\"by-value\",\"user-gesture\",\"repl\",\"target\")",
-      "browser_cdp.go:newBrowserEvaluationCommandWithCapture(command,\"idle\",\"settle\",\"max-result\")",
-      "browser_cdp.go:newBrowserEvaluationCommandWithCapture(command,\"keep-attached\")",
+      "browser_evaluation.go:newBrowserEvaluationCommandWithCapture(command,\"await\",\"by-value\",\"user-gesture\",\"repl\",\"target\")",
+      "browser_evaluation.go:newBrowserEvaluationCommandWithCapture(command,\"idle\",\"settle\",\"max-result\")",
+      "browser_evaluation.go:newBrowserEvaluationCommandWithCapture(command,\"keep-attached\")",
       "browser_download.go:init(browserDownloadCmd,\"chunk-size\",\"no-cache\",\"omit-credentials\")",
       "browser_fast.go:bindFastFlags(command,\"limit\",\"max-text\")",
       "browser_headless.go:init(start,\"window-size\",\"host\",\"binary\")",
@@ -28,9 +28,9 @@
       "search.go:init(searchCmd,\"ignore-case\",\"invert\",\"show-matches\",\"context\")"
     ],
     "aliases": [
-      "rep arc status =\u003e inspect",
-      "rep browser status =\u003e ping",
-      "rep jev doctor =\u003e smoke"
+      "rep arc status => inspect",
+      "rep browser status => ping",
+      "rep jev doctor => smoke"
     ],
     "commands": [
       "rep agent-prompt",
