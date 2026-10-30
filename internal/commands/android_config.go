@@ -453,15 +453,6 @@ func addPattern(pkg, pattern, patternType string) error {
 	return nil
 }
 
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
 func removeFromSlice(slice []string, item string) []string {
 	var result []string
 	for _, s := range slice {

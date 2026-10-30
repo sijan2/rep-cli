@@ -44,15 +44,6 @@ func (shared *elementFlags) apply(options *jevdom.Options) {
 	options.ScopeBackendDOMNodeID = shared.RootNode
 }
 
-func addDecisionBrowserFlag(command *cobra.Command) {
-	command.Flags().String("browser", defaultBrowser, "Browser bridge: dia, arc, chrome, any, or task-owned headless")
-}
-
-func decisionBrowserName(command *cobra.Command) string {
-	name, _ := command.Flags().GetString("browser")
-	return name
-}
-
 func newBrowserElementCommand(deps jevDOMDependencies) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "element",
@@ -86,7 +77,7 @@ func markElementCompatibility(command *cobra.Command, replacement string) *cobra
 
 func init() {
 	deps := defaultJevDOMDependencies()
-	browserCmd.AddCommand(newBrowserElementCommand(deps), newInheritedBrowserRuntimeCommand(deps))
+	browserCmd.AddCommand(newBrowserElementCommand(deps))
 	browserCmd.AddCommand(
 		markElementCompatibility(newElementSelectCommand(deps, nil), "rep browser element select"),
 		markElementCompatibility(newElementSelectBatchCommand(deps, nil), "rep browser element select-batch"),
