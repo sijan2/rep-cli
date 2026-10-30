@@ -63,7 +63,10 @@ func inspectScopeBrowserProfiles(ctx context.Context, selected scope.Scope) scop
 		profile.Status = "unknown"
 		return profiles
 	}
-	profile.Running, profile.Connected, profile.Headed = &status.Running, &status.Connected, &status.Headed
+	profile.Running, profile.Headed = &status.Running, &status.Headed
+	if !status.Running {
+		profile.Connected = &status.Connected
+	}
 	switch {
 	case status.Reason == "not_started":
 		profile.Status = "not_started"
