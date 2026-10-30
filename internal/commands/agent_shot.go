@@ -26,7 +26,7 @@ type coreShotOptions struct {
 
 func newCoreShotCommand() *cobra.Command {
 	options := coreShotOptions{}
-	command := &cobra.Command{Use: "shot [TAB|URL] [PATH]", Short: "Save a screenshot; sweep URLs through a bounded tab pool", Args: cobra.MaximumNArgs(2)}
+	command := &cobra.Command{Use: "shot [TAB|URL] [PATH]", Short: "Save screenshots", Args: cobra.MaximumNArgs(2)}
 	command.Flags().StringVar(&options.URLs, "urls", "", "Comma-separated URLs or @file with one URL per line")
 	command.Flags().StringVar(&options.Viewport, "viewport", "", "desktop, mobile, or WIDTHxHEIGHT")
 	command.Flags().BoolVar(&options.Full, "full-page", false, "Capture the scrollable page")

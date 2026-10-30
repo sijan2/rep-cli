@@ -18,7 +18,13 @@ import (
 func newCoreDoCommand() *cobra.Command {
 	var key string
 	var files []string
-	command := &cobra.Command{Use: "do REF [VALUE] | @PLAN [TAB]", Short: "Act and return verified changes and fresh controls", Args: cobra.RangeArgs(1, 33)}
+	command := &cobra.Command{Use: "do REF [VALUE] | @PLAN [TAB]", Short: "Act; return verified changes", Long: `REF clicks; VALUE fills, selects or checks. --press accepts chords/sequences.
+@PLAN or @- reads JSON; stops at the first failed step. Example:
+{"version":1,"url":"https://example.com/","steps":[{"id":"fill","action":"fill","target":{"name":"Search","role":"textbox"},"value":"query"}]}
+Actions: fill, replace, choose, check, click, press, wait. Target: name/role or
+selector. Click/press/wait require after:[{target:{selector},text|value|checked|
+visible|enabled|absent}] or after:[{url}]. Press uses keys:["Enter"].
+Replace requires old and value. See docs/interactions.md for the full schema.`, Args: cobra.RangeArgs(1, 33)}
 	command.Flags().StringVar(&key, "press", "", "Key, chord, or space-separated sequence after filling")
 	command.Flags().StringArrayVar(&files, "file", nil, "Upload a local file to the observed file input")
 	command.RunE = func(cmd *cobra.Command, args []string) error {

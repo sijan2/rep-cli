@@ -23,7 +23,7 @@ def tokens(text):
 
 
 def extract(root):
-    roots = [root / "docs", root / "skills", root / "scripts", root / "internal/commands",
+    roots = [root / "docs", root / "skills", root / ".agents/skills", root / ".claude/skills", root / "scripts", root / "internal/commands",
              root.parent / "rep-workspace/tools"]
     files = [root / "AGENTS.md", root / "README.md", root.parent / "rep-workspace/AGENTS.md",
              root.parent / "rep-workspace/README.md", root.parent / "rep-workspace/Makefile"]
@@ -43,7 +43,7 @@ def extract(root):
         if not argv:
             return
         # Prose and Cobra placeholders do not promise an executable command.
-        if argv[0] in ("CLI", "drives", "supplies", "[command]"):
+        if argv[0] in ("CLI", "drives", "supplies", "[command]", "VERB"):
             return
         argv = [arg.rstrip("`,") for arg in argv]
         # A compact command-path alternative promises every named path.

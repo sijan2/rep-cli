@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -135,15 +136,6 @@ func uniqueStrings(values []string) []string {
 func TestDocumentedCommandsResolve(t *testing.T) {
 	failures := referenceFailures(t)
 	path := filepath.Join("testdata", "command-reference-debt.json")
-	// Explicit one-time Step 0 inventory. Step 7 removes this debt and the
-	// update hook; new failures cannot be accepted by the regular suite.
-	if os.Getenv("REP_FREEZE_CONTRACT_BASELINE") == "1" {
-		data, _ := json.MarshalIndent(failures, "", "  ")
-		if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
-			t.Fatal(err)
-		}
-		return
-	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -151,6 +143,11 @@ func TestDocumentedCommandsResolve(t *testing.T) {
 	var baseline []string
 	if err := json.Unmarshal(data, &baseline); err != nil {
 		t.Fatal(err)
+	}
+	// Exact file+argv debt only during the parallel migration. The original
+	// freeze hook is gone; no environment variable can bless new failures.
+	if len(baseline) > 0 && !time.Now().Before(time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC)) {
+		t.Fatal("command-reference migration debt expired; remove it at step 7/9")
 	}
 	allowed := map[string]bool{}
 	for _, value := range baseline {
@@ -161,7 +158,7 @@ func TestDocumentedCommandsResolve(t *testing.T) {
 			t.Error(value)
 		}
 	}
-	t.Logf("resolved source contracts; %d known stale examples must be removed by Step 7", len(failures))
+	t.Logf("resolved source contracts; %d exact migration exceptions must be removed by Step 7/9", len(failures))
 }
 
 func TestCompanionCommandShapes(t *testing.T) {

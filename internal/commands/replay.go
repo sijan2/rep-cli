@@ -34,8 +34,8 @@ var (
 )
 
 var replayCmd = &cobra.Command{
-	Use:   "replay <request-id>",
-	Short: "Re-execute a captured request (optionally mutated) and diff the response",
+	Use:   "replay h_ID",
+	Short: "Replay observed requests",
 	Long: `Re-run a captured request against its real URL, then diff the response.
 
 Mutation path syntax (--set and --matrix):

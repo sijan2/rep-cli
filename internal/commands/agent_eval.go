@@ -43,7 +43,7 @@ func coreSource(command *cobra.Command, value string) (string, error) {
 }
 func newCoreEvalCommand() *cobra.Command {
 	var timeout time.Duration
-	command := &cobra.Command{Use: "eval JS|@FILE [TAB]", Short: "Evaluate JavaScript with an execution lease; return its value", Args: cobra.RangeArgs(1, 2)}
+	command := &cobra.Command{Use: "eval JS|@FILE|@- [TAB]", Short: "Evaluate JavaScript", Args: cobra.RangeArgs(1, 2)}
 	command.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Execution deadline (1s–5m)")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := coreEvaluate(cmd, args, timeout, false); err != nil {
@@ -54,7 +54,7 @@ func newCoreEvalCommand() *cobra.Command {
 	return command
 }
 func newCoreCDPCommand() *cobra.Command {
-	command := &cobra.Command{Use: "cdp METHOD [JSON|@FILE] [TAB]", Short: "Run a journaled protocol call on an owned tab", Args: cobra.RangeArgs(1, 3)}
+	command := &cobra.Command{Use: "cdp METHOD [JSON|@FILE] [TAB]", Short: "Run a guarded protocol call", Args: cobra.RangeArgs(1, 3)}
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := coreEvaluate(cmd, args, 30*time.Second, true); err != nil {
 			return coreFailure(cmd, err)

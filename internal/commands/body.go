@@ -22,8 +22,8 @@ var (
 )
 
 var bodyCmd = &cobra.Command{
-	Use:   "body <request-id>",
-	Short: "Get response body for a request",
+	Use:   "body h_ID [POINTER|#EVENT|p_CURSOR]",
+	Short: "Read retained body bytes",
 	Long: `Inspect captured response bytes with explicit completeness and bounded JSON.
 
 Flags for large responses:
