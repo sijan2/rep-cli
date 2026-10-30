@@ -42,11 +42,13 @@ func coreSource(command *cobra.Command, value string) (string, error) {
 	return string(data), nil
 }
 func newCoreEvalCommand() *cobra.Command {
+	var capture bool
 	var timeout time.Duration
 	command := &cobra.Command{Use: "eval JS|@FILE|@- [TAB]", Short: "Evaluate JavaScript", Args: cobra.RangeArgs(1, 2)}
 	command.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Execution deadline (1s–5m)")
+	command.Flags().BoolVar(&capture, "capture", false, "Record traffic triggered by the script")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := coreEvaluate(cmd, args, timeout, false); err != nil {
+		if err := coreEvaluate(cmd, args, timeout, false, capture); err != nil {
 			return coreFailure(cmd, err)
 		}
 		return nil
@@ -56,7 +58,7 @@ func newCoreEvalCommand() *cobra.Command {
 func newCoreCDPCommand() *cobra.Command {
 	command := &cobra.Command{Use: "cdp METHOD [JSON|@FILE] [TAB]", Short: "Run a guarded protocol call", Args: cobra.RangeArgs(1, 3)}
 	command.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := coreEvaluate(cmd, args, 30*time.Second, true); err != nil {
+		if err := coreEvaluate(cmd, args, 30*time.Second, true, false); err != nil {
 			return coreFailure(cmd, err)
 		}
 		return nil
@@ -91,7 +93,7 @@ func cdpAllowed(method string) bool {
 	}
 	return false
 }
-func coreEvaluate(command *cobra.Command, args []string, timeout time.Duration, protocol bool) error {
+func coreEvaluate(command *cobra.Command, args []string, timeout time.Duration, protocol, capture bool) error {
 	if timeout < time.Second || timeout > 5*time.Minute {
 		return coreArgument("timeout must be between 1s and 5m")
 	}
@@ -181,6 +183,13 @@ func coreEvaluate(command *cobra.Command, args []string, timeout time.Duration, 
 	}
 	if err = applyCoreViewport(ctx, store, tab, lease, session, ""); err != nil {
 		return err
+	}
+	if capture {
+		recording, e := beginCoreCapture(ctx, command, client, session, tab, tab.URL)
+		if e != nil {
+			return e
+		}
+		defer recording.finish()
 	}
 	var wire json.RawMessage
 	result := coreTabResult(tab)
