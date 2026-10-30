@@ -4,9 +4,9 @@
   "entries": {
     "advanced_calls": [
       "body.go:init(bodyCmd,\"record-offset\",\"records\")",
-      "browser_cdp.go:newBrowserEvaluationCommandWithCapture(command,\"await\",\"by-value\",\"user-gesture\",\"repl\",\"target\")",
-      "browser_cdp.go:newBrowserEvaluationCommandWithCapture(command,\"idle\",\"settle\",\"max-result\")",
-      "browser_cdp.go:newBrowserEvaluationCommandWithCapture(command,\"keep-attached\")",
+      "browser_evaluation.go:newBrowserEvaluationCommandWithCapture(command,\"await\",\"by-value\",\"user-gesture\",\"repl\",\"target\")",
+      "browser_evaluation.go:newBrowserEvaluationCommandWithCapture(command,\"idle\",\"settle\",\"max-result\")",
+      "browser_evaluation.go:newBrowserEvaluationCommandWithCapture(command,\"keep-attached\")",
       "browser_download.go:init(browserDownloadCmd,\"chunk-size\",\"no-cache\",\"omit-credentials\")",
       "browser_fast.go:bindFastFlags(command,\"limit\",\"max-text\")",
       "browser_headless.go:init(start,\"window-size\",\"host\",\"binary\")",
@@ -28,9 +28,9 @@
       "search.go:init(searchCmd,\"ignore-case\",\"invert\",\"show-matches\",\"context\")"
     ],
     "aliases": [
-      "rep arc status =\u003e inspect",
-      "rep browser status =\u003e ping",
-      "rep jev doctor =\u003e smoke"
+      "rep arc status => inspect",
+      "rep browser status => ping",
+      "rep jev doctor => smoke"
     ],
     "commands": [
       "rep agent-prompt",
@@ -1234,6 +1234,11 @@
       "rep browser shots --quality",
       "rep browser shots --raw-json",
       "rep browser shots --report",
+      "rep browser start --envelope",
+      "rep browser start --json",
+      "rep browser start --no-color",
+      "rep browser start --output",
+      "rep browser start --raw-json",
       "rep browser state --envelope",
       "rep browser state --json",
       "rep browser state --no-color",
@@ -1256,6 +1261,11 @@
       "rep browser step --raw-json",
       "rep browser step --root-node",
       "rep browser step --values-file",
+      "rep browser stop --envelope",
+      "rep browser stop --json",
+      "rep browser stop --no-color",
+      "rep browser stop --output",
+      "rep browser stop --raw-json",
       "rep browser tabs --envelope",
       "rep browser tabs --json",
       "rep browser tabs --no-color",
@@ -1821,8 +1831,6 @@
       "rep workspace init --raw-json"
     ],
     "pending_commands": [
-      "rep browser start",
-      "rep browser stop",
       "rep fetch",
       "rep net"
     ],
