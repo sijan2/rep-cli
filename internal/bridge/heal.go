@@ -20,6 +20,21 @@ func PossibleDispatch(err error) bool {
 	return errors.As(err, &failure) && failure.Dispatched
 }
 
+// BeforeDispatch reports a definite rejection. Only transport failures use
+// reconnect; renderer guard rejections are returned for a fresh observation.
+func BeforeDispatch(err error) bool {
+	var transport *TransportError
+	if errors.As(err, &transport) {
+		return !transport.Dispatched
+	}
+	var rpc *RPCError
+	if errors.As(err, &rpc) {
+		data, ok := rpc.Data.(map[string]any)
+		return ok && data["phase"] == "before_dispatch"
+	}
+	return false
+}
+
 func (c *Client) Call(ctx context.Context, method string, params interface{}, out interface{}) error {
 	err := c.callOnce(ctx, method, params, out)
 	var failure *TransportError

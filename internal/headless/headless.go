@@ -675,7 +675,7 @@ func resolveOptions(options Options) (Options, string, error) {
 		return options, "", errors.New("use full Chrome for Testing or Chromium; Arc, branded Chrome, and headless_shell are not supported")
 	}
 	if options.Extension == "" {
-		options.Extension = os.Getenv("REP_EXTENSION_PATH")
+		options.Extension = ConfiguredExtension()
 	}
 	if options.Extension == "" {
 		for _, path := range []string{"extension", "../rep", "."} {

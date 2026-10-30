@@ -103,3 +103,14 @@ func TestInventoryClaimsUserTabsAndRefusesActiveOwner(t *testing.T) {
 		t.Fatal("inventory retained disappeared tab")
 	}
 }
+
+func TestLifecycleCanStopEmptyFormerlySharedTask(t *testing.T) {
+	s := &Store{Root: t.TempDir()}
+	browser := Browser{Name: "headless", Profile: "p", Epoch: "e", PrivateName: "fixture"}
+	_ = s.Remember("fixture/a", "other-session", browser)
+	tab, _ := s.Register(browser, 7, "fixture/a", "other-session", true)
+	_ = s.Change(tab.Handle, "", func(tab *Tab) error { tab.Closed = true; return nil })
+	if _, err := s.BeginLifecycle(browser, "fixture/a", "this-session", time.Minute); err != nil {
+		t.Fatalf("empty shared task kept a phantom holder: %v", err)
+	}
+}

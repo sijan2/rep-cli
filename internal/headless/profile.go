@@ -45,3 +45,24 @@ func Inspect(dataDir string) (Status, error) {
 
 // ExtensionDigest uses the same source digest advertised by extension hello.
 func ExtensionDigest(directory string) (string, error) { return extensionDigest(directory) }
+
+// ConfiguredExtension is recorded by installation; discovery is only a legacy
+// fallback, so doctor and private profiles do not depend on the working directory.
+func ConfiguredExtension() string {
+	if path := strings.TrimSpace(os.Getenv("REP_EXTENSION_PATH")); path != "" {
+		return path
+	}
+	config := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME"))
+	if config == "" {
+		config, _ = os.UserConfigDir()
+	}
+	data, err := os.ReadFile(filepath.Join(config, "rep", "extension-path"))
+	if err != nil || len(data) > 8192 {
+		return ""
+	}
+	path := strings.TrimSpace(string(data))
+	if !filepath.IsAbs(path) {
+		return ""
+	}
+	return path
+}

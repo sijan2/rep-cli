@@ -49,9 +49,13 @@ func (s *Store) BeginLifecycle(browser Browser, owner, session string, duration 
 			return Failure("browser_in_use", "another browser lifecycle operation is active", "rep scope")
 		}
 		holders := []string{}
+		ownTabs := false
 		for _, tab := range state.Tabs {
 			if tab.Closed || lifecycleKey(tab.Browser) != lifecycleKey(browser) {
 				continue
+			}
+			if tab.Owner == owner {
+				ownTabs = true
 			}
 			if (browser.PrivateName != "" && tab.Owner != "" && tab.Owner != owner) || tab.Busy(now) {
 				holders = append(holders, tab.Handle)
@@ -60,7 +64,7 @@ func (s *Store) BeginLifecycle(browser Browser, owner, session string, duration 
 				holders = append(holders, tab.Handle)
 			}
 		}
-		if value := state.Tasks[owner]; browser.PrivateName != "" && value != nil {
+		if value := state.Tasks[owner]; browser.PrivateName != "" && ownTabs && value != nil {
 			for key, at := range value.Sessions {
 				if key != session && now.Sub(at) < 10*time.Minute {
 					return Failure("task_shared", "another session shares this task; close addressed tabs before stopping the profile", "rep tabs")

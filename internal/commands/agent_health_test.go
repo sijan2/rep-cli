@@ -301,3 +301,41 @@ func TestDoctorRealProfileReloadRequiresLiveStaleUnleasedBridge(t *testing.T) {
 		})
 	}
 }
+
+func TestBrowserSelectionIsOfflineAndCannotFlipOwnedTabs(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	selected, _ := scope.ConfigureInvocation(scope.Options{Task: "fixture/a", TaskSet: true}, "")
+	t.Cleanup(scope.Reset)
+	cmd := &cobra.Command{Use: "start"}
+	cmd.SetContext(context.Background())
+	out := new(bytes.Buffer)
+	cmd.SetOut(out)
+	if err := coreBrowserStart(cmd, []string{"chrome"}, false); err != nil {
+		t.Fatal(err)
+	}
+	store, _ := coreStore()
+	chosen, _ := store.Remembered(selected.Identity())
+	if chosen.Name != "chrome" || chosen.Profile != "" || !strings.Contains(out.String(), `"launched":false`) {
+		t.Fatalf("selection launched/probed: %s %+v", out, chosen)
+	}
+	chosen.Profile, chosen.Epoch = "fixture", "epoch"
+	_ = store.Remember(selected.Identity(), selected.SessionKey, *chosen)
+	_, _ = store.Register(*chosen, 7, selected.Identity(), selected.SessionKey, true)
+	if err := coreBrowserStart(cmd, []string{"dia"}, false); err == nil {
+		t.Fatal("flipped a task with owned tabs")
+	}
+	if err := coreBrowserStop(cmd); err == nil {
+		t.Fatal("stopped a real-profile browser")
+	}
+}
+func TestHandleDerivedRepairNextKeepsItsOwner(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	_, _ = scope.ConfigureInvocation(scope.Options{}, "fixture/parent")
+	t.Cleanup(scope.Reset)
+	if got := coreNext("doctor"); got != "rep doctor --task fixture/parent" {
+		t.Fatalf("repair lost owner: %s", got)
+	}
+	if got := coreNext("page", "t1"); got != "rep page t1" {
+		t.Fatalf("handle continuation repeated owner: %s", got)
+	}
+}

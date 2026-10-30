@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/repplus/rep-cli/internal/agentstate"
@@ -58,6 +57,21 @@ func coreDoctorWith(cmd *cobra.Command, options coreDoctorOptions) error {
 	human := ""
 	ctx, cancel := coreTimeout(cmd, 30*time.Second)
 	defer cancel()
+	// Resolve first so an unpinned sole bridge or a profile-ID selector repairs
+	// that browser's manifest rather than the default browser's manifest.
+	if browser.Name != "headless" {
+		probe, cancel := context.WithTimeout(ctx, time.Second)
+		_, identity, probeErr := resolveCoreBrowserOnce(probe, store, nil)
+		cancel()
+		if probeErr == nil {
+			browser = identity
+		} else {
+			var problem *agentstate.Error
+			if errors.As(probeErr, &problem) && problem.Code != "browser_unavailable" {
+				return probeErr
+			}
+		}
+	}
 	var local headless.Status
 	if browser.Name == "headless" {
 		if browser.PrivateName == "" {
@@ -269,14 +283,8 @@ func coreReloadGuard(ctx context.Context, client *bridge.Client) error {
 	}
 	return nil
 }
-func coreExtensionPath() string {
-	if path := os.Getenv("REP_EXTENSION_PATH"); path != "" {
-		return path
-	}
-	config, _ := os.UserConfigDir()
-	data, _ := os.ReadFile(filepath.Join(config, "rep", "extension-path"))
-	return strings.TrimSpace(string(data))
-}
+func coreExtensionPath() string { return headless.ConfiguredExtension() }
+
 func repairCoreManifest(path, host, extensionID string) (bool, error) {
 	info, err := os.Stat(host)
 	if err != nil || info.IsDir() || info.Mode()&0111 == 0 {

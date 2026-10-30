@@ -43,10 +43,21 @@ type coreResult struct {
 
 func coreNext(verb string, handles ...string) string {
 	args := append([]string{"rep", verb}, handles...)
-	if selected, ok := scope.Configured(); ok && selected.TaskSource == "flag" && !selected.ExplicitGlobal {
+	if selected, ok := scope.Configured(); ok && (selected.TaskSource == "flag" || selected.TaskSource == "handle" && !coreHasHandle(handles)) && !selected.ExplicitGlobal {
 		args = append(args, "--task", selected.Identity())
 	}
 	return quoteCommand(args...)
+}
+
+// Repair and inventory commands have no handle positional. Preserve a
+// handle-derived task when their continuation cannot carry that capability.
+func coreHasHandle(args []string) bool {
+	for _, arg := range args {
+		if agentstate.TabOf(arg) != "" || agentstate.CursorPattern.MatchString(arg) || strings.HasPrefix(arg, "h_") || strings.HasPrefix(arg, "s_") {
+			return true
+		}
+	}
+	return false
 }
 func emitCore(command *cobra.Command, result coreResult) error {
 	selected, _ := scope.Current()
@@ -68,10 +79,13 @@ func coreFailure(command *cobra.Command, err error) error {
 	var stateError *agentstate.Error
 	var agentError output.AgentError
 	var rpcError *bridge.RPCError
+	var transportError *bridge.TransportError
 	switch {
 	case bridge.PossibleDispatch(err):
 		problem.Code, problem.Message, problem.Retry = "outcome_unknown", "the browser may have executed the request; verify its state before acting again", "do-not-retry"
 		problem.Next = coreVerificationNext(command)
+	case errors.As(err, &transportError):
+		problem.Code, problem.Message = "browser_unavailable", "the browser bridge is unavailable; nothing was dispatched"
 	case errors.As(err, &stateError):
 		problem = coreError{stateError.Code, stateError.Message, stateError.Next, stateError.Retry, stateError.Candidates}
 	case errors.As(err, &agentError):
@@ -91,7 +105,7 @@ func coreFailure(command *cobra.Command, err error) error {
 	if problem.Retry == "" {
 		problem.Retry = "needs-agent"
 	}
-	if selected, ok := scope.Configured(); ok && selected.TaskSource == "flag" && !strings.Contains(problem.Next, "--task") {
+	if selected, ok := scope.Configured(); ok && (selected.TaskSource == "flag" || selected.TaskSource == "handle" && !coreHasHandle(strings.Fields(problem.Next))) && !strings.Contains(problem.Next, "--task") {
 		problem.Next += " --task " + quoteCommand(selected.Identity())
 	}
 	result := coreResult{Error: &problem}

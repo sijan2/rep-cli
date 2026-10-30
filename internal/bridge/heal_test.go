@@ -127,3 +127,19 @@ func TestHealWaitIsBoundedByCaller(t *testing.T) {
 		t.Fatal("unbounded recovery")
 	}
 }
+
+func TestBeforeDispatchDistinguishesGuardAndLostReply(t *testing.T) {
+	for _, test := range []struct {
+		err    error
+		before bool
+	}{
+		{&TransportError{Cause: errors.New("dial refused")}, true},
+		{&TransportError{Dispatched: true, Cause: errors.New("read failed")}, false},
+		{&RPCError{Code: "page_changed", Data: map[string]any{"phase": "before_dispatch"}}, true},
+		{&RPCError{Code: "chrome_api_error"}, false},
+	} {
+		if got := BeforeDispatch(test.err); got != test.before {
+			t.Fatalf("dispatch evidence: %v = %v", test.err, got)
+		}
+	}
+}

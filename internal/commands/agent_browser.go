@@ -22,7 +22,7 @@ func privateBrowserName() string {
 }
 func corePrivateOptions(headed bool) headless.Options {
 	executable, _ := os.Executable()
-	return headless.Options{Headed: headed, Extension: strings.TrimSpace(os.Getenv("REP_EXTENSION_PATH")), Binary: strings.TrimSpace(os.Getenv("REP_HEADLESS_BINARY")), Host: filepath.Join(filepath.Dir(executable), "rep-host")}
+	return headless.Options{Headed: headed, Extension: headless.ConfiguredExtension(), Binary: strings.TrimSpace(os.Getenv("REP_HEADLESS_BINARY")), Host: filepath.Join(filepath.Dir(executable), "rep-host")}
 }
 func newCoreBrowserStartCommand() *cobra.Command {
 	headed := false
@@ -175,6 +175,17 @@ func coreBrowserStop(cmd *cobra.Command) error {
 	}
 	if browser.PrivateName == "" {
 		browser.PrivateName = privateBrowserName()
+	}
+	if selected.TaskSource != "flag" && strings.HasPrefix(selected.SessionKey, "agent-") {
+		state, e := store.Read()
+		if e != nil {
+			return e
+		}
+		for _, tab := range state.Tabs {
+			if tab.Owner == selected.Identity() && !tab.Closed {
+				return agentstate.Failure("ambiguous_target", "pin the task before stopping a profile with owned tabs", coreNext("tabs"))
+			}
+		}
 	}
 	reservation, err := store.BeginLifecycle(*browser, selected.Identity(), selected.SessionKey, 15*time.Second)
 	if err != nil {

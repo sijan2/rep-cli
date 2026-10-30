@@ -189,7 +189,10 @@ func coreEvaluate(command *cobra.Command, args []string, timeout time.Duration, 
 	result.Untrusted = map[string]any{"url": tab.URL}
 	if err = session.Inspect(ctx, "", method, params, &wire); err != nil {
 		outcome = "outcome_unknown"
-		if bridge.PossibleDispatch(err) {
+		if bridge.PossibleDispatch(err) || bridge.BeforeDispatch(err) {
+			if bridge.BeforeDispatch(err) {
+				outcome = "not_dispatched"
+			}
 			return err
 		}
 		result.Status = "performed"

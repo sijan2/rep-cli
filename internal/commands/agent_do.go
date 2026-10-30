@@ -186,8 +186,11 @@ func coreDo(command *cobra.Command, args []string, key string, files []string) e
 		operation = spec.Action
 		prepared, e := session.Eval(ctx, spec)
 		if e != nil {
-			if bridge.PossibleDispatch(e) {
+			if bridge.PossibleDispatch(e) || bridge.BeforeDispatch(e) {
 				outcome = "outcome_unknown"
+				if bridge.BeforeDispatch(e) {
+					outcome = "not_dispatched"
+				}
 				return e
 			}
 			outcome = "performed"
