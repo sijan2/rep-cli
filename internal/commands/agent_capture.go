@@ -84,10 +84,17 @@ func attachCoreCapture(command *cobra.Command, result *coreResult) {
 	if recording.err != nil {
 		meta["capture_error"] = "capture evidence unavailable; input was not retried"
 		result.Complete = boolPointer(false)
-		result.Next = coreNext("doctor")
+		if result.Error == nil {
+			result.Next = coreNext("doctor")
+		}
 		return
 	}
 	meta["capture"] = recording.result
+	// A failed/uncertain input already has its single verification continuation.
+	if result.Error != nil {
+		result.Next = ""
+		return
+	}
 	if previous, ok := command.Context().Value(coreCapturePrevious{}).(string); ok && previous != "" {
 		recording.result["extends"] = previous
 		recording.result["observation_gap"] = true
