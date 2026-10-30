@@ -23,5 +23,5 @@ func (store *Store) Journal(task, tab, operation, outcome string) error {
 		return err
 	}
 	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-	return json.NewEncoder(f).Encode(map[string]any{"time": time.Now().UTC().Format(time.RFC3339Nano), "task": task, "tab": tab, "operation": operation, "outcome": outcome})
+	return json.NewEncoder(f).Encode(map[string]any{"op_id": Token("op_"), "verb": operation, "time": time.Now().UTC().Format(time.RFC3339Nano), "task": task, "tab": tab, "operation": operation, "outcome": outcome})
 }

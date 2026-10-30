@@ -101,15 +101,17 @@ type Capture struct {
 type Task struct {
 	Browser         *Browser             `json:"browser,omitempty"`
 	Sessions        map[string]time.Time `json:"sessions,omitempty"`
+	BridgeLiveAt    *time.Time           `json:"bridge_live_at,omitempty"`
 	BridgeDownSince *time.Time           `json:"bridge_down_since,omitempty"`
 }
 type State struct {
-	Version  int                `json:"version"`
-	NextTab  uint64             `json:"next_tab"`
-	Tabs     map[string]*Tab    `json:"tabs"`
-	Cursors  map[string]Cursor  `json:"cursors"`
-	Tasks    map[string]*Task   `json:"tasks"`
-	Captures map[string]Capture `json:"captures"`
+	Lifecycle map[string]*Lease  `json:"lifecycle,omitempty"`
+	Version   int                `json:"version"`
+	NextTab   uint64             `json:"next_tab"`
+	Tabs      map[string]*Tab    `json:"tabs"`
+	Cursors   map[string]Cursor  `json:"cursors"`
+	Tasks     map[string]*Task   `json:"tasks"`
+	Captures  map[string]Capture `json:"captures"`
 }
 type Store struct {
 	Root string
@@ -284,10 +286,14 @@ func (s *Store) Remembered(owner string) (*Browser, error) {
 	}
 	return nil, nil
 }
+func tabHandle(n uint64) string     { return fmt.Sprintf("t%d", n) }
 func sameBrowser(a, b Browser) bool { return a.Profile == b.Profile && a.Epoch == b.Epoch }
 func (s *Store) Register(browser Browser, chromeID int, owner, session string, created bool) (*Tab, error) {
 	var result *Tab
 	err := s.Update(func(state *State) error {
+		if lifecycleBusy(state, browser, s.now()) {
+			return Failure("browser_in_use", "browser lifecycle operation is active", "rep scope")
+		}
 		if browser.Profile == "" || browser.Epoch == "" {
 			return Failure("bridge_outdated", "bridge has no profile identity", "rep doctor")
 		}
@@ -324,6 +330,9 @@ func (s *Store) Reserve(browser Browser, owner, session, explicit string, pinned
 	lease := Token("l_")
 	err := s.Update(func(state *State) error {
 		now := s.now()
+		if lifecycleBusy(state, browser, now) {
+			return Failure("browser_in_use", "browser lifecycle operation is active", "rep scope")
+		}
 		selected := task(state, owner)
 		shared := false
 		for key, seen := range selected.Sessions {
@@ -342,7 +351,11 @@ func (s *Store) Reserve(browser Browser, owner, session, explicit string, pinned
 				return Failure("tab_gone", "tab has closed", "rep tabs")
 			}
 			if result.Owner != owner {
-				return Failure("owned_by_other_task", "explicit task does not own this tab", "rep tabs")
+				if !adoptable(state, result, now) {
+					return Failure("owned_by_other_task", "tab has a live owner or protected input", "rep tabs")
+				}
+				result.Owner, result.Session = owner, session
+				result.Refs = map[string]Ref{}
 			}
 			if !sameBrowser(result.Browser, browser) {
 				return Failure("tab_gone", "tab belongs to a previous browser session", "rep tabs")
