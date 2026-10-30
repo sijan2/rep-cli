@@ -61,7 +61,7 @@ func jevSuggestions(code string) []string {
 	case jev.CodeRateLimited, jev.CodeOverloaded, jev.CodeServerError, jev.CodeTimeout, jev.CodeConnection, jev.CodeUnclassified:
 		return []string{"retry after a short wait; the lookup did not act on the page", "rep-lab jev doctor -j"}
 	case jev.CodeContextExceeded, jev.CodeInvalidRequest:
-		return []string{"narrow the lookup with --frame and --root-node, or lower --limit", "rep browser observe --tab ID --kind KIND  # inspect candidates without a model call"}
+		return []string{"narrow the lookup with --frame and --root-node, or lower --limit", "rep-lab element observe --tab ID --kind KIND  # inspect candidates without a model call"}
 	case jev.CodeInvalidResponse:
 		return []string{"retry; if it repeats, pin JEV_MODEL (for example jev-1.13.0) and keep this message", "rep-lab jev doctor -j"}
 	case output.ErrCodeBrowserUnavailable:

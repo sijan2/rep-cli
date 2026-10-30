@@ -120,7 +120,7 @@ func runBrowserNavigate(cmd *cobra.Command, url string, flags pageNavigateFlags)
 			suggest := []string{"retry with --wait domcontentloaded or --wait commit", "raise --timeout"}
 			if tab != "" {
 				message += "; tab " + tab + " remains open and usable"
-				suggest = append(suggest, "rep browser observe --tab "+tab, "rep browser screenshot --tab "+tab)
+				suggest = append(suggest, "rep-lab element observe --tab "+tab, "rep browser screenshot --tab "+tab)
 			}
 			return output.EmitAgentError(os.Stdout, output.NewAgentError("navigation_timeout", "browser navigate", message, suggest...), getOutputMode() == "json")
 		}
@@ -395,7 +395,7 @@ only its path, size, dimensions, and SHA-256, never the image data.`,
 	screenshotCmd.Flags().StringVar(&shot.Out, "out", "", "Output file (default: private task artifact)")
 	screenshotCmd.Flags().StringVar(&shot.Format, "format", "png", "png, jpeg, or webp")
 	screenshotCmd.Flags().IntVar(&shot.Quality, "quality", 0, "jpeg/webp quality 1-100 (default 80)")
-	advancedFlags(screenshotCmd, "quality")
+
 	screenshotCmd.Flags().BoolVar(&shot.FullPage, "full-page", false, "Capture the full scrollable page")
 	screenshotCmd.Flags().StringVar(&shot.Selector, "selector", "", "Capture only the first element matching this CSS selector")
 	browserCmd.AddCommand(navigateCmd, screenshotCmd)

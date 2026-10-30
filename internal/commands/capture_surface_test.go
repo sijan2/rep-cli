@@ -47,8 +47,8 @@ func captureSurfaceFixture(t *testing.T, args []string) (captureSurfaceResult, s
 	oldBrowser := browserSelector
 	t.Cleanup(func() { browserSelector = oldBrowser })
 	browser.PersistentFlags().StringVar(&browserSelector, "browser", defaultBrowser, "Browser")
-	browser.AddCommand(newBrowserCaptureCommand(open, fetch, action), newLegacyBrowserOpenCommand(false, open), newLegacyBrowserFetchCommand(fetch), newLegacyBrowserActionCommand(action))
-	root.AddCommand(browser, newLegacyBrowserOpenCommand(true, open))
+	browser.AddCommand(newBrowserCaptureCommand(open, fetch, action))
+	root.AddCommand(browser)
 	var out, errs bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&errs)
@@ -57,48 +57,6 @@ func captureSurfaceFixture(t *testing.T, args []string) (captureSurfaceResult, s
 		t.Fatal(err)
 	}
 	return result, out.String(), errs.String()
-}
-
-func TestCaptureCanonicalAndCompatibilityCommandsHaveIdenticalOptions(t *testing.T) {
-	common := []string{"--timeout", "7s", "--max-body", "4096", "--protocol-payloads", "--webrtc-media"}
-	cases := []struct {
-		name    string
-		args    []string
-		aliases [][]string
-	}{
-		{"open", []string{"https://example.test/", "--tab", "9", "--referrer", "https://example.test/home", "--active", "--keep-tab", "--idle", "20ms", "--save", "--note", "fixture"}, [][]string{{"browser", "open"}, {"browse"}}},
-		{"fetch", []string{"https://example.test/api", "--tab", "9", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", "--credentials", "same-origin", "--cache", "reload", "--headers-only", "--keep-tab", "--save", "--note", "fixture"}, [][]string{{"browser", "fetch"}}},
-		{"action", []string{"42", "--tab", "9", "--await=false", "--by-value=false", "--idle", "20ms", "--settle", "50ms", "--max-result", "2048"}, [][]string{{"browser", "action"}}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			canonical := append([]string{"browser", "capture", tc.name}, tc.args...)
-			canonical = append(canonical, common...)
-			want, out, errs := captureSurfaceFixture(t, canonical)
-			if out != "{\"ok\":true}\n" || errs != "" {
-				t.Fatalf("canonical streams: stdout=%q stderr=%q", out, errs)
-			}
-			// A parent flag must work on either side of the operation token.
-			before := append([]string{"browser", "capture"}, common...)
-			before = append(before, tc.name)
-			before = append(before, tc.args...)
-			got, _, errs := captureSurfaceFixture(t, before)
-			if !reflect.DeepEqual(got, want) || errs != "" {
-				t.Fatalf("parent placement changed operation: %#v != %#v; stderr=%q", got, want, errs)
-			}
-			for _, prefix := range tc.aliases {
-				args := append(append([]string{}, prefix...), tc.args...)
-				args = append(args, common...)
-				got, out, errs := captureSurfaceFixture(t, args)
-				if !reflect.DeepEqual(got, want) {
-					t.Fatalf("%v changed operation: %#v != %#v", prefix, got, want)
-				}
-				if out != "{\"ok\":true}\n" || !strings.Contains(errs, "deprecated:") || !strings.Contains(errs, "rep browser capture "+tc.name) {
-					t.Fatalf("compatibility warning corrupted streams: stdout=%q stderr=%q", out, errs)
-				}
-			}
-		})
-	}
 }
 
 func TestCaptureParentDefaultsAndHelpDoNotExecute(t *testing.T) {
@@ -127,7 +85,7 @@ func TestCaptureParentDefaultsAndHelpDoNotExecute(t *testing.T) {
 			}
 		}
 	}
-	for _, args := range [][]string{{"browser", "capture"}, {"browser", "capture", "action", "--help"}, {"browser", "open", "--help"}, {"browse", "--help"}} {
+	for _, args := range [][]string{{"browser", "capture"}, {"browser", "capture", "action", "--help"}} {
 		got, out, errs := captureSurfaceFixture(t, args)
 		if !reflect.DeepEqual(got, captureSurfaceResult{}) || !strings.Contains(out, "Usage:") || errs != "" {
 			t.Fatalf("help executed capture or emitted deprecation: args=%v result=%#v stdout=%q stderr=%q", args, got, out, errs)
@@ -147,12 +105,6 @@ func TestCaptureTreeKeepsScopeAndRestrictsCaptureFlags(t *testing.T) {
 			}
 		}
 	}
-	for _, path := range [][]string{{"browser", "open"}, {"browser", "fetch"}, {"browser", "action"}, {"browse"}} {
-		command, _, err := rootCmd.Find(path)
-		if err != nil || !command.Hidden || !commandRequiresScope(command) {
-			t.Fatalf("legacy path missing or scope changed: %v: %v", path, err)
-		}
-	}
 	for _, operation := range []string{"eval", "tabs", "create"} {
 		command, _, err := rootCmd.Find([]string{"browser", operation})
 		if err != nil {
@@ -168,9 +120,9 @@ func TestCaptureTreeKeepsScopeAndRestrictsCaptureFlags(t *testing.T) {
 
 func TestCaptureSpellingsRetainRunEvidenceAndVerifiedArchive(t *testing.T) {
 	for _, path := range [][]string{
-		{"browser", "capture", "open"}, {"browser", "open"}, {"browse"},
-		{"browser", "capture", "fetch"}, {"browser", "fetch"},
-		{"browser", "capture", "action"}, {"browser", "action"},
+		{"browser", "capture", "open"},
+		{"browser", "capture", "fetch"},
+		{"browser", "capture", "action"},
 	} {
 		t.Run(strings.Join(path, "-"), func(t *testing.T) {
 			store, run := operationEvidenceFixture(t)
@@ -206,8 +158,8 @@ func TestCaptureSpellingsRetainRunEvidenceAndVerifiedArchive(t *testing.T) {
 			oldBrowser := browserSelector
 			t.Cleanup(func() { browserSelector = oldBrowser })
 			browser.PersistentFlags().StringVar(&browserSelector, "browser", defaultBrowser, "Browser")
-			browser.AddCommand(newBrowserCaptureCommand(runBrowserOpen, runBrowserFetch, callBrowserRPC), newLegacyBrowserOpenCommand(false, runBrowserOpen), newLegacyBrowserFetchCommand(runBrowserFetch), newLegacyBrowserActionCommand(callBrowserRPC))
-			root.AddCommand(browser, newLegacyBrowserOpenCommand(true, runBrowserOpen))
+			browser.AddCommand(newBrowserCaptureCommand(runBrowserOpen, runBrowserFetch, callBrowserRPC))
+			root.AddCommand(browser)
 			args := append([]string{"--run", run.ID}, path...)
 			operand := "https://surface-request.test/"
 			if operation == "action" {

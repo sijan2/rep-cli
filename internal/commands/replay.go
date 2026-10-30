@@ -51,7 +51,7 @@ Use exactly one of --set or --matrix; they cannot be combined.
 
 Replay uses Go's HTTP client, not a browser session. Body comparisons use all
 retained bytes exactly; incomplete or unknown evidence is inconclusive.
-Use rep describe replay for the comparison and transport fidelity contract.`,
+Use rep replay --help for the comparison and transport fidelity contract.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runReplay,
 }
@@ -63,7 +63,7 @@ func init() {
 	replayCmd.Flags().DurationVar(&replayTimeout, "timeout", 10*time.Second, "Per-replay timeout")
 	replayCmd.Flags().IntVar(&replayConcurrency, "concurrency", 4, "Max parallel replays (matrix mode)")
 	replayCmd.Flags().BoolVar(&replayIncludeBody, "include-body", false, "Include retained response bytes in output (up to 16 MiB per response)")
-	advancedFlags(replayCmd, "include-body")
+
 	replayCmd.Flags().StringSliceVar(&replayAs, "as", nil, "Replay as named principals, e.g. --as alice,bob,anon (see rep identity)")
 	replayCmd.Flags().IntVar(&replayBaseline, "baseline", 0, "Replay the unmutated request N times first to learn which fields vary on their own")
 }

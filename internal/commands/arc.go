@@ -45,10 +45,9 @@ chrome.debugger for signed-in tab capture and renderer control.`,
 }
 
 var arcStatusCmd = &cobra.Command{
-	Use:     "status",
-	Aliases: []string{"inspect"},
-	Short:   "Inspect Arc build, process flags, and browser-level CDP",
-	Args:    cobra.NoArgs,
+	Use:   "status",
+	Short: "Inspect Arc build, process flags, and browser-level CDP",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithTimeout(cmd.Context(), arcTimeout)
 		defer cancel()

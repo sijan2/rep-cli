@@ -34,14 +34,9 @@ func (flags *requestViewFlags) bind(command *cobra.Command, api bool) {
 	command.Flags().BoolVar(&flags.legacy.detail, "detail", false, "Legacy detailed text layout")
 	command.Flags().BoolVar(&flags.legacy.errors, "errors", false, "Legacy error-response preset")
 	command.Flags().BoolVar(&flags.legacy.mutations, "mutations", false, "Legacy state-changing-method preset")
-	names := []string{"line", "detail", "errors", "mutations"}
 	if api {
 		command.Flags().BoolVar(&flags.legacy.api, "api", false, "Legacy API request preset")
 		command.Flags().BoolVar(&flags.legacy.interesting, "interesting", false, "Legacy error and mutation intersection")
-		names = append(names, "api", "interesting")
-	}
-	for _, name := range names {
-		_ = command.Flags().MarkHidden(name)
 	}
 }
 

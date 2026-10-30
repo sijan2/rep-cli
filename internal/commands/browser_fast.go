@@ -69,7 +69,7 @@ func bindFastFlags(command *cobra.Command, flags *fastFlags) {
 	command.Flags().DurationVar(&flags.timeout, "timeout", 2*time.Second, "Navigation, action and observation budget; pending replies remain pending")
 	command.Flags().IntVar(&flags.maxText, "max-text", 4096, "Maximum returned text bytes (256 to 16384)")
 	command.Flags().IntVar(&flags.limit, "limit", 40, "Maximum returned controls (1 to 80)")
-	advancedFlags(command, "limit", "max-text")
+
 }
 
 func validateFastFlags(flags fastFlags) error {

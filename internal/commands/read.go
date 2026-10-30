@@ -74,7 +74,7 @@ func init() {
 	readCmd.Flags().IntVar(&readOpts.TabID, "tab", -1, "Reuse an open owned tab instead of navigating")
 	readCmd.Flags().BoolVar(&readOpts.KeepTab, "keep-tab", false, "Keep the tab open after reading")
 	readCmd.Flags().BoolVar(&readOpts.Refresh, "refresh", false, "Bypass the cached extraction")
-	advancedFlags(readCmd, "refresh")
+
 	readCmd.Flags().DurationVar(&readOpts.Timeout, "timeout", 45*time.Second, "Maximum navigation and extraction duration")
 }
 

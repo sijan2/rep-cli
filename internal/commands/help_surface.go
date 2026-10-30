@@ -2,22 +2,6 @@ package commands
 
 import "github.com/spf13/cobra"
 
-// Advanced flags remain parseable for scripts and are documented by `describe`.
-// This is presentation metadata, not a second configuration or behavior layer.
-func advancedFlags(command *cobra.Command, names ...string) {
-	for _, name := range names {
-		flag := command.Flags().Lookup(name)
-		if flag == nil {
-			panic("unknown advanced flag: " + name)
-		}
-		flag.Hidden = true
-		if flag.Annotations == nil {
-			flag.Annotations = map[string][]string{}
-		}
-		flag.Annotations["rep/advanced"] = []string{"true"}
-	}
-}
-
 func configureCommandGroups() {
 	if len(rootCmd.Groups()) > 0 {
 		return
@@ -30,10 +14,10 @@ func configureCommandGroups() {
 		&cobra.Group{ID: "help", Title: "Help and configuration:"},
 	)
 	rootGroups := map[string][]string{
-		"browser": {"browser", "browse"},
+		"browser": {"browser"},
 		"traffic": {"body", "chain", "compare", "context", "coverage", "detail", "diff", "domains", "extract", "findings", "get", "group", "js", "list", "media", "packets", "search", "stats", "stream", "summary"},
 		"data":    {"clear", "evidence", "ignore", "import", "mute", "note", "primary", "save", "scope", "sessions", "workspace"},
-		"help":    {"agent-prompt", "describe", "version", "jev", "completion", "help"},
+		"help":    {"version", "jev", "help"},
 	}
 	groups := map[string]string{}
 	for group, names := range rootGroups {
@@ -49,7 +33,7 @@ func configureCommandGroups() {
 		command.GroupID = group
 	}
 	rootCmd.SetHelpCommandGroupID("help")
-	rootCmd.SetCompletionCommandGroupID("help")
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	browserCmd.AddGroup(
 		&cobra.Group{ID: "work", Title: "Everyday workflows:"},
 		&cobra.Group{ID: "capture", Title: "Network capture:"},

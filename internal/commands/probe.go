@@ -78,7 +78,7 @@ input_reflection, mutation_side_effect, rate_or_lockout, information_disclosure.
 	add.Flags().StringVar(&ref, "ref", "", "Captured request ID or unambiguous alias in this task")
 	add.Flags().StringVar(&precondition, "precondition", "", "Prerequisite for an interpretable result (default: oracle-specific)")
 	add.Flags().StringVar(&mutationShape, "mutation-shape", "", "Stable mutation descriptor; defaults to the oracle's standard experiment")
-	advancedFlags(add, "precondition", "mutation-shape")
+
 	add.Flags().StringSliceVar(&principals, "as", nil, "Principal names that distinguish this experiment; order and duplicates are ignored")
 	command.AddCommand(add)
 

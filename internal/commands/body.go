@@ -65,7 +65,7 @@ Examples:
 		}
 
 		if err := renderCapturedBody(cmd, req); err != nil {
-			return output.EmitAgentError(cmd.OutOrStdout(), output.NewAgentError("body_unavailable", "body", err.Error(), "rep body "+requestID+" --info", "rep describe body"), true)
+			return output.EmitAgentError(cmd.OutOrStdout(), output.NewAgentError("body_unavailable", "body", err.Error(), "rep body "+requestID+" --info", "rep body --help"), true)
 		}
 		return nil
 	},
@@ -246,5 +246,5 @@ func init() {
 	bodyCmd.Flags().StringVar(&bodyView.Find, "find", "", "Find literal text with byte offsets and bounded context")
 	bodyCmd.Flags().IntVar(&bodyView.RecordOffset, "record-offset", 0, "Starting NDJSON/SSE record or search-match index")
 	bodyCmd.Flags().IntVar(&bodyView.Records, "records", 20, "Maximum NDJSON/SSE records or search matches")
-	advancedFlags(bodyCmd, "record-offset", "records")
+
 }

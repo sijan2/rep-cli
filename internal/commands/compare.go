@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	compareFilter string
+	compareFilter  string
 	compareByField string
 )
 
@@ -75,12 +75,12 @@ Examples:
 
 // CompareResult represents comparison of multiple requests
 type CompareResult struct {
-	TotalRequests int              `json:"total"`
-	Filter        string           `json:"filter"`
-	GroupBy       string           `json:"group_by,omitempty"`
-	Groups        []CompareGroup   `json:"groups"`
-	CommonFields  []string         `json:"common_fields,omitempty"`
-	VaryingFields []string         `json:"varying_fields,omitempty"`
+	TotalRequests int            `json:"total"`
+	Filter        string         `json:"filter"`
+	GroupBy       string         `json:"group_by,omitempty"`
+	Groups        []CompareGroup `json:"groups"`
+	CommonFields  []string       `json:"common_fields,omitempty"`
+	VaryingFields []string       `json:"varying_fields,omitempty"`
 }
 
 // CompareGroup represents a group of similar requests

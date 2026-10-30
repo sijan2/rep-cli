@@ -69,12 +69,12 @@ func newBrowserEvaluationCommandWithCapture(capture bool, shared *browserCapture
 		command.Flags().DurationVar(&options.Idle, "idle", 300*time.Millisecond, "Required network-idle interval after the action")
 		command.Flags().DurationVar(&options.Settle, "settle", 1500*time.Millisecond, "Minimum observation window for delayed callbacks")
 		command.Flags().IntVar(&options.MaxResultBytes, "max-result", 64*1024, "Maximum serialized evaluation-result bytes")
-		advancedFlags(command, "idle", "settle", "max-result")
+
 	} else {
 		command.Flags().BoolVar(&options.KeepAttached, "keep-attached", false, "Keep the target attached for subsequent commands")
-		advancedFlags(command, "keep-attached")
+
 	}
-	advancedFlags(command, "await", "by-value", "user-gesture", "repl", "target")
-	command.Long = short + ".\n\nUse 'browser interact' for typed, verified UI workflows. Advanced evaluation\nand capture settings remain available; see 'rep describe browser'."
+
+	command.Long = short + ".\n\nUse 'browser interact' for typed, verified UI workflows. Advanced evaluation\nand capture settings remain available; see 'rep browser --help'."
 	return command
 }

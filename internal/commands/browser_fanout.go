@@ -272,15 +272,15 @@ Without --tab, an owned inactive tab is opened on the origin and closed after.`,
 			return output.EmitAgentError(os.Stdout, output.NewAgentError(code, commandName, message, suggest...), getOutputMode() == "json")
 		}
 		if matrix == "" || concurrency < 1 || concurrency > maxFanoutConcurrency || tab < -1 {
-			return fail(output.ErrCodeInvalidArgument, fmt.Sprintf("provide --matrix 'query.NAME=[v1,v2]' and a concurrency of 1 to %d", maxFanoutConcurrency), "rep describe fanout")
+			return fail(output.ErrCodeInvalidArgument, fmt.Sprintf("provide --matrix 'query.NAME=[v1,v2]' and a concurrency of 1 to %d", maxFanoutConcurrency), "rep replay --help")
 		}
 		matrixKey, values, err := parseMatrixSpec(matrix)
 		if err != nil {
-			return fail(output.ErrCodeInvalidArgument, err.Error(), "rep describe fanout")
+			return fail(output.ErrCodeInvalidArgument, err.Error(), "rep replay --help")
 		}
 		constant, err := parseMutationSpecs(sets)
 		if err != nil {
-			return fail(output.ErrCodeInvalidArgument, err.Error(), "rep describe fanout")
+			return fail(output.ErrCodeInvalidArgument, err.Error(), "rep replay --help")
 		}
 		source := findRequestByID(args[0])
 		if source == nil {
@@ -288,7 +288,7 @@ Without --tab, an owned inactive tab is opened on the origin and closed after.`,
 		}
 		variants, origin, err := fanoutVariants(source, matrixKey, values, constant)
 		if err != nil {
-			return fail(output.ErrCodeInvalidArgument, err.Error(), "rep describe fanout")
+			return fail(output.ErrCodeInvalidArgument, err.Error(), "rep replay --help")
 		}
 		script, err := fanoutScript(variants, concurrency)
 		if err != nil {

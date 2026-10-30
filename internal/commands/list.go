@@ -561,7 +561,7 @@ func init() {
 	listCmd.Flags().StringVarP(&listPattern, "pattern", "p", "", "Filter by URL pattern (regex)")
 	listCmd.Flags().BoolVar(&listIncludeIgnored, "include-ignored", false, "Include requests to ignored domains")
 	listCmd.Flags().StringVar(&listBudget, "budget", "compact", "Token budget: minimal (~15/req), compact (~30/req), standard (~100/req), full")
-	advancedFlags(listCmd, "budget", "include-ignored")
+
 	listCmd.Flags().StringVar(&listSince, "since", "", "Only requests since duration (e.g., 5m, 1h, 30s)")
 	listCmd.Flags().StringVar(&listSaved, "saved", "", "Read from saved session (ID, prefix, or 'latest')")
 }

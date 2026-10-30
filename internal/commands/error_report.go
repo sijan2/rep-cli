@@ -59,9 +59,6 @@ func reportUnreported(command *cobra.Command, err error, runStarted bool, args [
 		ae = output.NewAgentError(output.ErrCodeInvalidArgument, path, err.Error(), usageSuggestions(command, err)...)
 	default:
 		ae = output.WrapError(err, output.ErrCodeCommandFailed, path, path+" --help")
-		if topic := describeTopic(command); topic != "" {
-			ae.Suggest = append(ae.Suggest, "rep describe "+topic)
-		}
 	}
 	if getOutputMode() == "json" || jsonRequested(args) {
 		_ = output.EmitAgentError(stdout, ae, true)
@@ -71,7 +68,7 @@ func reportUnreported(command *cobra.Command, err error, runStarted bool, args [
 }
 
 // usageSuggestions points an unknown flag at the commands that accept it.
-// Advanced flags are hidden from --help, so their full list is in describe.
+// The generated verb help lists every accepted command flag.
 func usageSuggestions(command *cobra.Command, err error) []string {
 	path := rootCmd.Name()
 	if command != nil {
@@ -93,9 +90,6 @@ func usageSuggestions(command *cobra.Command, err error) []string {
 		}
 	}
 	suggestions = append(suggestions, path+" --help")
-	if topic := describeTopic(command); topic != "" {
-		suggestions = append(suggestions, "rep describe "+topic+"  # includes advanced flags hidden from --help")
-	}
 	return suggestions
 }
 
@@ -122,19 +116,6 @@ func flagOwners(name string, shorthand bool) []string {
 		owners = append(owners[:6], "...")
 	}
 	return owners
-}
-
-// describeTopic names the most specific `rep describe` page for command, if any.
-func describeTopic(command *cobra.Command) string {
-	if command == nil || command == rootCmd {
-		return ""
-	}
-	for _, name := range []string{command.Name(), rootCommandName(command)} {
-		if _, ok := knownDescriptions[name]; ok {
-			return name
-		}
-	}
-	return ""
 }
 
 // jsonRequested detects a JSON request even when flag parsing stopped before

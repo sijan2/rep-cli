@@ -48,7 +48,7 @@ Examples:
 			data, err := buildTrafficSummary(options, forceEnvelope && !rawJSON, cmd.Name())
 			if err != nil {
 				return output.EmitAgentError(cmd.OutOrStdout(), output.NewAgentError(
-					"context_unavailable", cmd.Name(), err.Error(), "rep scope", "rep describe summary",
+					"context_unavailable", cmd.Name(), err.Error(), "rep scope", "rep net --help",
 				), true)
 			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), string(data))

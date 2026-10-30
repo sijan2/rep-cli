@@ -48,7 +48,7 @@ func init() {
 		},
 	})
 	jevCmd.AddCommand(&cobra.Command{
-		Use: "doctor", Aliases: []string{"smoke"}, Short: "Verify Jev with synthetic traffic metadata (one API evaluation)", Args: cobra.NoArgs,
+		Use: "doctor", Short: "Verify Jev with synthetic traffic metadata (one API evaluation)", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			config, err := jev.LoadConfig()
 			if err != nil {
@@ -84,11 +84,4 @@ func init() {
 			return emitJev(cmd, "jev classify", result)
 		},
 	})
-}
-
-func init() {
-	legacy := newBrowserInteractCommand(defaultJevDOMDependencies())
-	legacy.Use = "act [plan.json] --tab ID"
-	legacy.Hidden = true
-	jevCmd.AddCommand(legacy)
 }

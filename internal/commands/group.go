@@ -31,7 +31,7 @@ Examples:
   rep group status --show methods,ids
   rep group domain --min-count 5
 
-Use rep describe group for source and output contracts.`,
+Use rep net --help for source and output contracts.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("by") {
 				fmt.Fprintln(cmd.ErrOrStderr(), "Flag --by is deprecated; use rep group FIELD")
@@ -119,7 +119,7 @@ Use rep describe group for source and output contracts.`,
 		},
 	}
 	command.Flags().StringVar(&groupBy, "by", "", "Legacy field to group by")
-	_ = command.Flags().MarkHidden("by")
+
 	command.Flags().StringVar(&groupShow, "show", "", "What to show per group (count,statuses,methods,ids)")
 	command.Flags().StringVar(&groupPattern, "pattern", "", "Regex pattern for normalization")
 	command.Flags().StringVar(&groupReplace, "replace", "", "Replacement string for pattern")

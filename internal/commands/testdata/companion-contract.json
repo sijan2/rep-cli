@@ -11,6 +11,26 @@
   },
   {
     "argv": [
+      "page",
+      "t1",
+      "https://fixture.invalid/"
+    ],
+    "fields": [
+      "tab"
+    ]
+  },
+  {
+    "argv": [
+      "page",
+      "https://fixture.invalid/",
+      "--capture"
+    ],
+    "fields": [
+      "meta.capture.id"
+    ]
+  },
+  {
+    "argv": [
       "eval",
       "@fixture.js",
       "t1",
@@ -25,6 +45,98 @@
   },
   {
     "argv": [
+      "eval",
+      "1",
+      "t1",
+      "--capture"
+    ],
+    "fields": [
+      "meta.capture.id"
+    ]
+  },
+  {
+    "argv": [
+      "body",
+      "h_fixture"
+    ],
+    "fields": [
+      "meta.method",
+      "meta.status_code",
+      "untrusted.url",
+      "untrusted.headers"
+    ]
+  },
+  {
+    "argv": [
+      "body",
+      "h_fixture",
+      "--out",
+      "/fixture/response.bin"
+    ],
+    "fields": [
+      "meta.body_capture",
+      "meta.artifact.path"
+    ]
+  },
+  {
+    "argv": [
+      "body",
+      "h_fixture",
+      "--request",
+      "--out",
+      "/fixture/request.bin"
+    ],
+    "fields": [
+      "meta.body_capture",
+      "meta.artifact.path"
+    ]
+  },
+  {
+    "argv": [
+      "net",
+      "s_fixture",
+      "url:/graphql"
+    ],
+    "fields": [
+      "untrusted.requests"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "start"
+    ],
+    "fields": [
+      "status"
+    ]
+  },
+  {
+    "argv": [
+      "browser",
+      "stop"
+    ],
+    "fields": []
+  },
+  {
+    "argv": [
+      "scope"
+    ],
+    "fields": [
+      "task",
+      "browser",
+      "tabs"
+    ]
+  },
+  {
+    "argv": [
+      "tabs"
+    ],
+    "fields": [
+      "meta.tabs"
+    ]
+  },
+  {
+    "argv": [
       "close",
       "t1"
     ],
@@ -32,144 +144,14 @@
   },
   {
     "argv": [
-      "detail",
-      "h_fixture",
-      "--saved",
-      "s_fixture",
-      "--output",
-      "meta"
+      "download",
+      "https://fixture.invalid/file.pdf",
+      "/fixture/file.pdf"
     ],
     "fields": [
-      "id",
-      "method",
-      "url",
-      "headers",
-      "response.status"
-    ]
-  },
-  {
-    "argv": [
-      "body",
-      "h_fixture",
-      "--saved",
-      "s_fixture",
-      "--info",
-      "--require-complete"
-    ],
-    "fields": [
-      "body_capture.state",
-      "body_capture.sha256",
-      "body_bytes"
-    ]
-  },
-  {
-    "argv": [
-      "browser",
-      "headless",
-      "start",
-      "--host",
-      "/fixture/rep-host",
-      "--extension",
-      "/fixture/extension"
-    ],
-    "fields": [
-      "connected"
-    ]
-  },
-  {
-    "argv": [
-      "summary",
-      "--max-bytes",
-      "4096"
-    ],
-    "fields": [
-      "status"
-    ]
-  },
-  {
-    "argv": [
-      "browser",
-      "action",
-      "1",
-      "--tab",
-      "1",
-      "--timeout",
-      "10s"
-    ],
-    "fields": [
-      "saved_hash_id"
-    ]
-  },
-  {
-    "argv": [
-      "list",
-      "--saved",
-      "s_fixture",
-      "--primary=false",
-      "--pattern",
-      "/graphql",
-      "--output",
-      "meta"
-    ],
-    "fields": [
-      "id"
-    ]
-  },
-  {
-    "argv": [
-      "browser",
-      "headless",
-      "stop"
-    ],
-    "fields": []
-  },
-  {
-    "argv": [
-      "browser",
-      "status"
-    ],
-    "fields": [
-      "connected"
-    ]
-  },
-  {
-    "argv": [
-      "browser",
-      "create",
-      "about:blank"
-    ],
-    "fields": [
-      "tab_id"
-    ]
-  },
-  {
-    "argv": [
-      "browser",
-      "attach",
-      "--tab",
-      "1"
-    ],
-    "fields": []
-  },
-  {
-    "argv": [
-      "browser",
-      "detach",
-      "--tab",
-      "1"
-    ],
-    "fields": []
-  },
-  {
-    "argv": [
-      "browser",
-      "cdp",
-      "Page.getFrameTree",
-      "--tab",
-      "1"
-    ],
-    "fields": [
-      "result.frameTree.frame.id"
+      "meta.path",
+      "meta.bytes",
+      "meta.sha256"
     ]
   },
   {
@@ -189,135 +171,5 @@
     ],
     "fields": [],
     "binary": "rep-lab"
-  },
-  {
-    "argv": [
-      "browser",
-      "download",
-      "h_fixture",
-      "/fixture/file.pdf"
-    ],
-    "fields": [
-      "path",
-      "bytes",
-      "sha256"
-    ]
-  },
-  {
-    "argv": [
-      "page",
-      "https://fixture.invalid/"
-    ],
-    "fields": [
-      "tab",
-      "untrusted.url"
-    ]
-  },
-  {
-    "argv": [
-      "eval",
-      "@fixture.js",
-      "t1",
-      "--timeout",
-      "90s"
-    ],
-    "fields": [
-      "untrusted.value",
-      "untrusted.exception",
-      "meta.artifact"
-    ]
-  },
-  {
-    "argv": [
-      "body",
-      "h_fixture",
-      "--saved",
-      "s_fixture",
-      "--save",
-      "--require-complete"
-    ],
-    "fields": [
-      "path"
-    ]
-  },
-  {
-    "argv": [
-      "body",
-      "h_fixture",
-      "--saved",
-      "s_fixture",
-      "--request",
-      "--save",
-      "--require-complete"
-    ],
-    "fields": [
-      "path"
-    ]
-  },
-  {
-    "argv": [
-      "browser",
-      "cdp",
-      "Network.loadNetworkResource",
-      "--tab",
-      "1",
-      "--params",
-      "{}"
-    ],
-    "fields": [
-      "result.resource"
-    ]
-  },
-  {
-    "argv": [
-      "browser",
-      "cdp",
-      "IO.read",
-      "--tab",
-      "1",
-      "--params",
-      "{}"
-    ],
-    "fields": [
-      "result.data",
-      "result.base64Encoded",
-      "result.eof"
-    ]
-  },
-  {
-    "argv": [
-      "browser",
-      "cdp",
-      "IO.close",
-      "--tab",
-      "1",
-      "--params",
-      "{}"
-    ],
-    "fields": []
-  },
-  {
-    "argv": [
-      "eval",
-      "@fixture.js",
-      "t1",
-      "--timeout",
-      "90s"
-    ],
-    "fields": [
-      "untrusted.value",
-      "untrusted.exception",
-      "meta.artifact"
-    ]
-  },
-  {
-    "argv": [
-      "page",
-      "https://fixture.invalid/"
-    ],
-    "fields": [
-      "tab",
-      "untrusted.url"
-    ]
   }
 ]

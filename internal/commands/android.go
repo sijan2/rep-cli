@@ -108,7 +108,7 @@ func init() {
 	androidCmd.Flags().StringVarP(&androidMethod, "method", "m", "", "Filter by method")
 	androidCmd.Flags().BoolVar(&androidAll, "all", false, "Show all requests (ignore skip/keep config)")
 	androidCmd.Flags().String("budget", "compact", "Legacy no-op; retained for compatibility")
-	_ = androidCmd.Flags().MarkHidden("budget")
+
 	androidCmd.Flags().StringVar(&androidSince, "since", "", "Only requests since duration (e.g., 5m, 1h, 30s)")
 
 	// Add primitive subcommands

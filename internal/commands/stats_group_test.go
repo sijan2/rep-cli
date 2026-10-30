@@ -195,12 +195,12 @@ func TestAggregationHelpHasFiniteExplicitOperations(t *testing.T) {
 	}
 	for _, name := range []string{"count-by", "unique", "distribution", "top"} {
 		flag := command.PersistentFlags().Lookup(name)
-		if !flag.Hidden {
-			t.Fatalf("legacy flag %s remains advertised", name)
+		if flag.Hidden {
+			t.Fatalf("accepted flag %s is hidden", name)
 		}
 	}
-	if len(newGroupCommand().Commands()) != 0 || !newGroupCommand().Flags().Lookup("by").Hidden {
-		t.Fatal("group field should be data with a hidden legacy adapter")
+	if len(newGroupCommand().Commands()) != 0 || newGroupCommand().Flags().Lookup("by").Hidden {
+		t.Fatal("group field should be data and every accepted flag visible")
 	}
 }
 

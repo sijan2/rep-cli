@@ -122,10 +122,10 @@ Examples:
 
 		if getOutputMode() == "json" {
 			out, _ := sonic.MarshalIndent(map[string]interface{}{
-				"action": "add",
+				"action":  "add",
 				"domains": args,
-				"added":  count,
-				"total":  len(s.GetIgnoredDomains()),
+				"added":   count,
+				"total":   len(s.GetIgnoredDomains()),
 			}, "", "  ")
 			fmt.Println(string(out))
 		} else {

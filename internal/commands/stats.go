@@ -24,7 +24,7 @@ func newStatsCommand() *cobra.Command {
 
 Choose count, unique, or distribution, then give one field.
 Fields: method, status, domain, path, path:segment:N, header:<name>, body-type.
-Use rep describe stats for source and output contracts.`,
+Use rep net --help for source and output contracts.`,
 	}
 	legacyMode := func() (string, string, error) {
 		mode, field := "", ""
@@ -83,7 +83,7 @@ Use rep describe stats for source and output contracts.`,
 		return runStats(cmd, mode, field, limit)
 	}
 	command.PersistentFlags().IntVar(&limit, "top", 0, "Legacy limit on results")
-	_ = command.PersistentFlags().MarkHidden("top")
+
 	for _, option := range []struct {
 		flag  string
 		value *string
@@ -91,7 +91,7 @@ Use rep describe stats for source and output contracts.`,
 		{"count-by", &countBy}, {"unique", &unique}, {"distribution", &distribution},
 	} {
 		command.PersistentFlags().StringVar(option.value, option.flag, "", "Legacy statistics operation")
-		_ = command.PersistentFlags().MarkHidden(option.flag)
+
 	}
 	for _, mode := range []string{"count", "unique", "distribution"} {
 		operation := mode

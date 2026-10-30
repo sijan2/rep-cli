@@ -101,9 +101,9 @@ Examples:
 			}
 			if getOutputMode() == "json" {
 				out, _ := sonic.MarshalIndent(map[string]interface{}{
-					"action":  "remove",
+					"action":   "remove",
 					"patterns": args,
-					"removed": removed,
+					"removed":  removed,
 				}, "", "  ")
 				fmt.Println(string(out))
 			} else {

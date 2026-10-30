@@ -3,8 +3,6 @@
 package commands
 
 import (
-	"fmt"
-
 	"github.com/repplus/rep-cli/internal/jevdom"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -63,28 +61,8 @@ func newBrowserElementCommand(deps jevDOMDependencies) *cobra.Command {
 	return command
 }
 
-func markElementCompatibility(command *cobra.Command, replacement string) *cobra.Command {
-	command.Hidden = true
-	previous := command.PreRunE
-	command.PreRunE = func(command *cobra.Command, args []string) error {
-		// Cobra's Deprecated field writes to stdout, which would corrupt JSON.
-		fmt.Fprintf(command.ErrOrStderr(), "Deprecated: %s; use %s instead.\n", command.CommandPath(), replacement)
-		if previous != nil {
-			return previous(command, args)
-		}
-		return nil
-	}
-	return command
-}
-
 func init() {
 	deps := defaultJevDOMDependencies()
 	browserCmd.AddCommand(newBrowserElementCommand(deps))
-	browserCmd.AddCommand(
-		markElementCompatibility(newElementSelectCommand(deps, nil), "rep browser element select"),
-		markElementCompatibility(newElementSelectBatchCommand(deps, nil), "rep browser element select-batch"),
-		markElementCompatibility(newElementObservationCommand(false, deps, nil), "rep browser element observe"),
-		markElementCompatibility(newElementObservationCommand(true, deps, nil), "rep browser element validate"),
-	)
-	jevCmd.AddCommand(markElementCompatibility(newBrowserSelectCommand(deps), "rep browser element select"))
+
 }

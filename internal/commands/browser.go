@@ -57,8 +57,6 @@ const defaultBrowser = "dia"
 var (
 	browserSelector string
 	closeTabID      int
-	browserOpenCmd  = newLegacyBrowserOpenCommand(false, runBrowserOpen)
-	browseCmd       = newLegacyBrowserOpenCommand(true, runBrowserOpen)
 )
 
 var browserCmd = &cobra.Command{
@@ -75,14 +73,13 @@ var browserCmd = &cobra.Command{
 
 Use --raw-json for plain JSON; Dia is the default. Capture, raw protocol controls,
 and browser management have separate groups. Advanced tuning flags remain
-available through 'rep describe browser' and 'rep describe interact'.`,
+available through 'rep browser --help' and 'rep do --help'.`,
 }
 
 var browserStatusCmd = &cobra.Command{
-	Use:     "status",
-	Aliases: []string{"ping"},
-	Short:   "Check the extension/native bridge and browser capabilities",
-	Args:    cobra.NoArgs,
+	Use:   "status",
+	Short: "Check the extension/native bridge and browser capabilities",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 		defer cancel()
@@ -744,8 +741,7 @@ func init() {
 	browserCmd.AddCommand(browserStatusCmd, browserTabsCmd, browserCloseCmd)
 	browserCmd.PersistentFlags().StringVar(&browserSelector, "browser", defaultBrowser, "Browser bridge to use: dia, arc, chrome, headless, or any")
 	browserCmd.AddCommand(newBrowserCaptureCommand(runBrowserOpen, runBrowserFetch, callBrowserRPC))
-	browserCmd.AddCommand(browserOpenCmd, newLegacyBrowserFetchCommand(runBrowserFetch), newLegacyBrowserActionCommand(callBrowserRPC))
-	rootCmd.AddCommand(browseCmd)
+
 }
 
 var _ = json.RawMessage{}

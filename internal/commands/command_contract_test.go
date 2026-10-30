@@ -190,8 +190,8 @@ func TestCompanionCommandShapes(t *testing.T) {
 		}
 		paths[path] = true
 	}
-	if len(cases) != 27 || len(paths) != 18 {
-		t.Fatalf("companion baseline: %d shapes / %d paths; want 27/18", len(cases), len(paths))
+	if len(cases) != 17 || len(paths) != 12 {
+		t.Fatalf("companion contract: %d shapes / %d paths; want 17/12", len(cases), len(paths))
 	}
 }
 

@@ -49,12 +49,12 @@ type TokenInfoRedacted struct {
 // setupConfigDiff summarizes state mutations so dry-run can show "would change"
 // and the --write path can show "changed".
 type setupConfigDiff struct {
-	PreviousPrimaries  []string `json:"previous_primaries"`
-	NewPrimaries       []string `json:"new_primaries"`
-	PreviousIgnored    []string `json:"previous_ignored"`
-	NewIgnored         []string `json:"new_ignored"`
-	StorePath          string   `json:"store_path,omitempty"`
-	Applied            bool     `json:"applied"`
+	PreviousPrimaries []string `json:"previous_primaries"`
+	NewPrimaries      []string `json:"new_primaries"`
+	PreviousIgnored   []string `json:"previous_ignored"`
+	NewIgnored        []string `json:"new_ignored"`
+	StorePath         string   `json:"store_path,omitempty"`
+	Applied           bool     `json:"applied"`
 }
 
 // setupOutput is the JSON envelope for `rep setup`. The token shape changes

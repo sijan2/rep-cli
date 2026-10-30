@@ -20,11 +20,7 @@ func TestScopeCLIHelperProcess(t *testing.T) {
 	if os.Getenv("REP_SCOPE_CLI_TEST") != "1" {
 		return
 	}
-	actionCommand, _, err := rootCmd.Find([]string{"browser", "action"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, command := range []*cobra.Command{browserOpenCmd, actionCommand, browseCmd, authCmd, setupCmd} {
+	for _, command := range []*cobra.Command{authCmd, setupCmd} {
 		// Guard regressions must fail locally instead of invoking a browser or
 		// reading/writing existing shared credential exports.
 		command.RunE = func(cmd *cobra.Command, args []string) error { return os.ErrPermission }

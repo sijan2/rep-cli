@@ -62,7 +62,7 @@ func engineNewCommand() *cobra.Command {
 	run.Flags().DurationVar(&options.Limits.Timeout, "timeout", engine.EngineDefaultTimeout, "Overall model deadline (maximum 2m)")
 	run.Flags().IntVar(&options.Limits.MaxInputBytes, "max-input-bytes", engine.EngineMaxInputBytes, "Maximum input and provider request bytes (maximum 65536)")
 	run.Flags().IntVar(&options.Limits.MaxOutputBytes, "max-output-bytes", engine.EngineDefaultOutput, "Maximum model answer bytes (maximum 65536)")
-	advancedFlags(run, "max-input-bytes", "max-output-bytes", "effort")
+
 	_ = run.MarkFlagRequired("job")
 	_ = run.MarkFlagRequired("input")
 	command.AddCommand(run)

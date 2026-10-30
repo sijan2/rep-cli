@@ -167,7 +167,7 @@ func newInheritedBrowserInteractCommand(deps jevDOMDependencies) *cobra.Command 
 	command.Flags().BoolVar(&apply, "apply", false, "Execute the explicit plan; default validates and previews first target")
 	command.Flags().BoolVar(&noCache, "no-cache", false, "Bypass the Jev decision cache for semantic targets")
 	_ = command.MarkFlagRequired("tab")
-	advancedFlags(command, "plan", "no-cache")
+
 	return command
 }
 

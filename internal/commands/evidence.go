@@ -29,7 +29,7 @@ func openScopedEvidence() (*evidence.Store, map[string]string, error) {
 }
 
 func newEvidenceCommand(open evidenceOpener) *cobra.Command {
-	command := &cobra.Command{Use: "evidence", Short: "Record task-scoped runs, operations, and native diagnostic artifacts", Long: "Keep explicit run journals and immutable imported bytes. Commands return bounded JSON. Read rep describe evidence for limits and provenance semantics."}
+	command := &cobra.Command{Use: "evidence", Short: "Record task-scoped runs, operations, and native diagnostic artifacts", Long: "Keep explicit run journals and immutable imported bytes. Commands return bounded JSON. Read rep evidence --help for limits and provenance semantics."}
 	var intent, stop, beginManifest string
 	begin := &cobra.Command{Use: "begin", Short: "Create a run with intent and an optional stopping condition", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		var spec struct {

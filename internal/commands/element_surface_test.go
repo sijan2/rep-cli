@@ -23,11 +23,7 @@ func elementTestRoot(deps jevDOMDependencies) *cobra.Command {
 	browser := &cobra.Command{Use: "browser"}
 	browser.PersistentFlags().String("browser", "arc", "Browser bridge")
 	root.AddCommand(browser)
-	browser.AddCommand(newBrowserElementCommand(deps),
-		markElementCompatibility(newElementSelectCommand(deps, nil), "rep browser element select"),
-		markElementCompatibility(newElementSelectBatchCommand(deps, nil), "rep browser element select-batch"),
-		markElementCompatibility(newElementObservationCommand(false, deps, nil), "rep browser element observe"),
-		markElementCompatibility(newElementObservationCommand(true, deps, nil), "rep browser element validate"))
+	browser.AddCommand(newBrowserElementCommand(deps))
 	return root
 }
 
@@ -40,14 +36,14 @@ func configureElementTestScope(t *testing.T) {
 	t.Cleanup(scope.Reset)
 }
 
-func TestElementCanonicalAndLegacyPreserveScopeAndDefaults(t *testing.T) {
+func TestElementPreservesScopeAndDefaults(t *testing.T) {
 	configureElementTestScope(t)
 	goals := filepath.Join(t.TempDir(), "goals.json")
 	if err := os.WriteFile(goals, []byte(`{"version":1,"goals":[{"id":"one","goal":"Save"}]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, verb := range []string{"select", "select-batch", "observe", "validate"} {
-		for _, legacy := range []bool{false, true} {
+		for _, legacy := range []bool{false} {
 			for _, before := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/legacy=%v/flags-before=%v", verb, legacy, before), func(t *testing.T) {
 					calls := 0
@@ -219,7 +215,7 @@ func TestElementRuntimeUsesInheritedBrowser(t *testing.T) {
 }
 
 func TestElementRegisteredBrowserCommandsDoNotShadowSelector(t *testing.T) {
-	for _, path := range [][]string{{"runtime"}, {"interact"}, {"step"}, {"select"}, {"select-batch"}, {"observe"}, {"validate"}, {"element", "select"}, {"element", "select-batch"}, {"element", "observe"}, {"element", "validate"}} {
+	for _, path := range [][]string{{"runtime"}, {"interact"}, {"step"}, {"element", "select"}, {"element", "select-batch"}, {"element", "observe"}, {"element", "validate"}} {
 		command, _, err := browserCmd.Find(path)
 		if err != nil {
 			t.Fatal(err)

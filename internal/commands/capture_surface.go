@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -41,7 +40,7 @@ func newBrowserCaptureCommand(open browserOpenRunner, fetch browserFetchRunner, 
 
 Use open for navigation, fetch for a credentialed request, and action for page
 JavaScript. Captures in a task archive automatically. Shared capture limits and
-collectors may appear before or after the operation; see 'rep describe browser'.`,
+collectors may appear before or after the operation; see 'rep browser --help'.`,
 	}
 	bindBrowserCaptureFlags(command.PersistentFlags(), options)
 	command.AddCommand(newBrowserOpenCommand(options, false, open), newBrowserFetchCommand(options, fetch), newBrowserEvaluationCommandWithCapture(true, options, action), newBrowserFanoutCommand(options))
@@ -83,7 +82,7 @@ func newBrowserOpenCommand(shared *browserCaptureOptions, includeBrowser bool, r
 	command.Flags().DurationVar(&flags.Idle, "idle", 800*time.Millisecond, "Required network-idle interval")
 	command.Flags().BoolVar(&flags.Save, "save", false, "Legacy global mode: archive capture (task captures already archive automatically)")
 	command.Flags().StringVar(&flags.Note, "note", "", "Archive note")
-	advancedFlags(command, "referrer", "idle", "save")
+
 	return command
 }
 
@@ -120,41 +119,6 @@ HttpOnly cookies remain browser-managed and are sent normally.`,
 	command.Flags().BoolVar(&flags.KeepTab, "keep-tab", false, "Keep a temporary origin tab")
 	command.Flags().BoolVar(&flags.Save, "save", false, "Legacy global mode: archive capture (task captures already archive automatically)")
 	command.Flags().StringVar(&flags.Note, "note", "", "Archive note")
-	advancedFlags(command, "credentials", "cache", "save")
-	return command
-}
 
-func newLegacyBrowserOpenCommand(browse bool, run browserOpenRunner) *cobra.Command {
-	options := newBrowserCaptureOptions()
-	command := newBrowserOpenCommand(options, browse, run)
-	if browse {
-		command.Use = "browse <url-or-@file>"
-	}
-	bindBrowserCaptureFlags(command.Flags(), options)
-	markCaptureCompatibility(command, "rep browser capture open")
 	return command
-}
-
-func newLegacyBrowserFetchCommand(run browserFetchRunner) *cobra.Command {
-	options := newBrowserCaptureOptions()
-	command := newBrowserFetchCommand(options, run)
-	bindBrowserCaptureFlags(command.Flags(), options)
-	markCaptureCompatibility(command, "rep browser capture fetch")
-	return command
-}
-
-func newLegacyBrowserActionCommand(run browserCommandRunner) *cobra.Command {
-	command := newBrowserEvaluationCommand(true, run)
-	markCaptureCompatibility(command, "rep browser capture action")
-	return command
-}
-
-func markCaptureCompatibility(command *cobra.Command, replacement string) {
-	command.Hidden = true
-	run := command.RunE
-	command.RunE = func(cmd *cobra.Command, args []string) error {
-		// Cobra's Deprecated field writes to stdout and corrupts JSON pipelines.
-		fmt.Fprintf(cmd.ErrOrStderr(), "deprecated: %s; use %s\n", cmd.CommandPath(), replacement)
-		return run(cmd, args)
-	}
 }

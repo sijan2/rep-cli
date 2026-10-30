@@ -81,6 +81,6 @@ func newElementSelectCommand(dependencies jevDOMDependencies, shared *elementFla
 	command.Flags().BoolVar(&options.NoCache, "no-cache", false, "Bypass the local five-minute decision cache")
 	command.Flags().StringVar(&options.Strategy, "strategy", "auto", "Decision packing: auto or legacy (comparison baseline)")
 	command.Flags().StringVar(&options.ObservationMode, "observation", "auto", "Observation transport: auto or legacy (comparison baseline)")
-	advancedFlags(command, "goal", "limit", "confidence", "no-cache", "strategy", "observation")
+
 	return command
 }

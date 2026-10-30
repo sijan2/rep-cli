@@ -430,7 +430,7 @@ remembered per task and tab (without values) so later steps avoid repeats.`,
 	command.Flags().BoolVar(&noText, "no-text", false, "Omit visible page text evidence from the decision")
 	command.Flags().BoolVar(&resetHistory, "reset-history", false, "Forget this tab's earlier applied steps first")
 	_ = command.MarkFlagRequired("tab")
-	advancedFlags(command, "limit", "origin", "frame", "frame-url", "root-node", "no-text", "values-file")
+
 	return command
 }
 

@@ -24,7 +24,7 @@ Use --saved HASH to inspect the same archive as a body or stream result.`,
 			capture, err := loadObservedCapture(saved)
 			if err != nil {
 				return output.EmitAgentError(cmd.OutOrStdout(), output.NewAgentError(
-					"coverage_unavailable", "coverage", err.Error(), "rep scope", "rep describe coverage",
+					"coverage_unavailable", "coverage", err.Error(), "rep scope", "rep net --help",
 				), true)
 			}
 			var result any = struct {

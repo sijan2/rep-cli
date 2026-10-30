@@ -27,7 +27,7 @@ func newNativeBrowserCaptureCommandWith(run func(context.Context, browserdiagnos
 	options := browserdiagnostics.DefaultOptions()
 	command := &cobra.Command{
 		Use: "native-capture URL", Short: "Collect native Chromium key logs and original RTP in a private session",
-		Long: "Launch an isolated, extension-free Chromium session with explicit native diagnostics.\nTLS/QUIC key logging and original RTP/RTCP logging are independent opt-ins.\nTLS key capture requires an explicit interface and BPF filter for wire packets.\nThe new private output directory contains sensitive capture artifacts.\nRead rep describe native-capture for provenance, bounds and browser support.",
+		Long: "Launch an isolated, extension-free Chromium session with explicit native diagnostics.\nTLS/QUIC key logging and original RTP/RTCP logging are independent opt-ins.\nTLS key capture requires an explicit interface and BPF filter for wire packets.\nThe new private output directory contains sensitive capture artifacts.\nRead rep-lab native-capture --help for provenance, bounds and browser support.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) (returnErr error) {
 			if _, err := headlessTaskDir(); err != nil {
@@ -105,7 +105,7 @@ func newNativeBrowserCaptureCommandWith(run func(context.Context, browserdiagnos
 	command.Flags().Int64Var(&options.MaxLogBytes, "max-log-bytes", options.MaxLogBytes, "Maximum retained Chromium diagnostic log bytes")
 	command.Flags().Int64Var(&options.MaxKeyLogBytes, "max-key-log-bytes", options.MaxKeyLogBytes, "TLS key-log stop threshold; native writes may overshoot before shutdown")
 	command.Flags().Int64Var(&options.MaxPacketBytes, "max-packet-bytes", options.MaxPacketBytes, "Maximum retained wire pcap bytes")
-	advancedFlags(command, "max-key-log-bytes", "max-log-bytes", "max-packet-bytes", "binary")
+
 	return command
 }
 

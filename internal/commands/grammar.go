@@ -24,6 +24,9 @@ func quoteCommand(arguments ...string) string {
 }
 
 func verbFirst(root *cobra.Command, args []string) error {
+	if len(args) > 0 && (args[0] == "__complete" || args[0] == "__completeNoDesc") {
+		return output.NewAgentError("invalid_argument", "rep", "completion protocol is not available", "rep --help")
+	}
 	if len(args) == 0 {
 		return nil
 	}
