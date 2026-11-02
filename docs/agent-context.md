@@ -2,7 +2,7 @@
 
 Start with `rep --help`; it is the runtime contract. A call has the form `rep page t3` or `rep page URL --task project/name`. All flags follow the verb except root help/version. Putting a flag first is a usage error with a corrected `next`.
 
-Identity resolves in order: explicit task flag, addressed handle owner, `REP_TASK`, a deterministic hash of all available agent-session markers, a controlling terminal's global context, then an eligible ancestor process. If none is safe, rep returns `task_required`. Legacy `REP_WORKSPACE=W` with `REP_TASK=T` maps to W/T during migration. Nested agent markers subdivide an inherited namespace. The result echoes `task` and `task_source`.
+Identity resolves in order: explicit task flag, addressed handle owner, `REP_TASK`, a deterministic hash of all available agent-session markers, a controlling terminal's global context, then an eligible ancestor process. If none is safe, rep returns `task_required`. Use `REP_TASK=project/name` for an explicit namespace; `REP_WORKSPACE` is no longer a CLI identity input. Nested agent markers subdivide an inherited namespace. The result echoes `task` and `task_source`.
 
 Same-session siblings can share one derived task. Use returned handles or a deliberate task override; the CLI cannot infer a new identity from a sibling that has no distinct marker. Ambiguous implicit writes fail closed. Handles carry their owner's context, so a child can continue a parent's explicitly shared handle without retyping scope.
 
