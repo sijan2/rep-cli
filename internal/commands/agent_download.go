@@ -45,6 +45,10 @@ func coreDownload(command *cobra.Command, source, path string, overwrite bool, t
 		if err != nil {
 			return err
 		}
+		selected, _ := scope.Current()
+		if selected.Identity() != capture.Owner {
+			return agentstate.Failure("owned_by_other_task", "explicit task does not own this capture", coreNext("scope"))
+		}
 		request = req
 		addressed = &agentstate.Tab{Browser: capture.Browser}
 	}

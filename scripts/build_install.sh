@@ -54,6 +54,7 @@ done
 
 EXTENSION_SOURCE="$(rep_extension_source "$ROOT_DIR")"
 mkdir -p "$INSTALL_DIR"
+INSTALL_DIR="$(cd "$INSTALL_DIR" && pwd -P)"
 
 VERSION_VALUE="${VERSION:-}"
 if [[ -z "$VERSION_VALUE" ]]; then
@@ -83,19 +84,19 @@ if [[ -z "${REP_SKIP_TESTS:-}" ]]; then
 fi
 
 node "$EXTENSION_SOURCE/scripts/build-info.js"
-CGO_ENABLED=0 go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" "$ROOT_DIR/cmd/rep"
+(cd "$ROOT_DIR" && CGO_ENABLED=0 go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep" ./cmd/rep)
 # Verify the new executable now so the agent's first browser command does not
 # also pay macOS's first-execution validation cost.
 "$INSTALL_DIR/rep" --version >/dev/null
 echo "Installed: $INSTALL_DIR/rep"
 
 if [[ "$BUILD_HOST" == "true" ]]; then
-  go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep-host" "$ROOT_DIR/cmd/rep-host"
+  (cd "$ROOT_DIR" && go build -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep-host" ./cmd/rep-host)
   echo "Installed: $INSTALL_DIR/rep-host"
 fi
 
 if [[ "$BUILD_LAB" == "true" ]]; then
-  go build -tags replab -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep-lab" "$ROOT_DIR/cmd/rep"
+  (cd "$ROOT_DIR" && go build -tags replab -ldflags "${LDFLAGS[*]}" -o "$INSTALL_DIR/rep-lab" ./cmd/rep)
   "$INSTALL_DIR/rep-lab" --version >/dev/null
   echo "Installed: $INSTALL_DIR/rep-lab"
 fi

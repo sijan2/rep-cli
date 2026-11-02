@@ -191,6 +191,9 @@ func TestCoreNetArchiveDefaultsAreFailClosed(t *testing.T) {
 	if _, _, err := coreDataRequest(snapshot.Requests[0].ID); err == nil {
 		t.Fatal("duplicate request IDs were trusted")
 	}
+	if _, _, err := coreCapturedRequest(snapshot.Requests[0].ID); err == nil {
+		t.Fatal("replay/download trusted duplicate request IDs rejected by body/net")
+	}
 }
 func TestCoreBodyRedactionPointersRawExportAndMetadata(t *testing.T) {
 	request := netRequest("/api?access_token=synthetic-query", `{"password":"synthetic-secret","ok":true}`)
@@ -230,6 +233,24 @@ func TestCoreBodyRedactionPointersRawExportAndMetadata(t *testing.T) {
 	}
 	if _, _, err = bodyResult(t, id, "", false, "", link); err == nil {
 		t.Fatal("followed output symlink")
+	}
+}
+
+func TestCoreCaptureRejectsTrailingArchiveData(t *testing.T) {
+	for _, suffix := range []string{` {"requests":[]}`, ` corrupted`} {
+		t.Run(suffix, func(t *testing.T) {
+			capture, snapshot := netFixture(t, []store.Request{netRequest("/one", `{}`)})
+			encoded, err := os.ReadFile(capture.Archive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(capture.Archive, append(encoded, suffix...), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err = coreDataRequest(snapshot.Requests[0].ID); err == nil {
+				t.Fatal("accepted an archive followed by unvalidated data")
+			}
+		})
 	}
 }
 func TestCoreBodyEventSelectionStopsAndRecordPaginationAdvances(t *testing.T) {

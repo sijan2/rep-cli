@@ -130,7 +130,7 @@ func coreDoctorWith(cmd *cobra.Command, options coreDoctorOptions) error {
 			stale = digest != local.ExtensionDigest || (client != nil && client.Registry.BuildDigest != "" && client.Registry.BuildDigest != digest)
 		}
 		if err != nil || stale {
-			reservation, e := store.BeginLifecycle(browser, selected.Identity(), selected.SessionKey, 30*time.Second)
+			reservation, e := store.BeginLifecycle(browser, selected.Identity(), selected.SessionKey, 30*time.Second, selected.TaskSource == "flag")
 			if e != nil {
 				return e
 			}
@@ -179,7 +179,7 @@ func coreDoctorWith(cmd *cobra.Command, options coreDoctorOptions) error {
 	} else if err == nil {
 		digest, e := headless.ExtensionDigest(coreExtensionPath())
 		if e == nil && client.Registry.BuildDigest != "" && client.Registry.BuildDigest != digest {
-			reservation, e := store.BeginLifecycle(browser, selected.Identity(), selected.SessionKey, 15*time.Second)
+			reservation, e := store.BeginLifecycle(browser, selected.Identity(), selected.SessionKey, 15*time.Second, selected.TaskSource == "flag")
 			if e != nil {
 				return e
 			}

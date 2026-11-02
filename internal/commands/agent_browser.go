@@ -98,7 +98,7 @@ func coreBrowserStart(cmd *cobra.Command, args []string, headed bool) error {
 	}
 	var status headless.Status
 	if !current.Running || restart {
-		reservation, e := store.BeginLifecycle(browser, selected.Identity(), selected.SessionKey, 30*time.Second)
+		reservation, e := store.BeginLifecycle(browser, selected.Identity(), selected.SessionKey, 30*time.Second, selected.TaskSource == "flag")
 		if e != nil {
 			return e
 		}
@@ -176,18 +176,8 @@ func coreBrowserStop(cmd *cobra.Command) error {
 	if browser.PrivateName == "" {
 		browser.PrivateName = privateBrowserName()
 	}
-	if selected.TaskSource != "flag" && strings.HasPrefix(selected.SessionKey, "agent-") {
-		state, e := store.Read()
-		if e != nil {
-			return e
-		}
-		for _, tab := range state.Tabs {
-			if tab.Owner == selected.Identity() && !tab.Closed {
-				return agentstate.Failure("ambiguous_target", "pin the task before stopping a profile with owned tabs", coreNext("tabs"))
-			}
-		}
-	}
-	reservation, err := store.BeginLifecycle(*browser, selected.Identity(), selected.SessionKey, 15*time.Second)
+
+	reservation, err := store.BeginLifecycle(*browser, selected.Identity(), selected.SessionKey, 15*time.Second, selected.TaskSource == "flag")
 	if err != nil {
 		return err
 	}

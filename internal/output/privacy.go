@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
+	"net/textproto"
 	"net/url"
 	"os"
 	"regexp"
@@ -144,6 +147,9 @@ var credentialPair = regexp.MustCompile(`(?i)(["']?[a-z0-9_.-]*(?:password|passw
 // scalar or cutting through its field cannot remove the redaction context.
 func RedactBody(body, contentType string) string {
 	lowerType := strings.ToLower(contentType)
+	if strings.HasPrefix(lowerType, "multipart/") {
+		return redactMultipart(body, contentType)
+	}
 	if strings.Contains(lowerType, "event-stream") {
 		return redactSSE(body)
 	}
@@ -214,6 +220,66 @@ func RedactBody(body, contentType string) string {
 		encoded, _ := json.Marshal(Fingerprint(value))
 		return parts[1] + string(encoded)
 	})
+}
+
+// Form credentials are commonly sent as MIME parts rather than urlencoded
+// pairs. Parse their names before publishing a body; a malformed/truncated MIME
+// body cannot safely be classified, so retain only its fingerprint inline.
+func redactMultipart(body, contentType string) string {
+	_, parameters, err := mime.ParseMediaType(contentType)
+	if err != nil || parameters["boundary"] == "" {
+		return Fingerprint(body)
+	}
+	reader := multipart.NewReader(strings.NewReader(body), parameters["boundary"])
+	var buffer bytes.Buffer
+	writer := multipart.NewWriter(&buffer)
+	if writer.SetBoundary(parameters["boundary"]) != nil {
+		return Fingerprint(body)
+	}
+	changed := false
+	for {
+		part, err := reader.NextRawPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return Fingerprint(body)
+		}
+		data, err := io.ReadAll(part)
+		if err != nil {
+			return Fingerprint(body)
+		}
+		value := string(data)
+		safe := value
+		if SensitiveName(part.FormName()) {
+			safe = Fingerprint(value)
+		} else {
+			safe = RedactBody(value, part.Header.Get("Content-Type"))
+		}
+		headers := RedactHeaders(store.HeaderMap(part.Header))
+		for name, values := range headers {
+			for i, value := range values {
+				if value != part.Header[name][i] {
+					changed = true
+				}
+			}
+		}
+		changed = changed || safe != value
+		destination, err := writer.CreatePart(textproto.MIMEHeader(headers))
+		if err != nil {
+			return Fingerprint(body)
+		}
+		if _, err = io.WriteString(destination, safe); err != nil {
+			return Fingerprint(body)
+		}
+	}
+	if !changed {
+		return body
+	}
+	if writer.Close() != nil {
+		return Fingerprint(body)
+	}
+	return buffer.String()
 }
 
 // Marshal returns compact JSON for pipes and indented JSON for terminals.

@@ -1,7 +1,10 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"strings"
 	"testing"
 
@@ -86,5 +89,63 @@ func TestURLCredentialFragmentsAreFingerprinted(t *testing.T) {
 	raw := "https://fixture.test/path?q=literal#section"
 	if RedactURL(raw) != raw {
 		t.Fatal("ordinary URL lost fidelity")
+	}
+}
+
+func TestMultipartFormCredentialsAreRedactedWithoutLosingOtherParts(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("password", "multipart-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteField("description", "ordinary text"); err != nil {
+		t.Fatal(err)
+	}
+	file, err := writer.CreateFormFile("attachment", "fixture.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte{0, 255, 254, 10}
+	if _, err = file.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	if err = writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	safe := RedactBody(body.String(), writer.FormDataContentType())
+	if strings.Contains(safe, "multipart-secret") || !strings.Contains(safe, "REDACTED") {
+		t.Fatal("multipart password leaked")
+	}
+	reader := multipart.NewReader(strings.NewReader(safe), writer.Boundary())
+	values := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatal(err)
+		}
+		values[part.FormName()] = string(data)
+	}
+	if values["description"] != "ordinary text" || values["attachment"] != string(payload) {
+		t.Fatal("redaction changed non-sensitive parts")
+	}
+	if got := RedactBody(body.String()[:len(body.String())-20], writer.FormDataContentType()); strings.Contains(got, "multipart-secret") {
+		t.Fatal("truncated multipart credential leaked")
+	}
+	if got := RedactBody(body.String(), "multipart/form-data"); strings.Contains(got, "multipart-secret") {
+		t.Fatal("multipart credential leaked when boundary metadata was missing")
+	}
+}
+
+func TestMultipartWithoutCredentialsPreservesExactBytes(t *testing.T) {
+	body := "--fixture\r\nContent-Disposition: form-data; name=description\r\n\r\nordinary text\r\n--fixture--\r\n"
+	if got := RedactBody(body, "multipart/form-data; boundary=fixture"); got != body {
+		t.Fatal("non-sensitive multipart lost byte fidelity")
 	}
 }

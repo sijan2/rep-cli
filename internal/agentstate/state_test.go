@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -167,4 +168,51 @@ func TestRegisteredWorkersCannotBypassTabCap(t *testing.T) {
 	}
 	_, err := store.Register(fixtureBrowser(), 1000, "default/worker", "session", true)
 	requireCode(t, err, "tab_cap")
+}
+
+func TestTabCapNamesOldestSafeIdleCandidateWithoutEviction(t *testing.T) {
+	store := fixtureStore(t)
+	browser := fixtureBrowser()
+	oldest := ""
+	for i := 0; i < TabCap; i++ {
+		tab, err := store.Register(browser, i+1, "default/a", "", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 3 {
+			oldest = tab.Handle
+		}
+		if err := store.Change(tab.Handle, "", func(tab *Tab) error {
+			tab.LastUsed = time.Unix(int64(i), 0)
+			switch i {
+			case 0:
+				tab.HasInput = true
+			case 1:
+				tab.Dialog = true
+			case 2:
+				tab.Lease = &Lease{ID: "fixture", Until: time.Now().Add(time.Hour)}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, allocate := range []func() error{
+		func() error { _, err := store.Register(browser, 1000, "default/a", "", true); return err },
+		func() error {
+			_, _, err := store.ReserveTransport(browser, "default/a", "", "https://fixture.test", time.Minute)
+			return err
+		},
+	} {
+		err := allocate()
+		requireCode(t, err, "tab_cap")
+		var problem *Error
+		if !errors.As(err, &problem) || len(problem.Candidates) != TabCap-3 || problem.Candidates[0] != oldest || !strings.Contains(problem.Message, oldest) {
+			t.Fatalf("unsafe or unordered idle candidates: %+v", problem)
+		}
+	}
+	state, err := store.Read()
+	if err != nil || len(state.Tabs) != TabCap {
+		t.Fatalf("cap evicted or allocated a tab: %+v %v", state, err)
+	}
 }

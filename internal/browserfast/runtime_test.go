@@ -113,6 +113,15 @@ const wireJSON=value=>JSON.stringify(value).replace(/[\u2028\u2029]/g,c=>({'\u20
   } while(cursor);
   assert.equal(offset,40);assert.equal(seen.size,40);assert.equal(first.coverage.controls_limited_by_bytes,true);
 
+  const draft=Object.assign(anchor(41),{tagName:'INPUT',type:'text',value:'unsubmitted draft'});
+  controls=[anchor(40),draft];allNodes=controls;
+  const sliced=await fast({owner:'protected-input',operation:'page',max_text:4096,limit:1});
+  assert.equal(sliced.controls.length,1);
+  assert.equal(sliced.page_state.has_input,true,'a draft outside the returned control slice must protect the tab');
+  draft.value='';
+  const cleared=await fast({owner:'protected-input',operation:'page',max_text:4096,limit:1});
+  assert.equal(cleared.page_state.has_input,false,'cleared drafts release protection');
+
   controls=[];allNodes=Array(50001).fill({shadowRoot:null});body.innerText='bounded result';
   const large=await fast({owner:'large-dom-test',operation:'page',max_text:4096,limit:40});
   assert.equal(large.status,'partial');assert.equal(large.next_cursor,undefined);

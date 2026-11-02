@@ -39,11 +39,11 @@ func TestLifecycleReservationProtectsHoldersAndBlocksRacingClaims(t *testing.T) 
 	s := &Store{Root: t.TempDir()}
 	browser := Browser{Name: "headless", Profile: "p", Epoch: "e", PrivateName: "fixture"}
 	tab, _ := s.Register(browser, 1, "fixture/other", "other-session", true)
-	if _, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute); err == nil {
+	if _, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute, false); err == nil {
 		t.Fatal("restart killed another holder")
 	}
 	_ = s.Change(tab.Handle, "", func(tab *Tab) error { tab.Closed = true; return nil })
-	id, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute)
+	id, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,11 +64,11 @@ func TestLifecycleReservationProtectsHoldersAndBlocksRacingClaims(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute); err == nil {
+	if _, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute, false); err == nil {
 		t.Fatal("restarted active same-task execute lease")
 	}
 	_ = s.Release(tab.Handle, lease)
-	if _, err := s.BeginLifecycle(browser, "fixture/a", "another-session", time.Minute); err == nil {
+	if _, err := s.BeginLifecycle(browser, "fixture/a", "another-session", time.Minute, false); err == nil {
 		t.Fatal("stopped another session's task tab")
 	}
 }
@@ -110,7 +110,7 @@ func TestLifecycleCanStopEmptyFormerlySharedTask(t *testing.T) {
 	_ = s.Remember("fixture/a", "other-session", browser)
 	tab, _ := s.Register(browser, 7, "fixture/a", "other-session", true)
 	_ = s.Change(tab.Handle, "", func(tab *Tab) error { tab.Closed = true; return nil })
-	if _, err := s.BeginLifecycle(browser, "fixture/a", "this-session", time.Minute); err != nil {
+	if _, err := s.BeginLifecycle(browser, "fixture/a", "this-session", time.Minute, false); err != nil {
 		t.Fatalf("empty shared task kept a phantom holder: %v", err)
 	}
 }
@@ -118,7 +118,7 @@ func TestLifecycleCanStopEmptyFormerlySharedTask(t *testing.T) {
 func TestTransportReservationHonorsLifecycleGuard(t *testing.T) {
 	s := &Store{Root: t.TempDir()}
 	browser := Browser{Name: "headless", Profile: "p", Epoch: "e", PrivateName: "fixture"}
-	id, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute)
+	id, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,8 +130,46 @@ func TestTransportReservationHonorsLifecycleGuard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute); err == nil {
+	if _, err := s.BeginLifecycle(browser, "fixture/a", "a", time.Minute, false); err == nil {
 		t.Fatal("restart interrupted active transport")
 	}
 	_ = s.Release(tab.Handle, lease)
+}
+
+func TestLifecycleRequiresPinForSameSessionSiblingsWithOwnedTabs(t *testing.T) {
+	s := &Store{Root: t.TempDir()}
+	browser := Browser{Name: "headless", Profile: "p", Epoch: "e", PrivateName: "fixture"}
+	const owner, session = "default/agent-shared", "agent-same-session"
+	// The parent and sibling have the same derived identity and session key.
+	// A lifecycle call therefore cannot use the session key as authorization.
+	tab, err := s.Register(browser, 7, owner, session, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.BeginLifecycle(browser, owner, session, time.Minute, false)
+	requireCode(t, err, "ambiguous_target")
+	if _, err := s.Tab(tab.Handle); err != nil {
+		t.Fatalf("refused lifecycle closed the parent's tab: %v", err)
+	}
+	id, err := s.BeginLifecycle(browser, owner, session, time.Minute, true)
+	if err != nil {
+		t.Fatalf("explicit task pin rejected: %v", err)
+	}
+	if err := s.EndLifecycle(browser, id, false); err != nil {
+		t.Fatal(err)
+	}
+	// Empty profiles are safe to start/stop without a pin; another task's
+	// existing tabs remain protected even when the caller does pin its task.
+	_, err = s.BeginLifecycle(browser, "default/another", "agent-other", time.Minute, true)
+	requireCode(t, err, "browser_in_use")
+	if err := s.Change(tab.Handle, "", func(tab *Tab) error { tab.Closed = true; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	id, err = s.BeginLifecycle(browser, owner, session, time.Minute, false)
+	if err != nil {
+		t.Fatalf("empty profile required a pin: %v", err)
+	}
+	if err := s.EndLifecycle(browser, id, false); err != nil {
+		t.Fatal(err)
+	}
 }

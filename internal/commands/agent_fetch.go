@@ -286,23 +286,7 @@ func emitCoreTransport(command *cobra.Command, result coreResult, recording *cor
 	var singleBody any
 	for _, item := range outcomes {
 		row := map[string]any{"index": item.Index, "status": item.Status, "bytes": item.Bytes, "ok": item.OK}
-		var req *store.Request
-		for i := len(requests) - 1; i >= 0; i-- {
-			r := &requests[i]
-			if r.Method == item.Method && fanoutNormalizeURL(r.URL) == fanoutNormalizeURL(item.URL) && r.Response != nil && r.Response.Status == item.Status {
-				req = r
-				break
-			}
-		}
-		// Identical-URL body variants must use the ordinal match, not the last URL.
-		if execution.Retries == 0 {
-			for i := range requests {
-				if requests[i].ID == item.RequestID {
-					req = &requests[i]
-					break
-				}
-			}
-		}
+		req := coreTransportEvidence(item, variants, requests, execution.Retries > 0)
 		if req != nil {
 			row["request_id"] = req.ID
 			bytes, contentType, evidence, e := bodyEvidence(req, false)
@@ -374,5 +358,64 @@ func emitCoreTransport(command *cobra.Command, result coreResult, recording *cor
 	}
 	result.Untrusted = singleBody
 	return emitCore(command, result)
+}
+
+// A retry changes the request order, so method/URL alone cannot distinguish
+// same-URL header variants. Match retained request inputs before attaching body
+// evidence, and leave indistinguishable variants inconclusive rather than
+// reporting the same final response as proof of several different requests.
+func coreTransportEvidence(item fanoutOutcome, variants []fanoutVariant, requests []store.Request, retried bool) *store.Request {
+	var variant *fanoutVariant
+	for i := range variants {
+		if variants[i].Index == item.Index {
+			variant = &variants[i]
+			break
+		}
+	}
+	if variant == nil {
+		return nil
+	}
+	var found *store.Request
+	for i := range requests {
+		request := &requests[i]
+		if request.Response == nil || request.Response.Status != item.Status || !coreTransportInputsMatch(*variant, request) {
+			continue
+		}
+		if !retried {
+			if request.ID == item.RequestID {
+				return request
+			}
+			continue
+		}
+		ambiguous := false
+		for _, other := range variants {
+			if other.Index != item.Index && coreTransportInputsMatch(other, request) {
+				ambiguous = true
+				break
+			}
+		}
+		if !ambiguous && (found == nil || request.StartOrdinal >= found.StartOrdinal) {
+			found = request
+		}
+	}
+	return found
+}
+
+func coreTransportInputsMatch(variant fanoutVariant, request *store.Request) bool {
+	if (request.RecordKind != "" && request.RecordKind != "http") || !strings.EqualFold(variant.Method, request.Method) || fanoutNormalizeURL(variant.URL) != fanoutNormalizeURL(request.URL) {
+		return false
+	}
+	for name, value := range variant.Headers {
+		if store.HeaderFirst(request.Headers, name) != value {
+			return false
+		}
+	}
+	if variant.Body != nil {
+		data, _, evidence, err := bodyEvidence(request, true)
+		if err != nil || evidence.State != "complete" || string(data) != *variant.Body {
+			return false
+		}
+	}
+	return true
 }
 func init() { rootCmd.AddCommand(newCoreFetchCommand()) }

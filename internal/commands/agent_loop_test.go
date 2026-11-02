@@ -7,9 +7,47 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/repplus/rep-cli/internal/agentstate"
+	"github.com/repplus/rep-cli/internal/browserfast"
 	"github.com/repplus/rep-cli/internal/browserflow"
 )
+
+func TestPageProtectionSurvivesFilteredAndPaginatedControls(t *testing.T) {
+	store := &agentstate.Store{Root: t.TempDir()}
+	browser := agentstate.Browser{Name: "headless", Profile: "protection", Epoch: "one"}
+	tab, err := store.Register(browser, 1, "default/protection", "session", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tab, lease, err := store.Reserve(browser, tab.Owner, tab.Session, tab.Handle, true, true, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Release(tab.Handle, lease)
+	// The current slice has no input controls, but there is a filled control
+	// elsewhere on the page and two visible dialogs. Neither may be adopted.
+	observation := browserfast.Result{Status: "ready", Generation: "document", URL: "https://example.test/",
+		PageState: json.RawMessage(`{"kind":"content","has_input":true,"dialogs":2}`)}
+	if _, err := buildCorePage(store, tab, lease, observation, nil, corePageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := store.Tab(tab.Handle)
+	if err != nil || !stored.HasInput || !stored.Dialog {
+		t.Fatalf("lost page protection: %+v %v", stored, err)
+	}
+	// A subsequent full-page signal can clear protection after the draft is
+	// submitted and the dialogs are dismissed.
+	observation.PageState = json.RawMessage(`{"kind":"content","has_input":false,"dialogs":0}`)
+	if _, err := buildCorePage(store, tab, lease, observation, nil, corePageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err = store.Tab(tab.Handle)
+	if err != nil || stored.HasInput || stored.Dialog {
+		t.Fatalf("protection did not clear: %+v %v", stored, err)
+	}
+}
 
 func TestCoreActorKeyContract(t *testing.T) {
 	for _, key := range []string{"Enter", "Meta+v", "Control+a", "Shift+Tab", "Control+Shift+ArrowLeft", "PageUp", "F12", "z", "9", "+", "Control++", "é", ":"} {

@@ -128,6 +128,11 @@ async function repFast(spec) {
     const controls=query('input,textarea,select,button,a[href],[role="button"],[role="tab"],[role="menuitem"]').filter(visible).length;
     const dialogs=query('[role="dialog"],[role="alertdialog"],dialog[open]').filter(visible).length;
     const password=query('input[type="password"]').filter(visible).length;
+    // Protection must describe the whole page, before find/section filtering
+    // and control pagination. Only a boolean crosses the renderer boundary.
+    const hasInput=query('input:not([type=hidden]),textarea,select,[contenteditable="true"]')
+      .some(el=>visible(el) && (el.isContentEditable ? !!text(el) :
+        el.type==='checkbox' || el.type==='radio' ? !!el.checked : !!el.value));
     const title=(document.title || '').toLowerCase();
     const body=((document.body?.innerText) || '').slice(0,4000).toLowerCase();
     const hints=[];
@@ -150,7 +155,7 @@ async function repFast(spec) {
       // so ("No results"). A shell with navigation but no text is still loading.
       : busy || textChars===0 ? 'loading'
       : 'content';
-    return {kind, hints, ready_state:document.readyState, text_chars:textChars, loading_indicators:loadingIndicators, visible_controls:controls, dialogs, password_fields:password,
+    return {kind, hints, ready_state:document.readyState, text_chars:textChars, loading_indicators:loadingIndicators, visible_controls:controls, dialogs, has_input:hasInput, password_fields:password,
       new_resources_in_window:after-before, mutations_in_window:mutations, window_ms:windowMs, basis:'in_page_signals'};
   };
   const stateKey = Symbol.for('rep.fast.v1');

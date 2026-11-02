@@ -2,6 +2,7 @@ package agentstate
 
 import (
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -41,7 +42,7 @@ func lifecycleBusy(state *State, browser Browser, now time.Time) bool {
 
 // BeginLifecycle excludes new claims/leases while a destructive lifecycle
 // operation checks holders and stops/restarts the browser. RPCs run unlocked.
-func (s *Store) BeginLifecycle(browser Browser, owner, session string, duration time.Duration) (string, error) {
+func (s *Store) BeginLifecycle(browser Browser, owner, session string, duration time.Duration, pinned bool) (string, error) {
 	id := Token("l_")
 	err := s.Update(func(state *State) error {
 		now := s.now()
@@ -63,6 +64,12 @@ func (s *Store) BeginLifecycle(browser Browser, owner, session string, duration 
 			if browser.PrivateName != "" && tab.Owner == owner && tab.Session != "" && tab.Session != session {
 				holders = append(holders, tab.Handle)
 			}
+		}
+		// Same-session siblings have indistinguishable derived identities. Require an
+		// explicit task pin before a lifecycle operation can destroy their tabs. This
+		// check shares the registry lock with claims, so a racing new tab is protected.
+		if browser.PrivateName != "" && ownTabs && !pinned && strings.HasPrefix(session, "agent-") {
+			return Failure("ambiguous_target", "pin the task before restarting or stopping a profile with owned tabs", "rep tabs")
 		}
 		if value := state.Tasks[owner]; browser.PrivateName != "" && ownTabs && value != nil {
 			for key, at := range value.Sessions {

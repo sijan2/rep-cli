@@ -1,13 +1,19 @@
 package commands
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/repplus/rep-cli/internal/agentstate"
+	"github.com/repplus/rep-cli/internal/scope"
 	"github.com/repplus/rep-cli/internal/store"
+	"github.com/spf13/cobra"
 )
 
 func TestCoreReplayWriteGuardAndMutations(t *testing.T) {
@@ -112,6 +118,20 @@ func TestCoreDownloadInferredValidation(t *testing.T) {
 	}
 }
 
+func TestCoreDownloadRefusesAnExplicitDifferentTaskBeforeNetwork(t *testing.T) {
+	_, snapshot := netFixture(t, []store.Request{netRequest("/file", "fixture")})
+	if _, err := scope.Configure(scope.Options{Workspace: "net-fixture", Task: "other"}); err != nil {
+		t.Fatal(err)
+	}
+	command := &cobra.Command{Use: "download"}
+	command.SetContext(context.Background())
+	err := coreDownload(command, snapshot.Requests[0].ID, filepath.Join(t.TempDir(), "file.txt"), false, time.Second)
+	problem, ok := err.(*agentstate.Error)
+	if !ok || problem.Code != "owned_by_other_task" {
+		t.Fatalf("cross-task download reached browser/network work: %v", err)
+	}
+}
+
 func TestCoreOriginNormalizesBrowserOrigin(t *testing.T) {
 	for input, want := range map[string]string{"http://EXAMPLE.test:80/a": "http://example.test", "https://EXAMPLE.test:443/a": "https://example.test", "http://[::1]:8080/a": "http://[::1]:8080"} {
 		got, err := coreRequestURL(input)
@@ -129,5 +149,65 @@ func TestCoreReplayHeaderMutationReplacesCaseInsensitively(t *testing.T) {
 	}
 	if source.Headers["X-Test"][0] != "old" {
 		t.Fatal("source headers mutated")
+	}
+}
+
+func TestCoreTransportRetryKeepsSameURLHeaderVariantsDistinct(t *testing.T) {
+	requests := []store.Request{}
+	for i, header := range []string{"alpha", "beta", "alpha"} {
+		request := netRequest("/same", `{"variant":"`+header+`"}`)
+		request.Headers = store.HeaderMap{"X-Variant": {header}}
+		request.StartOrdinal = int64(i + 1)
+		if i == 0 {
+			request.Response.Status = 429
+		}
+		requests = append(requests, request)
+	}
+	_, snapshot := netFixture(t, requests)
+	variants := []fanoutVariant{
+		{Index: 0, Method: "GET", URL: "https://fixture.test/same", Headers: map[string]string{"x-variant": "alpha"}},
+		{Index: 1, Method: "GET", URL: "https://fixture.test/same", Headers: map[string]string{"x-variant": "beta"}},
+	}
+	command := &cobra.Command{Use: "replay"}
+	command.SetContext(context.Background())
+	var stdout bytes.Buffer
+	command.SetOut(&stdout)
+	result := coreResult{Meta: map[string]any{}}
+	outcome := ""
+	if err := emitCoreTransport(command, result, &coreRecording{snapshot: snapshot}, variants, json.RawMessage(`{"attempted":3,"retries":1,"variants":[{"index":0,"status":200,"ok":true},{"index":1,"status":200,"ok":true}]}`), nil, &outcome); err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Meta struct {
+			Variants []struct {
+				RequestID string `json:"request_id"`
+			} `json:"variants"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if got := decoded.Meta.Variants; len(got) != 2 || got[0].RequestID != snapshot.Requests[2].ID || got[1].RequestID != snapshot.Requests[1].ID {
+		t.Fatalf("retry attached the wrong same-URL evidence: %s", stdout.String())
+	}
+}
+
+func TestCoreTransportRetryAmbiguityDoesNotClaimBodyEvidence(t *testing.T) {
+	variants := []fanoutVariant{
+		{Index: 0, Method: "GET", URL: "https://fixture.test/same"},
+		{Index: 1, Method: "GET", URL: "https://fixture.test/same"},
+	}
+	request := netRequest("/same", `{"ok":true}`)
+	request.ID = "h_last"
+	item := fanoutOutcome{Index: 0, Method: "GET", URL: request.URL, Status: 200, RequestID: request.ID}
+	if got := coreTransportEvidence(item, variants, []store.Request{request}, true); got != nil {
+		t.Fatal("indistinguishable retry variants claimed the same retained response")
+	}
+	if got := coreTransportEvidence(item, variants, []store.Request{request}, false); got == nil {
+		t.Fatal("non-retried ordinal match was discarded")
+	}
+	request.Response.Status = 429
+	if got := coreTransportEvidence(item, variants, []store.Request{request}, false); got != nil {
+		t.Fatal("ordinal match ignored a conflicting response status")
 	}
 }

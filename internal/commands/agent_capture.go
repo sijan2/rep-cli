@@ -191,22 +191,19 @@ func loadCoreCapture(handle string) (agentstate.Capture, store.Export, error) {
 	}
 	defer file.Close()
 	var snapshot store.Export
+	info, err := file.Stat()
+	if err != nil || info.Size() > browserSnapshotMaxBytes {
+		return capture, snapshot, agentstate.Failure("archive_invalid", "retained capture exceeds the archive size limit", coreNext("scope"))
+	}
 	decoder := json.NewDecoder(io.LimitReader(file, browserSnapshotMaxBytes+1))
 	err = decoder.Decode(&snapshot)
-	if err != nil {
+	if err != nil || decoder.Decode(new(any)) != io.EOF {
 		return capture, snapshot, agentstate.Failure("archive_invalid", "retained capture could not be decoded", coreNext("scope"))
 	}
 	return capture, snapshot, nil
 }
 func coreCapturedRequest(handle string) (agentstate.Capture, *store.Request, error) {
-	capture, snapshot, err := loadCoreCapture(handle)
-	if err != nil {
-		return capture, nil, err
-	}
-	for i := range snapshot.Requests {
-		if snapshot.Requests[i].ID == handle {
-			return capture, &snapshot.Requests[i], nil
-		}
-	}
-	return capture, nil, agentstate.Failure("request_not_found", "request handle is absent from its exact archive", coreNext("net", capture.ID))
+	// Network operations must validate the same exact archive/index relationship
+	// as body and net before using retained URLs, headers or request bytes.
+	return coreDataRequest(handle)
 }

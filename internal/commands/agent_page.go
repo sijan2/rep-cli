@@ -246,6 +246,14 @@ func buildCorePage(store *agentstate.Store, tab *agentstate.Tab, lease string, o
 		}
 		controls[i] = item
 	}
+	var protection struct {
+		HasInput *bool `json:"has_input"`
+		Dialogs  int   `json:"dialogs"`
+	}
+	_ = json.Unmarshal(observed.PageState, &protection)
+	if protection.HasInput != nil {
+		hasInput = *protection.HasInput
+	}
 	var coverage struct {
 		Offset            int `json:"text_offset"`
 		Controls          int `json:"control_offset"`
@@ -284,7 +292,7 @@ func buildCorePage(store *agentstate.Store, tab *agentstate.Tab, lease string, o
 	if err := store.Change(tab.Handle, lease, func(stored *agentstate.Tab) error {
 		stored.URL = observed.URL
 		stored.HasInput = hasInput
-		stored.Dialog = strings.Contains(string(observed.PageState), `"dialogs":1`)
+		stored.Dialog = protection.Dialogs > 0
 		return nil
 	}); err != nil {
 		return coreResult{}, err

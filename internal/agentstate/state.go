@@ -290,6 +290,31 @@ func (s *Store) Remembered(owner string) (*Browser, error) {
 }
 func tabHandle(n uint64) string     { return fmt.Sprintf("t%d", n) }
 func sameBrowser(a, b Browser) bool { return a.Profile == b.Profile && a.Epoch == b.Epoch }
+
+// tabCapFailure names safe idle candidates without evicting a tab. Protected
+// input, dialogs, active leases and user-created tabs are never close suggestions.
+func tabCapFailure(state *State, browser Browser, owner string, now time.Time) *Error {
+	idle := []*Tab{}
+	for _, tab := range state.Tabs {
+		if tab.Owner == owner && !tab.Closed && sameBrowser(tab.Browser, browser) && tab.CreatedByRep && !tab.Busy(now) && !tab.HasInput && !tab.Dialog {
+			idle = append(idle, tab)
+		}
+	}
+	sort.Slice(idle, func(i, j int) bool {
+		if idle[i].LastUsed.Equal(idle[j].LastUsed) {
+			return idle[i].Handle < idle[j].Handle
+		}
+		return idle[i].LastUsed.Before(idle[j].LastUsed)
+	})
+	problem := Failure("tab_cap", "task tab cap reached; inspect the owned tabs", "rep tabs")
+	if len(idle) > 0 {
+		problem.Message = "task tab cap reached; oldest idle tab is " + idle[0].Handle
+		for _, tab := range idle {
+			problem.Candidates = append(problem.Candidates, tab.Handle)
+		}
+	}
+	return problem
+}
 func (s *Store) Register(browser Browser, chromeID int, owner, session string, created bool) (*Tab, error) {
 	var result *Tab
 	err := s.Update(func(state *State) error {
@@ -315,7 +340,7 @@ func (s *Store) Register(browser Browser, chromeID int, owner, session string, c
 			}
 		}
 		if count >= TabCap {
-			return Failure("tab_cap", "task tab cap reached; close an idle tab", "rep tabs")
+			return tabCapFailure(state, browser, owner, s.now())
 		}
 		state.NextTab++
 		result = &Tab{Handle: fmt.Sprintf("t%d", state.NextTab), Browser: browser, ChromeID: chromeID, Owner: owner, Session: session, Created: s.now(), LastUsed: s.now(), CreatedByRep: created, Refs: map[string]Ref{}}
@@ -413,7 +438,7 @@ func (s *Store) Reserve(browser Browser, owner, session, explicit string, pinned
 					}
 				}
 				if count >= TabCap {
-					return Failure("tab_cap", "task tab cap reached; close an idle tab", "rep tabs")
+					return tabCapFailure(state, browser, owner, s.now())
 				}
 				state.NextTab++
 				result = &Tab{Handle: fmt.Sprintf("t%d", state.NextTab), Browser: browser, ChromeID: -1, Owner: owner, Session: session, Created: now, CreatedByRep: true, Refs: map[string]Ref{}}

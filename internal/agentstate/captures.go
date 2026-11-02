@@ -92,7 +92,7 @@ func (s *Store) ReserveTransport(browser Browser, owner, session, origin string,
 		}
 		if result == nil {
 			if count >= TabCap {
-				return Failure("tab_cap", "task tab cap reached; close an idle tab", "rep tabs")
+				return tabCapFailure(state, browser, owner, s.now())
 			}
 			state.NextTab++
 			result = &Tab{Handle: fmt.Sprintf("t%d", state.NextTab), Browser: browser, ChromeID: -1, Owner: owner, Session: session, Created: s.now(), CreatedByRep: true, TransportOrigin: origin, Refs: map[string]Ref{}}
