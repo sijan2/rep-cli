@@ -204,7 +204,7 @@ func TestDoctorUnstartedPrivateProfileEmitsOneFailureObject(t *testing.T) {
 }
 
 func TestDoctorRealProfileReloadRequiresLiveStaleUnleasedBridge(t *testing.T) {
-	for _, scenario := range []string{"current", "stale", "capture", "lease", "pending", "offline"} {
+	for _, scenario := range []string{"current", "stale", "missing-digest", "missing-metadata", "bad-metadata", "capture", "lease", "pending", "offline"} {
 		t.Run(scenario, func(t *testing.T) {
 			dir, err := os.MkdirTemp("", "doc-")
 			if err != nil {
@@ -227,6 +227,19 @@ func TestDoctorRealProfileReloadRequiresLiveStaleUnleasedBridge(t *testing.T) {
 			registry := bridge.Registry{PID: os.Getpid(), Browser: "dia", ProfileID: "profile", Epoch: "epoch", BuildDigest: digest, Socket: filepath.Join(dir, "s")}
 			if scenario != "current" {
 				registry.BuildDigest = "old"
+			}
+			if scenario == "missing-digest" {
+				registry.BuildDigest = ""
+			}
+			metadata := filepath.Join(extension, "build-info.json")
+			if scenario != "missing-metadata" {
+				data, _ := json.Marshal(map[string]string{"digest": registry.BuildDigest})
+				if scenario == "bad-metadata" {
+					data = []byte("{")
+				}
+				if err := os.WriteFile(metadata, data, 0600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			registryDir := filepath.Join(dir, "bridges")
 			_ = os.MkdirAll(registryDir, 0700)
@@ -266,7 +279,14 @@ func TestDoctorRealProfileReloadRequiresLiveStaleUnleasedBridge(t *testing.T) {
 								}
 							case "browser.reload-extension":
 								reloads.Add(1)
-								registry.BuildDigest = digest
+								// Match the real worker: reload advertises the on-disk
+								// metadata, not the digest doctor hopes to see.
+								var info struct {
+									Digest string `json:"digest"`
+								}
+								data, _ := os.ReadFile(metadata)
+								_ = json.Unmarshal(data, &info)
+								registry.BuildDigest = info.Digest
 								publish()
 							}
 							_ = json.NewEncoder(conn).Encode(bridge.RPCResponse{ID: req.ID, Result: json.RawMessage(value)})
@@ -279,7 +299,7 @@ func TestDoctorRealProfileReloadRequiresLiveStaleUnleasedBridge(t *testing.T) {
 			out := new(bytes.Buffer)
 			cmd.SetOut(out)
 			err = coreDoctorWith(cmd, coreDoctorOptions{host, func(string) ([]string, error) { return []string{filepath.Join(dir, "native", "host.json")}, nil }, 150 * time.Millisecond})
-			if scenario == "stale" {
+			if scenario == "stale" || scenario == "missing-digest" || scenario == "missing-metadata" || scenario == "bad-metadata" {
 				if err != nil || reloads.Load() != 1 || !strings.Contains(out.String(), "extension_reloaded") {
 					t.Fatalf("stale reload: %v %d %s", err, reloads.Load(), out)
 				}

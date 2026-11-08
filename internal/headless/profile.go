@@ -1,10 +1,12 @@
 package headless
 
 import (
-	"github.com/repplus/rep-cli/internal/scope"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/repplus/rep-cli/internal/scope"
 )
 
 // NamedProfileDir is independent of an agent session, allowing sign-ins to
@@ -45,6 +47,45 @@ func Inspect(dataDir string) (Status, error) {
 
 // ExtensionDigest uses the same source digest advertised by extension hello.
 func ExtensionDigest(directory string) (string, error) { return extensionDigest(directory) }
+
+// PrepareExtension refreshes the metadata read by the worker on startup. Source
+// edits otherwise survive a reload with the old advertised digest, making doctor
+// time out waiting for a version the worker cannot announce. Publish atomically so
+// another worker starting during repair never reads a partial JSON document.
+func PrepareExtension(directory string) (digest string, changed bool, err error) {
+	digest, err = extensionDigest(directory)
+	if err != nil {
+		return "", false, err
+	}
+	path := filepath.Join(directory, "build-info.json")
+	var info struct {
+		Digest string `json:"digest"`
+	}
+	if data, e := os.ReadFile(path); e == nil && json.Unmarshal(data, &info) == nil && info.Digest == digest {
+		return digest, false, nil
+	}
+	info.Digest = digest
+	data, err := json.Marshal(info)
+	if err != nil {
+		return "", false, err
+	}
+	file, err := os.CreateTemp(directory, ".build-info-*")
+	if err != nil {
+		return "", false, err
+	}
+	defer os.Remove(file.Name())
+	if _, err = file.Write(append(data, '\n')); err != nil {
+		file.Close()
+		return "", false, err
+	}
+	if err = file.Close(); err != nil {
+		return "", false, err
+	}
+	if err = os.Rename(file.Name(), path); err != nil {
+		return "", false, err
+	}
+	return digest, true, nil
+}
 
 // ConfiguredExtension is recorded by installation; discovery is only a legacy
 // fallback, so doctor and private profiles do not depend on the working directory.

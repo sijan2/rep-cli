@@ -178,7 +178,7 @@ func coreDoctorWith(cmd *cobra.Command, options coreDoctorOptions) error {
 		}
 	} else if err == nil {
 		digest, e := headless.ExtensionDigest(coreExtensionPath())
-		if e == nil && client.Registry.BuildDigest != "" && client.Registry.BuildDigest != digest {
+		if e == nil && client.Registry.BuildDigest != digest {
 			reservation, e := store.BeginLifecycle(browser, selected.Identity(), selected.SessionKey, 15*time.Second, selected.TaskSource == "flag")
 			if e != nil {
 				return e
@@ -186,6 +186,14 @@ func coreDoctorWith(cmd *cobra.Command, options coreDoctorOptions) error {
 			defer store.EndLifecycle(browser, reservation, false)
 			if e = coreReloadGuard(ctx, client); e != nil {
 				return e
+			}
+			var changed bool
+			digest, changed, e = headless.PrepareExtension(coreExtensionPath())
+			if e != nil {
+				return e
+			}
+			if changed {
+				fixed = append(fixed, "extension_build_metadata")
 			}
 			var ignored any
 			if e = client.Call(ctx, "browser.reload-extension", nil, &ignored); e != nil {

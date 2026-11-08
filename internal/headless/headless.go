@@ -338,7 +338,7 @@ func startLocked(ctx context.Context, dataDir string, options Options) (Status, 
 	if err := discardSessionRestore(profile); err != nil {
 		return Status{}, err
 	}
-	digest, err := extensionDigest(options.Extension)
+	digest, _, err := PrepareExtension(options.Extension)
 	if err != nil {
 		return Status{}, fmt.Errorf("read Rep extension source: %w", err)
 	}
