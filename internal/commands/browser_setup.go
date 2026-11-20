@@ -40,6 +40,7 @@ var (
 	installExtensionID   string
 	installExtensionPath string
 	installHostPath      string
+	installUserDataDir   string
 )
 
 var browserDoctorCmd = &cobra.Command{
@@ -154,6 +155,12 @@ extension ID from its canonical path. --extension-id accepts an explicit
 		if err != nil {
 			return output.EmitAgentError(os.Stdout, output.NewAgentError(output.ErrCodeInvalidArgument, "browser install", err.Error()), getOutputMode() == "json")
 		}
+		if installUserDataDir != "" {
+			// A browser started with --user-data-dir reads user-level hosts
+			// from that directory instead of the default profile location.
+			dir, _ := filepath.Abs(installUserDataDir)
+			targets = append(targets, filepath.Join(dir, "NativeMessagingHosts", "com.repplus.host.json"))
+		}
 		manifest := nativeHostManifest{
 			Name: "com.repplus.host", Description: "rep+ Native Messaging Host for CLI browser control",
 			Path: hostPath, Type: "stdio", AllowedOrigins: []string{"chrome-extension://" + extensionID + "/"},
@@ -236,24 +243,59 @@ func nativeManifestPaths(selector string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := filepath.Join(home, "Library", "Application Support")
-	paths := map[string]string{
-		// Dia keeps Chrome's branding paths and reads Chrome's user-level native
-		// hosts, so it shares this manifest with Chrome.
-		"dia":      filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", "com.repplus.host.json"),
-		"arc":      filepath.Join(base, "Arc", "NativeMessagingHosts", "com.repplus.host.json"),
-		"chrome":   filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", "com.repplus.host.json"),
-		"chromium": filepath.Join(base, "Chromium", "NativeMessagingHosts", "com.repplus.host.json"),
-		"edge":     filepath.Join(base, "Microsoft Edge", "NativeMessagingHosts", "com.repplus.host.json"),
-		"brave":    filepath.Join(base, "BraveSoftware", "Brave-Browser", "NativeMessagingHosts", "com.repplus.host.json"),
+	return nativeManifestPathsFor(runtime.GOOS, home, os.Getenv("XDG_CONFIG_HOME"), selector)
+}
+
+func nativeManifestPathsFor(goos, home, xdgConfig, selector string) ([]string, error) {
+	const file = "com.repplus.host.json"
+	var paths map[string]string
+	defaults := []string{"dia", "arc", "chromium"}
+	if goos == "linux" {
+		// Linux browsers read user-level hosts from their config directory.
+		// Dia does not ship for Linux; its default selector maps to Chrome so
+		// a plain install works. Arc is unavailable.
+		base := xdgConfig
+		if base == "" {
+			base = filepath.Join(home, ".config")
+		}
+		paths = map[string]string{
+			"dia":      filepath.Join(base, "google-chrome", "NativeMessagingHosts", file),
+			"chrome":   filepath.Join(base, "google-chrome", "NativeMessagingHosts", file),
+			"chromium": filepath.Join(base, "chromium", "NativeMessagingHosts", file),
+			"edge":     filepath.Join(base, "microsoft-edge", "NativeMessagingHosts", file),
+			"brave":    filepath.Join(base, "BraveSoftware", "Brave-Browser", "NativeMessagingHosts", file),
+		}
+		defaults = []string{"chrome", "chromium"}
+	} else {
+		base := filepath.Join(home, "Library", "Application Support")
+		paths = map[string]string{
+			// Dia keeps Chrome's branding paths and reads Chrome's user-level native
+			// hosts, so it shares this manifest with Chrome.
+			"dia":      filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", file),
+			"arc":      filepath.Join(base, "Arc", "NativeMessagingHosts", file),
+			"chrome":   filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", file),
+			"chromium": filepath.Join(base, "Chromium", "NativeMessagingHosts", file),
+			"edge":     filepath.Join(base, "Microsoft Edge", "NativeMessagingHosts", file),
+			"brave":    filepath.Join(base, "BraveSoftware", "Brave-Browser", "NativeMessagingHosts", file),
+		}
 	}
 	selector = strings.ToLower(strings.TrimSpace(selector))
 	if selector == "" || selector == "any" || selector == "all" {
-		return []string{paths["dia"], paths["arc"], paths["chromium"]}, nil
+		selected := make([]string, 0, len(defaults))
+		for _, name := range defaults {
+			selected = append(selected, paths[name])
+		}
+		return selected, nil
 	}
 	path, ok := paths[selector]
 	if !ok {
-		return nil, fmt.Errorf("unsupported browser %q (want dia, arc, chrome, chromium, edge, brave, or any)", selector)
+		names := make([]string, 0, len(paths))
+		for _, name := range []string{"dia", "arc", "chrome", "chromium", "edge", "brave"} {
+			if _, present := paths[name]; present {
+				names = append(names, name)
+			}
+		}
+		return nil, fmt.Errorf("unsupported browser %q on %s (want %s, or any)", selector, goos, strings.Join(names, ", "))
 	}
 	return []string{path}, nil
 }
@@ -283,11 +325,11 @@ func browserForManifestPath(path string) string {
 		return "dia"
 	case strings.Contains(lower, "/arc/"):
 		return "arc"
-	case strings.Contains(lower, "/google/chrome/"):
+	case strings.Contains(lower, "/google/chrome/"), strings.Contains(lower, "/google-chrome/"):
 		return "chrome"
 	case strings.Contains(lower, "/chromium/"):
 		return "chromium"
-	case strings.Contains(lower, "/microsoft edge/"):
+	case strings.Contains(lower, "/microsoft edge/"), strings.Contains(lower, "/microsoft-edge/"):
 		return "edge"
 	case strings.Contains(lower, "/bravesoftware/"):
 		return "brave"
@@ -384,4 +426,5 @@ func init() {
 	browserInstallCmd.Flags().StringVar(&installExtensionID, "extension-id", "", "Explicit unpacked/store extension ID")
 	browserInstallCmd.Flags().StringVar(&installExtensionPath, "extension-path", "", "Path to unpacked extension (derives its stable ID)")
 	browserInstallCmd.Flags().StringVar(&installHostPath, "host-path", "", "Path to rep-host (default: next to rep)")
+	browserInstallCmd.Flags().StringVar(&installUserDataDir, "user-data-dir", "", "Also install into a browser started with --user-data-dir=DIR")
 }

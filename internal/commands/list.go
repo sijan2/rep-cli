@@ -529,7 +529,7 @@ func printRequest(req *store.Request, mode store.OutputMode) {
 		fmt.Println("  Request Body:")
 		body := req.Body
 		if mode == store.OutputCompact && len(body) > 200 {
-			body = body[:200] + fmt.Sprintf("\n    [...truncated, %s total]", output.FormatBodySize(len(req.Body)))
+			body = output.TruncateUTF8(body, 200) + fmt.Sprintf("\n    [...truncated, %s total]", output.FormatBodySize(len(req.Body)))
 		}
 		body = output.SanitizeText(body)
 		for _, line := range strings.Split(body, "\n") {

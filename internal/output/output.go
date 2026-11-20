@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/bytedance/sonic"
 	"github.com/repplus/rep-cli/internal/store"
@@ -56,6 +57,22 @@ func FormatBodySize(size int) string {
 	}
 }
 
+// TruncateUTF8 returns at most limit bytes of text without splitting a
+// multi-byte UTF-8 sequence, so truncated previews stay valid UTF-8/JSON.
+func TruncateUTF8(text string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if len(text) <= limit {
+		return text
+	}
+	cut := limit
+	for cut > 0 && cut > limit-utf8.UTFMax && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
+}
+
 func TruncateBodyInfo(body, contentType string, cfg store.TruncateConfig) (string, TruncationInfo) {
 	info := TruncationInfo{Reason: "none", Returned: len(body), Total: len(body)}
 	if cfg.BinaryAsLabel && IsBinaryContentType(contentType) {
@@ -67,14 +84,15 @@ func TruncateBodyInfo(body, contentType string, cfg store.TruncateConfig) (strin
 	if cfg.MaxBodySize <= 0 || len(body) <= cfg.MaxBodySize {
 		return body, info
 	}
-	truncated := body[:cfg.MaxBodySize]
+	truncated := TruncateUTF8(body, cfg.MaxBodySize)
+	returned := len(truncated)
 	if cfg.ShowFullSize {
 		truncated += fmt.Sprintf("\n[...truncated, %s total]", FormatBodySize(len(body)))
 	} else {
 		truncated += "\n[...truncated]"
 	}
 	info.Reason = "size-cap"
-	info.Returned = cfg.MaxBodySize
+	info.Returned = returned
 	return truncated, info
 }
 

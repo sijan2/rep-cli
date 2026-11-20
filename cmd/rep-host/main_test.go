@@ -59,3 +59,22 @@ func TestAmbientResumeStartsAfterFinishedSession(t *testing.T) {
 		t.Fatalf("ambient resume did not start a fresh session: %+v", liveData)
 	}
 }
+
+func TestBrowserFromCommand(t *testing.T) {
+	cases := map[string]string{
+		"/Applications/Dia.app/Contents/MacOS/Dia":           "dia",
+		"/opt/google/chrome/chrome --type=renderer":          "chrome",
+		"/usr/lib/chromium/chromium --enable-features=x":     "chromium",
+		"/snap/chromium/123/usr/lib/chromium-browser/chrome": "chromium",
+		"/opt/microsoft/msedge/msedge":                       "edge",
+		"/opt/brave.com/brave/brave":                         "brave",
+	}
+	for command, want := range cases {
+		if got, _, ok := browserFromCommand(command); !ok || got != want {
+			t.Errorf("browserFromCommand(%q) = %q, %v; want %q", command, got, ok, want)
+		}
+	}
+	if _, _, ok := browserFromCommand("/usr/bin/bash -c rep-host"); ok {
+		t.Error("shell should not be detected as a browser")
+	}
+}

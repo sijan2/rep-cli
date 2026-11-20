@@ -1070,24 +1070,35 @@ func detectBrowserFromParents() (string, string) {
 			break
 		}
 		parentPID, _ := strconv.Atoi(parts[0])
-		command := strings.ToLower(strings.Join(parts[1:], " "))
-		switch {
-		case strings.Contains(command, "/dia.app/"):
-			return "dia", "Dia"
-		case strings.Contains(command, "/arc.app/"):
-			return "arc", "Arc"
-		case strings.Contains(command, "/google chrome.app/"):
-			return "chrome", "Google Chrome"
-		case strings.Contains(command, "/chromium.app/"):
-			return "chromium", "Chromium"
-		case strings.Contains(command, "/microsoft edge.app/"):
-			return "edge", "Microsoft Edge"
-		case strings.Contains(command, "/brave browser.app/"):
-			return "brave", "Brave"
+		if browser, label, ok := browserFromCommand(strings.Join(parts[1:], " ")); ok {
+			return browser, label
 		}
 		pid = parentPID
 	}
 	return "chromium", "Chromium-compatible browser"
+}
+
+func browserFromCommand(command string) (string, string, bool) {
+	command = strings.ToLower(command)
+	switch {
+	case strings.Contains(command, "/dia.app/"):
+		return "dia", "Dia", true
+	case strings.Contains(command, "/arc.app/"):
+		return "arc", "Arc", true
+	case strings.Contains(command, "/google chrome.app/"),
+		strings.Contains(command, "/opt/google/chrome/"), strings.Contains(command, "/google-chrome"):
+		return "chrome", "Google Chrome", true
+	case strings.Contains(command, "/chromium.app/"),
+		strings.Contains(command, "/chromium/chromium"), strings.Contains(command, "/chromium-browser"), strings.HasSuffix(strings.Fields(command)[0], "/chromium"):
+		return "chromium", "Chromium", true
+	case strings.Contains(command, "/microsoft edge.app/"),
+		strings.Contains(command, "/opt/microsoft/msedge/"), strings.Contains(command, "/microsoft-edge"):
+		return "edge", "Microsoft Edge", true
+	case strings.Contains(command, "/brave browser.app/"),
+		strings.Contains(command, "/brave.com/brave/"), strings.Contains(command, "/brave-browser"):
+		return "brave", "Brave", true
+	}
+	return "", "", false
 }
 
 func logError(context string, err error) {

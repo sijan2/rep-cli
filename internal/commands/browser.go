@@ -53,7 +53,16 @@ type browserFetchFlags struct {
 	WebRTCMedia      bool
 }
 
-const defaultBrowser = "dia"
+// defaultBrowser is dia unless REP_BROWSER names another bridge (for example
+// headless or any), so agents need not repeat --browser on every command.
+var defaultBrowser = defaultBrowserFromEnv()
+
+func defaultBrowserFromEnv() string {
+	if selected := strings.ToLower(strings.TrimSpace(os.Getenv("REP_BROWSER"))); selected != "" {
+		return selected
+	}
+	return "dia"
+}
 
 var (
 	browserSelector string
@@ -74,7 +83,7 @@ var browserCmd = &cobra.Command{
   rep browser interact flow.json --tab ID --apply
   rep browser capture open <url> --keep-tab
 
-Use --raw-json for plain JSON; Dia is the default. Capture, raw protocol controls,
+Use --raw-json for plain JSON; Dia is the default (set REP_BROWSER to change it). Capture, raw protocol controls,
 and browser management have separate groups. Advanced tuning flags remain
 available through 'rep describe browser' and 'rep describe interact'.`,
 }
