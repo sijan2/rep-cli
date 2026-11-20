@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -92,7 +93,12 @@ func newBrowserEvaluationCommandWithCapture(capture bool, shared *browserCapture
 			return emitBrowserArgumentError("browser "+name, err)
 		}
 		params["expression"], params["await_promise"], params["return_by_value"] = expression, options.AwaitPromise, options.ReturnByValue
-		params["user_gesture"], params["repl_mode"] = options.UserGesture, options.REPLMode
+		replMode := options.REPLMode
+		if !cmd.Flags().Changed("repl") && hasTopLevelAwait(expression) {
+			// Top-level await is a SyntaxError outside REPL parsing; agents write it naturally.
+			replMode = true
+		}
+		params["user_gesture"], params["repl_mode"] = options.UserGesture, replMode
 		timeout := options.Timeout
 		if capture {
 			timeout = shared.Timeout
@@ -264,4 +270,13 @@ func printBrowserJSON(value interface{}) {
 	if err == nil {
 		fmt.Println(string(data))
 	}
+}
+
+var awaitKeyword = regexp.MustCompile(`(^|[^\w$.])await\b`)
+var asyncScope = regexp.MustCompile(`\basync\b`)
+
+// hasTopLevelAwait reports an await outside any async function; expressions
+// that already declare an async scope keep the default parser.
+func hasTopLevelAwait(expression string) bool {
+	return awaitKeyword.MatchString(expression) && !asyncScope.MatchString(expression)
 }

@@ -3,6 +3,7 @@ package output
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/repplus/rep-cli/internal/store"
 )
@@ -244,5 +245,22 @@ func TestFormatSourceLine(t *testing.T) {
 	}
 	if got := FormatSourceLine("saved/abc123"); got != "source: saved/abc123" {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestTruncateUTF8KeepsRunes(t *testing.T) {
+	text := "ab\u00e9\u4e16z"
+	for limit := 0; limit <= len(text); limit++ {
+		got := TruncateUTF8(text, limit)
+		if !utf8.ValidString(got) || len(got) > limit {
+			t.Fatalf("TruncateUTF8(%d) = %q", limit, got)
+		}
+	}
+	if got := TruncateUTF8(text, 3); got != "ab" {
+		t.Fatalf("split rune kept: %q", got)
+	}
+	body, info := TruncateBodyInfo(strings.Repeat("\u00e9", 10), "text/plain", store.TruncateConfig{MaxBodySize: 5})
+	if !utf8.ValidString(body) || info.Returned != 4 {
+		t.Fatalf("TruncateBodyInfo = %q, %+v", body, info)
 	}
 }

@@ -71,3 +71,20 @@ func TestDeriveExtensionIDMatchesRepPath(t *testing.T) {
 		t.Fatalf("got %s", id)
 	}
 }
+
+func TestLinuxNativeManifestPaths(t *testing.T) {
+	paths, err := nativeManifestPathsFor("linux", "/home/u", "", "chrome")
+	if err != nil || len(paths) != 1 || paths[0] != "/home/u/.config/google-chrome/NativeMessagingHosts/com.repplus.host.json" {
+		t.Fatalf("chrome paths = %v, %v", paths, err)
+	}
+	paths, err = nativeManifestPathsFor("linux", "/home/u", "/xdg", "any")
+	if err != nil || len(paths) != 2 || paths[1] != "/xdg/chromium/NativeMessagingHosts/com.repplus.host.json" {
+		t.Fatalf("any paths = %v, %v", paths, err)
+	}
+	if _, err := nativeManifestPathsFor("linux", "/home/u", "", "arc"); err == nil {
+		t.Fatal("arc should be unsupported on linux")
+	}
+	if got := browserForManifestPath(paths[0]); got != "chrome" {
+		t.Fatalf("browserForManifestPath = %q", got)
+	}
+}
