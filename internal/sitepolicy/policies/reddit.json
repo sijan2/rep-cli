@@ -1,0 +1,41 @@
+{
+  "id": "reddit",
+  "version": "1",
+  "hosts": ["www.reddit.com", "old.reddit.com", "new.reddit.com", "sh.reddit.com", "reddit.com"],
+  "tos_risk": "high",
+  "replay": "never",
+  "signature_headers": [],
+  "body_ops": [
+    {"op": "thread", "method": "GET", "host": "reddit.com", "path_re": "^/r/[^/]+/comments/[^/]+", "types": ["Document"], "decoder": "reddit_html"},
+    {"op": "more_comments", "method": "POST", "host": "reddit.com", "path_re": "^/svc/shreddit/more-comments/", "types": ["XHR", "Fetch"], "decoder": "reddit_html"},
+    {"op": "comments", "method": "GET", "host": "reddit.com", "path_re": "^/svc/shreddit/comments/", "types": ["XHR", "Fetch"], "decoder": "reddit_html"}
+  ],
+  "private_paths": [
+    "chat.reddit.com",
+    "reddit.com/chat",
+    "/message/",
+    "/notifications",
+    "/svc/shreddit/inbox",
+    "header-action-item-",
+    "user-drawer",
+    "matrix.redditspace.com"
+  ],
+  "primary": {"op": "thread", "path_re": "^/r/[^/]+/comments/[^/]+"},
+  "inputs": ["sub", "t3"],
+  "continuations": [
+    {"kind": "branch", "selector": "shreddit-comment faceplate-partial[src*=\"/svc/shreddit/more-comments/\"] button", "trigger": "click"},
+    {"kind": "top_level", "selector": "shreddit-comment-tree > faceplate-partial[src*=\"/svc/shreddit/more-comments/\"] button", "trigger": "click"},
+    {"kind": "continue_thread", "selector": "shreddit-comment a[href*=\"/comment/\"]", "trigger": "navigate"}
+  ],
+  "dom_keys": {"container": "shreddit-comment", "key": "thingid", "post": "shreddit-post", "count": "totalcomments"},
+  "contracts": {"id": 0, "parent": 0.01, "author": 0.05, "time": 0.05, "text": 0.1, "unknown_share": 0.1},
+  "expected": "comment_count",
+  "pacing": {"min_interval_ms": 800, "max_in_flight": 1, "advances_per_read": 40, "reserve_min": 0, "reserve_fraction": 0, "daily_records": 3000},
+  "stop": {
+    "statuses": [401, 403, 429],
+    "headers": ["cf-mitigated"],
+    "title_contains": ["Prove your humanity", "blocked by network security"],
+    "redirect_path_prefixes": ["/login"],
+    "redirect_query_keys": ["rdt"]
+  }
+}

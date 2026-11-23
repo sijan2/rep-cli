@@ -17,6 +17,13 @@ func newCoreReplayCommand() *cobra.Command {
 	var write bool
 	var timeout time.Duration
 	command := &cobra.Command{Use: "replay h_ID", Short: "Replay captured traffic in its browser session; writes need --write", Args: cobra.ExactArgs(1)}
+	command.Long = `Start with a request handle returned by rep net. Repeat --set to change headers,
+query parameters, body paths, or the HTTP method. --matrix fans out one mutation
+path across a JSON array of values. Browser cookies come from the selected
+profile. Writes require --write and run sequentially without automatic retries.`
+	command.Example = `  rep replay h_ID --set 'query.page=2'
+  rep replay h_ID --matrix 'query.page=[1,2,3]'
+  rep replay h_ID --set 'body.title=Updated' --write`
 	command.Flags().StringArrayVar(&sets, "set", nil, "Mutation header.NAME, query.NAME, body.PATH, or method=METHOD")
 	command.Flags().StringVar(&matrix, "matrix", "", "One variant per value: PATH=[v1,v2,...]")
 	command.Flags().BoolVar(&write, "write", false, "Permit sequential unsafe requests; never retry")
@@ -38,6 +45,7 @@ func coreReplay(command *cobra.Command, handle string, sets []string, matrix str
 	if selected.Identity() != capture.Owner {
 		return agentstate.Failure("owned_by_other_task", "explicit task does not own this capture", coreNext("scope"))
 	}
+
 	variants, origin, err := coreReplayVariants(source, sets, matrix, write)
 	if err != nil {
 		return err
@@ -126,6 +134,13 @@ func coreReplayVariants(source *store.Request, sets []string, matrix string, wri
 				return nil, "", e
 			}
 			mutations = append(mutations, m)
+		}
+		for _, change := range mutations {
+			if change.kind == "header" {
+				if err := validateExplicitTransportHeader(change.key, change.value); err != nil {
+					return nil, "", err
+				}
+			}
 		}
 		modified, e := applyMutations(&copy, mutations)
 		if e != nil {

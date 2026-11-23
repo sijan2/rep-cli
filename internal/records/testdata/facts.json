@@ -1,0 +1,712 @@
+{
+  "_about": "Expected facts per fixture, computed by scripts/sanitize_records_fixtures.py from the fixture files themselves with a regex tag scan (HTML) or a JSON walk (X), independently of the sanitizer's transformation code. Decoder tests assert against these values.",
+  "_cross": {
+    "reddit_sorts_shared_ids": 56,
+    "reddit_sorts_union_ids": 144
+  },
+  "reddit_challenge.synthetic.html": {
+    "body_slots": 0,
+    "bytes": 772,
+    "comments": 0,
+    "comments_with_body": 0,
+    "deleted": 0,
+    "derived_depth_mismatches": 0,
+    "derived_depth_unresolved": 0,
+    "expect": {
+      "class": "challenge"
+    },
+    "expected": {
+      "comment_tree_stats_total_comments": null,
+      "comment_tree_totalComments": null,
+      "shreddit_post_comment_count": null
+    },
+    "loaders": {
+      "branch": 0,
+      "branch_hint_sum": 0,
+      "branch_hints": [],
+      "branch_with_button": 0,
+      "exactly_one_hidden_cursor_input": 0,
+      "faceplate_numbers_agree": 0,
+      "faceplate_numbers_in_loaders": 0,
+      "item_columns": ["cursor", "kind", "parent", "parent_wire_depth", "hint", "startingDepth", "query"],
+      "items": [],
+      "method_post": 0,
+      "param_sets": {},
+      "paths": [],
+      "slots": {},
+      "src_entity_encoded": 0,
+      "top_level": 0,
+      "top_level_ids": [],
+      "top_level_params": [],
+      "total": 0,
+      "tracker_noun_counts": {},
+      "with_sort_startingDepth_seeker_session": 0
+    },
+    "markers": {
+      "over18": 0,
+      "prove_your_humanity_text": 2,
+      "quarantine_text": 0
+    },
+    "nesting_parent_equals_parentId": 0,
+    "page_class": "challenge",
+    "parents_outside_document": [],
+    "partials": {
+      "banned_user_banner": 0,
+      "challenge_prompt": 0,
+      "human_verification_dialog": 0,
+      "other": 0,
+      "private": 0
+    },
+    "permalink_anchors": {
+      "continue_thread": 0,
+      "continue_thread_parents": [],
+      "loader_fallback": 0,
+      "loader_fallback_parents": [],
+      "number_sum": 0,
+      "points_at_own_parent": 0,
+      "total": 0,
+      "tracker_noun_counts": {},
+      "with_number": 0
+    },
+    "post": {
+      "present": false
+    },
+    "records": [],
+    "repeated_thing_ids": {},
+    "text_nonspace_chars_total": 0,
+    "thingId_attrs_camelcase": 0,
+    "thingid_attrs_lowercase": 0,
+    "top_level": 0,
+    "top_level_with_t3_postId": 0,
+    "unique_thing_ids": 0,
+    "wire_depth_histogram": {},
+    "wire_depth_histogram_unique": {},
+    "with_parentId": 0
+  },
+  "reddit_gated.synthetic.html": {
+    "body_slots": 0,
+    "bytes": 2450,
+    "comments": 0,
+    "comments_with_body": 0,
+    "deleted": 0,
+    "derived_depth_mismatches": 0,
+    "derived_depth_unresolved": 0,
+    "expect": {
+      "class": "gated",
+      "reason": "over18"
+    },
+    "expected": {
+      "comment_tree_stats_total_comments": null,
+      "comment_tree_totalComments": null,
+      "shreddit_post_comment_count": 57
+    },
+    "loaders": {
+      "branch": 0,
+      "branch_hint_sum": 0,
+      "branch_hints": [],
+      "branch_with_button": 0,
+      "exactly_one_hidden_cursor_input": 0,
+      "faceplate_numbers_agree": 0,
+      "faceplate_numbers_in_loaders": 0,
+      "item_columns": ["cursor", "kind", "parent", "parent_wire_depth", "hint", "startingDepth", "query"],
+      "items": [],
+      "method_post": 0,
+      "param_sets": {},
+      "paths": [],
+      "slots": {},
+      "src_entity_encoded": 0,
+      "top_level": 0,
+      "top_level_ids": [],
+      "top_level_params": [],
+      "total": 0,
+      "tracker_noun_counts": {},
+      "with_sort_startingDepth_seeker_session": 0
+    },
+    "markers": {
+      "over18": 2,
+      "prove_your_humanity_text": 0,
+      "quarantine_text": 0
+    },
+    "nesting_parent_equals_parentId": 0,
+    "page_class": "gated",
+    "parents_outside_document": [],
+    "partials": {
+      "banned_user_banner": 1,
+      "challenge_prompt": 1,
+      "human_verification_dialog": 1,
+      "other": 0,
+      "private": 0
+    },
+    "permalink_anchors": {
+      "continue_thread": 0,
+      "continue_thread_parents": [],
+      "loader_fallback": 0,
+      "loader_fallback_parents": [],
+      "number_sum": 0,
+      "points_at_own_parent": 0,
+      "total": 0,
+      "tracker_noun_counts": {},
+      "with_number": 0
+    },
+    "post": {
+      "author": "u1",
+      "id": "t3_p000002",
+      "present": true
+    },
+    "records": [],
+    "repeated_thing_ids": {},
+    "text_nonspace_chars_total": 0,
+    "thingId_attrs_camelcase": 0,
+    "thingid_attrs_lowercase": 0,
+    "top_level": 0,
+    "top_level_with_t3_postId": 0,
+    "unique_thing_ids": 0,
+    "wire_depth_histogram": {},
+    "wire_depth_histogram_unique": {},
+    "with_parentId": 0
+  },
+  "reddit_more_comments.synthetic.html": {
+    "all_parents_resolved_after_merge": true,
+    "answers_loader": {
+      "cursor": "cursor_17",
+      "fixture": "reddit_thread_ssr.html",
+      "hint": 7,
+      "parent": "t1_c000066",
+      "parent_wire_depth": 0,
+      "path": "/svc/shreddit/more-comments/r/programming/t3_p000001",
+      "startingDepth": 1
+    },
+    "body_slots": 5,
+    "bytes": 10054,
+    "comments": 5,
+    "comments_with_body": 5,
+    "deleted": 1,
+    "derived_depth": {
+      "t1_c900001": 1,
+      "t1_c900002": 2,
+      "t1_c900003": 1,
+      "t1_c900004": 1
+    },
+    "derived_depth_mismatches": 0,
+    "derived_depth_unresolved": 4,
+    "expect": {
+      "class": "ok"
+    },
+    "expected": {
+      "comment_tree_stats_total_comments": null,
+      "comment_tree_totalComments": null,
+      "shreddit_post_comment_count": null
+    },
+    "hint_conservation": {
+      "hint": 7,
+      "nested_hints": 2,
+      "records_not_deleted": 3,
+      "records_unique": 4,
+      "resolved_if_counting_all": true,
+      "resolved_if_excluding_deleted": true,
+      "threshold": 5
+    },
+    "ids_already_in_base": [],
+    "loaders": {
+      "branch": 1,
+      "branch_hint_sum": 2,
+      "branch_hints": [2],
+      "branch_with_button": 1,
+      "exactly_one_hidden_cursor_input": 1,
+      "faceplate_numbers_agree": 1,
+      "faceplate_numbers_in_loaders": 2,
+      "item_columns": ["cursor", "kind", "parent", "parent_wire_depth", "hint", "startingDepth", "query"],
+      "items": [
+        ["cursor_901", "branch", "t1_c900002", 1, 2, 3, "sort=CONFIDENCE&startingDepth=3&seeker-session=true&commentParentPositions=3,1,0"]
+      ],
+      "method_post": 1,
+      "param_sets": {
+        "sort,startingDepth,seeker-session,commentParentPositions": 1
+      },
+      "paths": ["/svc/shreddit/more-comments/r/programming/t3_p000001"],
+      "slots": {
+        "children": 1
+      },
+      "src_entity_encoded": 1,
+      "top_level": 0,
+      "top_level_ids": [],
+      "top_level_params": [],
+      "total": 1,
+      "tracker_noun_counts": {
+        "more_replies": 2
+      },
+      "with_sort_startingDepth_seeker_session": 1
+    },
+    "markers": {
+      "over18": 0,
+      "prove_your_humanity_text": 0,
+      "quarantine_text": 0
+    },
+    "nesting_parent_equals_parentId": 1,
+    "page_class": "ok",
+    "parents_outside_document": ["t1_c000066"],
+    "partials": {
+      "banned_user_banner": 0,
+      "challenge_prompt": 0,
+      "human_verification_dialog": 0,
+      "other": 0,
+      "private": 0
+    },
+    "permalink_anchors": {
+      "continue_thread": 1,
+      "continue_thread_parents": ["t1_c900001"],
+      "loader_fallback": 1,
+      "loader_fallback_parents": ["t1_c900002"],
+      "number_sum": 2,
+      "points_at_own_parent": 2,
+      "total": 2,
+      "tracker_noun_counts": {
+        "continue_thread": 1,
+        "more_replies": 1
+      },
+      "with_number": 1
+    },
+    "post": {
+      "present": false
+    },
+    "records": [
+      {"author": "u901", "id": "t1_c900001", "parent": "t1_c000066", "text_nonspace_chars": 126, "wire_depth": 0},
+      {"author": "u56", "id": "t1_c900002", "parent": "t1_c900001", "text_nonspace_chars": 60, "wire_depth": 1},
+      {"author": "[deleted]", "id": "t1_c900003", "parent": "t1_c000066", "text_nonspace_chars": 20, "wire_depth": 0},
+      {"author": "u902", "id": "t1_c900004", "parent": "t1_c000066", "text_nonspace_chars": 54, "wire_depth": 0}
+    ],
+    "repeated_thing_ids": {
+      "t1_c900004": 2
+    },
+    "text_nonspace_chars_total": 260,
+    "thingId_attrs_camelcase": 5,
+    "thingid_attrs_lowercase": 0,
+    "top_level": 0,
+    "top_level_with_t3_postId": 0,
+    "unique_thing_ids": 4,
+    "wire_depth_histogram": {
+      "0": 4,
+      "1": 1
+    },
+    "wire_depth_histogram_unique": {
+      "0": 3,
+      "1": 1
+    },
+    "wire_offset": {
+      "t1_c900001": 1,
+      "t1_c900002": 1,
+      "t1_c900003": 1,
+      "t1_c900004": 1
+    },
+    "with_parentId": 5
+  },
+  "reddit_thread_ssr.html": {
+    "body_slots": 100,
+    "bytes": 259203,
+    "comments": 100,
+    "comments_with_body": 100,
+    "deleted": 0,
+    "derived_depth_mismatches": 0,
+    "derived_depth_unresolved": 0,
+    "expected": {
+      "comment_tree_stats_total_comments": 207,
+      "comment_tree_totalComments": 207,
+      "shreddit_post_comment_count": 207
+    },
+    "loaders": {
+      "branch": 24,
+      "branch_hint_sum": 89,
+      "branch_hints": [3, 8, 4, 1, 17, 2, 1, 5, 2, 1, 1, 11, 1, 3, 1, 10, 7, 4, 1, 1, 1, 2, 1, 1],
+      "branch_with_button": 24,
+      "exactly_one_hidden_cursor_input": 25,
+      "faceplate_numbers_agree": 25,
+      "faceplate_numbers_in_loaders": 48,
+      "item_columns": ["cursor", "kind", "parent", "parent_wire_depth", "hint", "startingDepth", "query"],
+      "items": [
+        ["cursor_1", "branch", "t1_c000005", 4, 3, 5, "sort=CONFIDENCE&startingDepth=5&seeker-session=true&commentParentPositions=0,0,0,0,0"],
+        ["cursor_2", "branch", "t1_c000014", 6, 8, 7, "sort=CONFIDENCE&startingDepth=7&seeker-session=true&commentParentPositions=0,0,1,0,1,0,0"],
+        ["cursor_3", "branch", "t1_c000012", 4, 4, 5, "sort=CONFIDENCE&startingDepth=5&seeker-session=true&commentPositionOffset=2&commentParentPositions=0,0,1,0,1"],
+        ["cursor_4", "branch", "t1_c000023", 5, 1, 6, "sort=CONFIDENCE&startingDepth=6&seeker-session=true&commentParentPositions=0,0,1,0,4,0"],
+        ["cursor_5", "branch", "t1_c000025", 4, 17, 5, "sort=CONFIDENCE&startingDepth=5&seeker-session=true&commentParentPositions=0,0,1,1,0"],
+        ["cursor_6", "branch", "t1_c000026", 4, 2, 5, "sort=CONFIDENCE&startingDepth=5&seeker-session=true&commentParentPositions=0,0,1,1,1"],
+        ["cursor_7", "branch", "t1_c000009", 2, 1, 3, "sort=CONFIDENCE&startingDepth=3&seeker-session=true&commentPositionOffset=2&commentParentPositions=0,0,1"],
+        ["cursor_8", "branch", "t1_c000028", 1, 5, 2, "sort=CONFIDENCE&startingDepth=2&seeker-session=true&commentParentPositions=0,1"],
+        ["cursor_9", "branch", "t1_c000036", 2, 2, 3, "sort=CONFIDENCE&startingDepth=3&seeker-session=true&commentPositionOffset=1&commentParentPositions=1,0,1"],
+        ["cursor_10", "branch", "t1_c000042", 2, 1, 3, "sort=CONFIDENCE&startingDepth=3&seeker-session=true&commentParentPositions=1,3,0"],
+        ["cursor_11", "branch", "t1_c000041", 1, 1, 2, "sort=CONFIDENCE&startingDepth=2&seeker-session=true&commentPositionOffset=3&commentParentPositions=1,3"],
+        ["cursor_12", "branch", "t1_c000033", 0, 11, 1, "sort=CONFIDENCE&startingDepth=1&seeker-session=true&commentPositionOffset=6&commentParentPositions=1"],
+        ["cursor_13", "branch", "t1_c000055", 6, 1, 7, "sort=CONFIDENCE&startingDepth=7&seeker-session=true&commentPositionOffset=1&commentParentPositions=2,0,0,2,0,0,0"],
+        ["cursor_14", "branch", "t1_c000054", 5, 3, 6, "sort=CONFIDENCE&startingDepth=6&seeker-session=true&commentPositionOffset=3&commentParentPositions=2,0,0,2,0,0"],
+        ["cursor_15", "branch", "t1_c000065", 2, 1, 3, "sort=CONFIDENCE&startingDepth=3&seeker-session=true&commentParentPositions=2,2,1"],
+        ["cursor_16", "branch", "t1_c000047", 0, 10, 1, "sort=CONFIDENCE&startingDepth=1&seeker-session=true&commentPositionOffset=3&commentParentPositions=2"],
+        ["cursor_17", "branch", "t1_c000066", 0, 7, 1, "sort=CONFIDENCE&startingDepth=1&seeker-session=true&commentPositionOffset=1&commentParentPositions=3"],
+        ["cursor_18", "branch", "t1_c000070", 0, 4, 1, "sort=CONFIDENCE&startingDepth=1&seeker-session=true&commentPositionOffset=4&commentParentPositions=5"],
+        ["cursor_19", "branch", "t1_c000077", 1, 1, 2, "sort=CONFIDENCE&startingDepth=2&seeker-session=true&commentParentPositions=6,0"],
+        ["cursor_20", "branch", "t1_c000079", 0, 1, 1, "sort=CONFIDENCE&startingDepth=1&seeker-session=true&commentParentPositions=8"],
+        ["cursor_21", "branch", "t1_c000088", 2, 1, 3, "sort=CONFIDENCE&startingDepth=3&seeker-session=true&commentParentPositions=12,0,0"],
+        ["cursor_22", "branch", "t1_c000086", 0, 2, 1, "sort=CONFIDENCE&startingDepth=1&seeker-session=true&commentPositionOffset=1&commentParentPositions=12"],
+        ["cursor_23", "branch", "t1_c000091", 0, 1, 1, "sort=CONFIDENCE&startingDepth=1&seeker-session=true&commentParentPositions=15"],
+        ["cursor_24", "branch", "t1_c000097", 0, 1, 1, "sort=CONFIDENCE&startingDepth=1&seeker-session=true&commentPositionOffset=1&commentParentPositions=21"],
+        ["cursor_25", "top_level", null, null, null, null, "top-level=1&comments-remaining=100&commentPositionOffset=22"]
+      ],
+      "method_post": 25,
+      "param_sets": {
+        "sort,startingDepth,seeker-session,commentParentPositions": 12,
+        "sort,startingDepth,seeker-session,commentPositionOffset,commentParentPositions": 12,
+        "top-level,comments-remaining,commentPositionOffset": 1
+      },
+      "paths": ["/svc/shreddit/more-comments/r/programming/t3_p000001"],
+      "slots": {
+        "None": 1,
+        "children": 24
+      },
+      "src_entity_encoded": 25,
+      "top_level": 1,
+      "top_level_ids": ["top-level-more-comments-partial"],
+      "top_level_params": [
+        ["top-level", "comments-remaining", "commentPositionOffset"]
+      ],
+      "total": 25,
+      "tracker_noun_counts": {
+        "more_replies": 48
+      },
+      "with_sort_startingDepth_seeker_session": 24
+    },
+    "markers": {
+      "over18": 0,
+      "prove_your_humanity_text": 0,
+      "quarantine_text": 0
+    },
+    "nesting_parent_equals_parentId": 100,
+    "page_class": "ok",
+    "parents_outside_document": [],
+    "partials": {
+      "banned_user_banner": 1,
+      "challenge_prompt": 1,
+      "human_verification_dialog": 1,
+      "other": 0,
+      "private": 0
+    },
+    "permalink_anchors": {
+      "continue_thread": 31,
+      "continue_thread_parents": ["t1_c000004", "t1_c000007", "t1_c000003", "t1_c000015", "t1_c000013", "t1_c000017", "t1_c000020", "t1_c000022", "t1_c000010", "t1_c000024", "t1_c000002", "t1_c000030", "t1_c000001", "t1_c000034", "t1_c000038", "t1_c000056", "t1_c000053", "t1_c000052", "t1_c000049", "t1_c000048", "t1_c000061", "t1_c000060", "t1_c000063", "t1_c000067", "t1_c000072", "t1_c000076", "t1_c000080", "t1_c000083", "t1_c000087", "t1_c000099", "t1_c000098"],
+      "loader_fallback": 24,
+      "loader_fallback_parents": ["t1_c000005", "t1_c000014", "t1_c000012", "t1_c000023", "t1_c000025", "t1_c000026", "t1_c000009", "t1_c000028", "t1_c000036", "t1_c000042", "t1_c000041", "t1_c000033", "t1_c000055", "t1_c000054", "t1_c000065", "t1_c000047", "t1_c000066", "t1_c000070", "t1_c000077", "t1_c000079", "t1_c000088", "t1_c000086", "t1_c000091", "t1_c000097"],
+      "number_sum": 89,
+      "points_at_own_parent": 55,
+      "total": 55,
+      "tracker_noun_counts": {
+        "continue_thread": 31,
+        "more_replies": 24
+      },
+      "with_number": 24
+    },
+    "post": {
+      "author": "u1",
+      "id": "t3_p000001",
+      "present": true
+    },
+    "repeated_thing_ids": {},
+    "text_nonspace_chars_total": 21910,
+    "thingId_attrs_camelcase": 100,
+    "thingid_attrs_lowercase": 0,
+    "top_level": 22,
+    "top_level_with_t3_postId": 22,
+    "unique_thing_ids": 100,
+    "wire_depth_histogram": {
+      "0": 22,
+      "1": 25,
+      "2": 18,
+      "3": 10,
+      "4": 11,
+      "5": 5,
+      "6": 6,
+      "7": 2,
+      "8": 1
+    },
+    "wire_depth_histogram_unique": {
+      "0": 22,
+      "1": 25,
+      "2": 18,
+      "3": 10,
+      "4": 11,
+      "5": 5,
+      "6": 6,
+      "7": 2,
+      "8": 1
+    },
+    "with_parentId": 78
+  },
+  "reddit_thread_ssr_new.html": {
+    "body_slots": 100,
+    "bytes": 199560,
+    "comments": 100,
+    "comments_with_body": 100,
+    "deleted": 0,
+    "derived_depth_mismatches": 0,
+    "derived_depth_unresolved": 0,
+    "expected": {
+      "comment_tree_stats_total_comments": 207,
+      "comment_tree_totalComments": 207,
+      "shreddit_post_comment_count": 207
+    },
+    "loaders": {
+      "branch": 3,
+      "branch_hint_sum": 66,
+      "branch_hints": [8, 52, 6],
+      "branch_with_button": 3,
+      "exactly_one_hidden_cursor_input": 4,
+      "faceplate_numbers_agree": 4,
+      "faceplate_numbers_in_loaders": 6,
+      "item_columns": ["cursor", "kind", "parent", "parent_wire_depth", "hint", "startingDepth", "query"],
+      "items": [
+        ["cursor_26", "branch", "t1_c000003", 2, 8, 3, "sort=NEW&startingDepth=3&seeker-session=true&commentParentPositions=31,3,0"],
+        ["cursor_27", "branch", "t1_c000002", 1, 52, 2, "sort=NEW&startingDepth=2&seeker-session=true&commentPositionOffset=1&commentParentPositions=31,3"],
+        ["cursor_28", "branch", "t1_c000001", 0, 6, 1, "sort=NEW&startingDepth=1&seeker-session=true&commentPositionOffset=4&commentParentPositions=31"],
+        ["cursor_29", "top_level", null, null, null, null, "sort=new&top-level=1&comments-remaining=100&commentPositionOffset=32"]
+      ],
+      "method_post": 4,
+      "param_sets": {
+        "sort,startingDepth,seeker-session,commentParentPositions": 1,
+        "sort,startingDepth,seeker-session,commentPositionOffset,commentParentPositions": 2,
+        "sort,top-level,comments-remaining,commentPositionOffset": 1
+      },
+      "paths": ["/svc/shreddit/more-comments/r/programming/t3_p000001"],
+      "slots": {
+        "None": 1,
+        "children": 3
+      },
+      "src_entity_encoded": 4,
+      "top_level": 1,
+      "top_level_ids": ["top-level-more-comments-partial"],
+      "top_level_params": [
+        ["sort", "top-level", "comments-remaining", "commentPositionOffset"]
+      ],
+      "total": 4,
+      "tracker_noun_counts": {
+        "more_replies": 6
+      },
+      "with_sort_startingDepth_seeker_session": 3
+    },
+    "markers": {
+      "over18": 0,
+      "prove_your_humanity_text": 0,
+      "quarantine_text": 0
+    },
+    "nesting_parent_equals_parentId": 100,
+    "page_class": "ok",
+    "parents_outside_document": [],
+    "partials": {
+      "banned_user_banner": 1,
+      "challenge_prompt": 1,
+      "human_verification_dialog": 1,
+      "other": 0,
+      "private": 0
+    },
+    "permalink_anchors": {
+      "continue_thread": 34,
+      "continue_thread_parents": ["t1_c000079", "t1_c000083", "t1_c000110", "t1_c000088", "t1_c000087", "t1_c000086", "t1_c000091", "t1_c000077", "t1_c000076", "t1_c000080", "t1_c000072", "t1_c000120", "t1_c000070", "t1_c000099", "t1_c000098", "t1_c000097", "t1_c000042", "t1_c000041", "t1_c000130", "t1_c000129", "t1_c000128", "t1_c000127", "t1_c000134", "t1_c000133", "t1_c000038", "t1_c000136", "t1_c000036", "t1_c000034", "t1_c000033", "t1_c000067", "t1_c000141", "t1_c000139", "t1_c000066", "t1_c000030"],
+      "loader_fallback": 3,
+      "loader_fallback_parents": ["t1_c000003", "t1_c000002", "t1_c000001"],
+      "number_sum": 66,
+      "points_at_own_parent": 37,
+      "total": 37,
+      "tracker_noun_counts": {
+        "continue_thread": 34,
+        "more_replies": 3
+      },
+      "with_number": 3
+    },
+    "post": {
+      "author": "u1",
+      "id": "t3_p000001",
+      "present": true
+    },
+    "repeated_thing_ids": {},
+    "text_nonspace_chars_total": 19910,
+    "thingId_attrs_camelcase": 100,
+    "thingid_attrs_lowercase": 0,
+    "top_level": 32,
+    "top_level_with_t3_postId": 32,
+    "unique_thing_ids": 100,
+    "wire_depth_histogram": {
+      "0": 32,
+      "1": 34,
+      "2": 21,
+      "3": 10,
+      "4": 2,
+      "5": 1
+    },
+    "wire_depth_histogram_unique": {
+      "0": 32,
+      "1": 34,
+      "2": 21,
+      "3": 10,
+      "4": 2,
+      "5": 1
+    },
+    "with_parentId": 68
+  },
+  "x_tweetdetail.json": {
+    "added_to_module_ids": [],
+    "added_to_module_items": 0,
+    "bytes": 56035,
+    "cursor_entries": 1,
+    "cursor_types": {
+      "Bottom": 1
+    },
+    "cursors": [
+      {"action_text": null, "entry": "cursor-bottom-1900000000000000619", "type": "Bottom", "where": "entry"}
+    ],
+    "direct_replies_to_focal": 36,
+    "entries": 40,
+    "focal": {
+      "author": "u1",
+      "id": "1900000000000000003",
+      "note_tweet": true,
+      "reply_count": 635
+    },
+    "focal_tweet_entries": 1,
+    "instructions": ["TimelineClearCache", "TimelineAddEntries", "TimelineTerminateTimeline"],
+    "legacy_screen_name_keys": 0,
+    "module_items": 38,
+    "module_tweets_non_promoted": 36,
+    "modules": 38,
+    "note_tweet_keys": 2,
+    "organic_tweets": 37,
+    "promoted": 2,
+    "promoted_entries": ["conversationthread-1900000000000000001-promoted-tweet-1900000000000000001-feedface00000001", "conversationthread-1900000000000000002-promoted-tweet-1900000000000000002-feedface00000002"],
+    "quoted_ids": [],
+    "quoted_status_result_keys": 0,
+    "replaced_entries": [],
+    "result_typenames": {
+      "Tweet": 39
+    },
+    "screen_name_key_paths": {
+      "core.user_results.result.core": 39,
+      "data.threaded_conversation_with_injections_v2.instructions.entries.content.items.item.itemContent.promotedMetadata.advertiser_results.result.core": 2
+    },
+    "terminate_directions": ["Top"],
+    "timeline_tweet_items": 39,
+    "tombstone_entries": [],
+    "tombstones": 0,
+    "unknown_entry_ratio": 0.0,
+    "unknown_entry_typename_values": [],
+    "unknown_entry_typenames": 0,
+    "unknown_item_typenames": 0,
+    "visibility_wrapped": 0,
+    "visibility_wrapped_ids": []
+  },
+  "x_tweetdetail_showmore.synthetic.json": {
+    "added_to_module_ids": ["1910000000000000103"],
+    "added_to_module_items": 1,
+    "bytes": 17865,
+    "cursor_entries": 1,
+    "cursor_types": {
+      "ShowMore": 1,
+      "Top": 2
+    },
+    "cursors": [
+      {"action_text": null, "entry": "cursor-top-1910000000000001999", "type": "Top", "where": "entry"},
+      {"action_text": "Show replies", "entry": "conversationthread-1910000000000000101-cursor-showmore-1910000000000000199", "type": "ShowMore", "where": "module"},
+      {"action_text": null, "entry": "cursor-top-1910000000000001999", "type": "Top", "where": "replace_entry"}
+    ],
+    "direct_replies_to_focal": 3,
+    "entries": 6,
+    "expect": {
+      "class": "ok",
+      "terminal_bottom": true
+    },
+    "focal": {
+      "author": "u1",
+      "id": "1910000000000000100",
+      "note_tweet": false,
+      "reply_count": 6
+    },
+    "focal_tweet_entries": 1,
+    "instructions": ["TimelineAddEntries", "TimelineAddToModule", "TimelineReplaceEntry", "TimelineTerminateTimeline"],
+    "legacy_screen_name_keys": 0,
+    "module_items": 6,
+    "module_tweets_non_promoted": 5,
+    "modules": 4,
+    "note_tweet_keys": 0,
+    "organic_tweets": 6,
+    "promoted": 0,
+    "promoted_entries": [],
+    "quoted_ids": ["1910000000000000150"],
+    "quoted_status_result_keys": 1,
+    "replaced_entries": ["cursor-top-1910000000000001999"],
+    "result_typenames": {
+      "Tweet": 5,
+      "TweetTombstone": 1,
+      "TweetWithVisibilityResults": 1
+    },
+    "screen_name_key_paths": {
+      "core.user_results.result.core": 5,
+      "quoted_status_result.result.core.user_results.result.core": 1,
+      "tweet.core.user_results.result.core": 1
+    },
+    "terminate_directions": ["Bottom"],
+    "timeline_tweet_items": 7,
+    "tombstone_entries": ["conversationthread-1910000000000000105-tweet-1910000000000000105"],
+    "tombstones": 1,
+    "unknown_entry_ratio": 0.0,
+    "unknown_entry_typename_values": [],
+    "unknown_entry_typenames": 0,
+    "unknown_item_typenames": 0,
+    "visibility_wrapped": 1,
+    "visibility_wrapped_ids": ["1910000000000000104"]
+  },
+  "x_tweetdetail_unknown.synthetic.json": {
+    "added_to_module_ids": [],
+    "added_to_module_items": 0,
+    "bytes": 17185,
+    "cursor_entries": 1,
+    "cursor_types": {
+      "Bottom": 1
+    },
+    "cursors": [
+      {"action_text": null, "entry": "cursor-bottom-1920000000000001900", "type": "Bottom", "where": "entry"}
+    ],
+    "direct_replies_to_focal": 6,
+    "entries": 10,
+    "expect": {
+      "class": "drift_unknown"
+    },
+    "focal": {
+      "author": "u1",
+      "id": "1920000000000000200",
+      "note_tweet": false,
+      "reply_count": 9
+    },
+    "focal_tweet_entries": 1,
+    "instructions": ["TimelineClearCache", "TimelineAddEntries", "TimelineTerminateTimeline"],
+    "legacy_screen_name_keys": 0,
+    "module_items": 6,
+    "module_tweets_non_promoted": 6,
+    "modules": 6,
+    "note_tweet_keys": 0,
+    "organic_tweets": 7,
+    "promoted": 0,
+    "promoted_entries": [],
+    "quoted_ids": [],
+    "quoted_status_result_keys": 0,
+    "replaced_entries": [],
+    "result_typenames": {
+      "Tweet": 7
+    },
+    "screen_name_key_paths": {
+      "core.user_results.result.core": 7
+    },
+    "terminate_directions": ["Top"],
+    "timeline_tweet_items": 7,
+    "tombstone_entries": [],
+    "tombstones": 0,
+    "unknown_entry_ratio": 0.2,
+    "unknown_entry_typename_values": ["TimelineSyntheticUnknownA", "TimelineSyntheticUnknownB"],
+    "unknown_entry_typenames": 2,
+    "unknown_item_typenames": 0,
+    "visibility_wrapped": 0,
+    "visibility_wrapped_ids": []
+  }
+}

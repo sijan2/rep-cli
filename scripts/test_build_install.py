@@ -47,15 +47,16 @@ if sys.argv[1] == 'build':
                        REP_EXTENSION_PATH=str(extension), XDG_CONFIG_HOME=str(root / "config"),
                        INSTALL_TEST_LOG=str(log))
             env.pop("REP_SKIP_TESTS", None)
-            result = subprocess.run(["bash", str(scripts / "build_install.sh"), "--host", "--lab",
+            result = subprocess.run(["bash", str(scripts / "build_install.sh"), "--host",
                                      "--install-dir", "relative-bin"], cwd=caller, env=env,
                                     capture_output=True, text=True, timeout=15)
             self.assertEqual(result.returncode, 0, result.stderr)
             calls = [json.loads(line) for line in log.read_text().splitlines()]
-            self.assertEqual(len(calls), 5)
+            self.assertEqual(len(calls), 3)
             self.assertTrue(all(Path(call["cwd"]) == cli.resolve() for call in calls))
-            for binary in ("rep", "rep-host", "rep-lab"):
+            for binary in ("rep", "rep-host"):
                 self.assertTrue((caller / "relative-bin" / binary).is_file())
+            self.assertFalse((caller / "relative-bin" / "rep-lab").exists())
             recorded = root / "config" / "rep" / "extension-path"
             self.assertEqual(recorded.read_text().strip(), str(extension.resolve()))
             self.assertEqual(recorded.stat().st_mode & 0o777, 0o600)

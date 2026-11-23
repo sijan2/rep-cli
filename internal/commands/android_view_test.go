@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -8,11 +6,11 @@ import (
 )
 
 func TestAndroidLegacyBudgetIsTransparentNoOp(t *testing.T) {
-	baseline, stderr, code := runEntryPoint(t, "android", "--task", "global")
+	baseline, stderr, code := runEntryPoint(t, "lab", "android", "--task", "global")
 	if code != 0 || stderr != "" {
 		t.Fatalf("baseline code=%d stdout=%q stderr=%q", code, baseline, stderr)
 	}
-	legacy, stderr, code := runEntryPoint(t, "android", "--task", "global", "--budget", "full")
+	legacy, stderr, code := runEntryPoint(t, "lab", "android", "--task", "global", "--budget", "full")
 	if code != 0 || legacy != baseline || !strings.Contains(stderr, "--budget has no effect") {
 		t.Fatalf("legacy code=%d stdout=%q stderr=%q", code, legacy, stderr)
 	}

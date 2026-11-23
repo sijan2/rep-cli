@@ -15,8 +15,8 @@ func configureCommandGroups() {
 	groups := map[string]string{}
 	for group, names := range map[string][]string{
 		"browser": {"page", "do", "eval", "shot", "reference", "tabs", "close", "browser", "cdp"},
-		"traffic": {"net", "body", "fetch", "replay", "download", "media"},
-		"help":    {"scope", "doctor", "jev", "help"},
+		"traffic": {"net", "body", "export", "records", "fetch", "replay", "download", "cookies"},
+		"help":    {"scope", "doctor", "help"},
 	} {
 		for _, name := range names {
 			groups[name] = group

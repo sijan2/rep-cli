@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -7,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Specialized commands use explicit rep-lab top-level paths.
+// Specialized commands use explicit rep lab top-level paths.
 func init() {
 	deps := defaultJevDOMDependencies()
 	element := newBrowserElementCommand(deps)
@@ -16,7 +14,7 @@ func init() {
 	addDecisionBrowserFlag(locate)
 	state := newBrowserStateCommand(deps)
 	addDecisionBrowserFlag(state)
-	rootCmd.AddCommand(element, locate, state, newBrowserStepCommand(deps), newNativeBrowserCaptureCommandWith(browserdiagnostics.Run))
+	labCmd.AddCommand(element, locate, state, newBrowserStepCommand(deps), newNativeBrowserCaptureCommandWith(browserdiagnostics.Run))
 	watch := &cobra.Command{Use: "watch", Short: "Manage ambient all-tab network capture"}
 	watch.PersistentFlags().StringVar(&browserSelector, "browser", defaultBrowser, "Browser bridge to inspect")
 	for _, action := range []string{"start", "stop", "status"} {
@@ -24,5 +22,5 @@ func init() {
 		watch.AddCommand(&cobra.Command{Use: action, Short: action + " ambient capture", Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error { return runBrowserWatch(cmd, action) }})
 	}
-	rootCmd.AddCommand(watch)
+	labCmd.AddCommand(watch)
 }

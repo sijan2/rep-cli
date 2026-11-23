@@ -2,6 +2,8 @@
 
 `rep browser start` starts or resumes a private Chromium profile. `REP_PROFILE` is its stable name; XDG data/runtime paths locate its state and sockets. The extension and host come from recorded configuration or `REP_EXTENSION_PATH` and sibling binaries; `REP_HEADLESS_BINARY` selects the browser binary. `rep browser start --headed` allows a person to sign in. A later mode switch reuses the profile subject to the holder guard.
 
+If an `XDG_RUNTIME_DIR` is too long for Unix sockets, rep automatically uses a short mode-0700 transport directory under `/tmp`, keyed by the profile and runtime root. Browser data stays in `XDG_DATA_HOME`; the selected socket directory is recorded in the profile state. A stopped profile left by an older failed long-path start recovers automatically.
+
 An explicit browser name in `rep browser start arc`, `rep browser start chrome`, or `rep browser start dia` records a real-profile choice rather than launching it. Task choice and profile ID are echoed. Rep never silently starts a private profile while a real-profile bridge is live, or switches accounts when the remembered bridge is down.
 
 `rep scope` is an offline inventory. `rep tabs` tests live liveness and shows ownership. `rep doctor` performs repair: bounded reconnect waiting, manifest repair, guarded private restart, and an extension reload only when the bridge is live, its build digest is stale, and no capture or execute lease is active. It reports a concrete human-only step where needed. The native messaging host is launched by the extension, not by an agent retry loop.

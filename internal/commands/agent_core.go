@@ -129,6 +129,8 @@ func coreStore() (*agentstate.Store, error) { return agentstate.Default() }
 func invocationHandle(command *cobra.Command, args []string) string {
 	var candidate string
 	switch rootCommandName(command) {
+	case "lab":
+		candidate = labTabHandle(command)
 	case "do":
 		if len(args) > 0 {
 			candidate = args[0]
@@ -136,7 +138,7 @@ func invocationHandle(command *cobra.Command, args []string) string {
 		if strings.HasPrefix(candidate, "@") && len(args) > 1 {
 			candidate = args[len(args)-1]
 		}
-	case "page", "shot", "reference", "body", "close", "replay", "download":
+	case "page", "shot", "reference", "body", "close", "replay", "download", "records", "cookies", "export":
 		if len(args) > 0 {
 			candidate = args[0]
 		}

@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -400,7 +398,7 @@ func newBrowserLocateCommand(deps jevDOMDependencies) *cobra.Command {
 		}
 		return finish(nil)
 	}
-	command.Flags().IntVar(&tab, "tab", -1, "Existing task-owned tab to inspect without navigation")
+	bindLabTabFlag(command.Flags(), &tab, "Existing task-owned tab to inspect without navigation")
 	command.Flags().DurationVar(&timeout, "timeout", 15*time.Second, "Observation and decision budget (1s to 60s)")
 	_ = command.MarkFlagRequired("tab")
 	return command

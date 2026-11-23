@@ -46,8 +46,11 @@ func newCoreEvalCommand() *cobra.Command {
 	var capture bool
 	var timeout time.Duration
 	command := &cobra.Command{Use: "eval JS|@FILE|@- [TAB]", Short: "Evaluate JavaScript", Args: cobra.RangeArgs(1, 2)}
+	command.Long = "Awaits promises and supports scripts from files or stdin. Use an explicit tab in shared agent sessions. --out saves the raw JSON result, including credential fields, to a new file; stdout returns its path and digest. For HttpOnly cookies use rep cookies."
+	command.Example = "  rep eval 'document.title' t3\n  rep eval @script.js t3 --capture\n  rep eval 'Object.fromEntries(Object.entries(localStorage))' t3 --out storage.json"
 	command.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Execution deadline (1s–5m)")
 	command.Flags().BoolVar(&capture, "capture", false, "Record traffic triggered by the script")
+	command.Flags().String("out", "", "Export the raw result as JSON to a new file")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := coreEvaluate(cmd, args, timeout, false, capture); err != nil {
 			return coreFailure(cmd, err)
@@ -58,6 +61,9 @@ func newCoreEvalCommand() *cobra.Command {
 }
 func newCoreCDPCommand() *cobra.Command {
 	command := &cobra.Command{Use: "cdp METHOD [JSON|@FILE] [TAB]", Short: "Run a guarded protocol call", Args: cobra.RangeArgs(1, 3)}
+	command.Long = "Address an owned tab explicitly. Page, DOM, Runtime, Input, Emulation and related page methods are supported. Use rep cookies for HttpOnly session cookies and rep eval for localStorage; browser-global target management is outside this command. --out saves raw result JSON."
+	command.Example = "  rep cdp Page.getLayoutMetrics t3\n  rep cdp Page.getLayoutMetrics t3 --out layout.json"
+	command.Flags().String("out", "", "Export the raw result as JSON to a new file")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := coreEvaluate(cmd, args, 30*time.Second, true, false); err != nil {
 			return coreFailure(cmd, err)
@@ -95,6 +101,17 @@ func cdpAllowed(method string) bool {
 	return false
 }
 func coreEvaluate(command *cobra.Command, args []string, timeout time.Duration, protocol, capture bool) error {
+	if command.Flags().Changed("out") {
+		path, _ := command.Flags().GetString("out")
+		if strings.TrimSpace(path) == "" {
+			return coreArgument("--out requires a new file path")
+		}
+		// Catch destination collisions before running a possibly mutating script.
+		// Exclusive creation in coreArtifact also protects against later races.
+		if _, err := os.Lstat(path); err == nil || !os.IsNotExist(err) {
+			return coreErrorf("artifact_exists_or_unwritable", "export destination already exists or is unavailable; no script was run")
+		}
+	}
 	if timeout < time.Second || timeout > 5*time.Minute {
 		return coreArgument("timeout must be between 1s and 5m")
 	}
@@ -269,6 +286,31 @@ func coreEvaluate(command *cobra.Command, args []string, timeout time.Duration, 
 		if response.Result.Unserializable != "" {
 			value = response.Result.Unserializable
 		}
+	}
+	if command.Flags().Changed("out") {
+		path, _ := command.Flags().GetString("out")
+		encoded, e := output.Marshal(value)
+		if e != nil {
+			return e
+		}
+		artifact, e := coreArtifact(path, ".json", encoded)
+		if e != nil {
+			// The evaluation already completed. A filesystem failure must not
+			// invite repeating a script that may have submitted a form or written data.
+			outcome = "performed_export_failed"
+			result.Status, result.Complete = "performed", boolPointer(false)
+			result.Next = coreNext("page", tab.Handle)
+			result.Meta = map[string]any{"operation": operation, "observation_error": "evaluation completed but result export failed; do not repeat the script"}
+			result.Error = &coreError{Code: "result_export_failed", Message: "evaluation completed; export destination is unavailable", Next: result.Next, Retry: "do-not-retry"}
+			if err := emitCore(command, result); err != nil {
+				return err
+			}
+			return output.MarkReported(output.NewAgentError("result_export_failed", command.CommandPath(), result.Error.Message))
+		}
+		result.Meta = map[string]any{"operation": operation, "artifact": artifact}
+		result.Status, result.Complete = "complete", boolPointer(true)
+		outcome = "complete"
+		return emitCore(command, result)
 	}
 	value = output.RedactValue(value)
 	encoded, err := output.Marshal(value)

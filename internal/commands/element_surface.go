@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -21,7 +19,7 @@ type elementFlags struct {
 
 func bindElementFlags(flags *pflag.FlagSet) *elementFlags {
 	shared := &elementFlags{}
-	flags.IntVar(&shared.TabID, "tab", -1, "Existing task-owned browser tab")
+	bindLabTabFlag(flags, &shared.TabID, "Existing task-owned browser tab")
 	flags.StringVar(&shared.Kind, "kind", "controls", "Candidate roles: controls, text, or all")
 	flags.StringVar(&shared.Origin, "origin", "", "Require this top-frame origin and skip frames outside it")
 	flags.StringVar(&shared.FrameID, "frame", "", "Restrict observation to this frame id")
@@ -48,7 +46,7 @@ func newBrowserElementCommand(deps jevDOMDependencies) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "element",
 		Short: "Observe, select, and revalidate scoped page elements",
-		Long:  "Element commands share a tab and observation scope. Selection returns a model-assessed handle without acting; observation and validation read browser evidence. Use browser interact for explicit actions.",
+		Long:  "Element commands share a tab and observation scope. Pass --tab tN from rep page; its task and browser profile are inferred. Selection returns a model-assessed handle without acting; observation and validation read browser evidence. Use rep do for explicit actions.",
 		Args:  cobra.NoArgs,
 	}
 	shared := bindElementFlags(command.PersistentFlags())

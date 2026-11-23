@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -31,17 +29,17 @@ The AI agent uses this to configure which requests to capture/skip per app.
 Config is stored in ~/.local/share/rep-cli/android_config.json
 
 Commands:
-  rep android config show [package]     Show config for app(s)
-  rep android config skip <pkg> <pattern>   Add skip pattern
-  rep android config keep <pkg> <pattern>   Add keep pattern  
-  rep android config remove <pkg> <pattern> Remove pattern
-  rep android config clear <pkg>            Clear all config for app
+  rep lab android config show [package]     Show config for app(s)
+  rep lab android config skip <pkg> <pattern>   Add skip pattern
+  rep lab android config keep <pkg> <pattern>   Add keep pattern
+  rep lab android config remove <pkg> <pattern> Remove pattern
+  rep lab android config clear <pkg>            Clear all config for app
 
 Examples (AI agent would run these after reviewing traffic):
-  rep android config skip com.netflix.mediaclient nflxvideo.net
-  rep android config skip com.netflix.mediaclient /playapi/event
-  rep android config keep com.netflix.mediaclient /graphql
-  rep android config keep com.netflix.mediaclient /api/`,
+  rep lab android config skip com.netflix.mediaclient nflxvideo.net
+  rep lab android config skip com.netflix.mediaclient /playapi/event
+  rep lab android config keep com.netflix.mediaclient /graphql
+  rep lab android config keep com.netflix.mediaclient /api/`,
 }
 
 var configShowCmd = &cobra.Command{
@@ -147,9 +145,9 @@ var androidSummaryCmd = &cobra.Command{
 	Long: `Shows traffic summary for AI to review and configure filtering.
 
 AI agent workflow:
-1. Run: rep android summary <package>
+1. Run: rep lab android summary <package>
 2. Review domains/endpoints, identify noise
-3. Configure: rep android config skip <package> <pattern>
+3. Configure: rep lab android config skip <package> <pattern>
 4. Clear and recapture`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := loadAndroidDataRaw()
@@ -192,7 +190,7 @@ AI agent workflow:
 			fmt.Printf("  %-45s %4d reqs  %2d domains%s\n", pkg, len(p.Requests), len(p.Domains), status)
 		}
 		fmt.Println()
-		fmt.Println("Use: rep android summary <package>")
+		fmt.Println("Use: rep lab android summary <package>")
 		return nil
 	},
 }
@@ -341,9 +339,9 @@ func showPackageSummary(data *AndroidDataRaw, pkgQuery string) error {
 
 	// Next steps
 	fmt.Println("NEXT STEPS:")
-	fmt.Printf("  rep android config skip %s <noise-pattern>\n", pkgName)
-	fmt.Printf("  rep android config keep %s <api-pattern>\n", pkgName)
-	fmt.Println("  rep android list " + pkgQuery)
+	fmt.Printf("  rep lab android config skip %s <noise-pattern>\n", pkgName)
+	fmt.Printf("  rep lab android config keep %s <api-pattern>\n", pkgName)
+	fmt.Println("  rep lab android list " + pkgQuery)
 	fmt.Println()
 
 	return nil

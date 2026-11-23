@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -24,9 +22,9 @@ With package: clears traffic only for that package.
 Does NOT clear configuration (skip/keep patterns).
 
 Examples:
-  rep android clear                              Clear all traffic
-  rep android clear com.netflix.mediaclient      Clear only Netflix traffic
-  rep android clear --all                        Clear traffic AND config`,
+  rep lab android clear                              Clear all traffic
+  rep lab android clear com.netflix.mediaclient      Clear only Netflix traffic
+  rep lab android clear --all                        Clear traffic AND config`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		home, _ := os.UserHomeDir()
 		dataPath := filepath.Join(home, ".local/share/rep-cli/android.json")
@@ -96,7 +94,7 @@ var androidStatusCmd = &cobra.Command{
 			fmt.Println("CAPTURE: ✓ Running")
 		} else {
 			fmt.Println("CAPTURE: ✗ Not running")
-			fmt.Println("  Start with: rep android capture")
+			fmt.Println("  Start with: rep lab android capture")
 		}
 		fmt.Println()
 
@@ -133,12 +131,12 @@ var androidStatusCmd = &cobra.Command{
 		fmt.Println()
 
 		fmt.Println("COMMANDS:")
-		fmt.Println("  rep android capture              Start capture")
-		fmt.Println("  rep android capture stop         Stop capture")
-		fmt.Println("  rep android summary              View traffic")
-		fmt.Println("  rep android config show          View all config")
-		fmt.Println("  rep android clear                Clear all traffic")
-		fmt.Println("  rep android clear <package>      Clear package traffic")
+		fmt.Println("  rep lab android capture              Start capture")
+		fmt.Println("  rep lab android capture stop         Stop capture")
+		fmt.Println("  rep lab android summary              View traffic")
+		fmt.Println("  rep lab android config show          View all config")
+		fmt.Println("  rep lab android clear                Clear all traffic")
+		fmt.Println("  rep lab android clear <package>      Clear package traffic")
 
 		return nil
 	},

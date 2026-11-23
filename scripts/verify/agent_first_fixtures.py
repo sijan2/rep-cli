@@ -69,6 +69,10 @@ class Handler(BaseHTTPRequestHandler):
             if "fixture-session=fake-cookie" not in self.headers.get("Cookie", ""):
                 return self.reply("sign in required", status=401)
             return self.reply(FILE_BYTES, "application/pdf")
+        if path == "/api/cookie-auth":
+            if "api-session=path-cookie-value" not in self.headers.get("Cookie", ""):
+                return self.reply('{"authenticated":false}', "application/json", status=401)
+            return self.reply('{"authenticated":true}', "application/json")
         if path == "/image.svg":
             return self.reply("<svg xmlns='http://www.w3.org/2000/svg' width='100' height='60'><rect width='100' height='60' fill='#405ac2'/></svg>", "image/svg+xml")
         if path == "/document/d/fixture/export":
@@ -84,10 +88,21 @@ class Handler(BaseHTTPRequestHandler):
             "/frame": "<main><h1>Frame parent</h1><iframe title='Local form' src='/form' style='width:800px;height:300px'></iframe></main>",
             "/flow": """<main><h1>Five-step flow</h1><p role='status'>Step 1</p><button onclick="let n=Number(this.dataset.n||1); document.querySelector('[role=status]').textContent=n===5?'Flow complete':'Step '+(n+1); this.dataset.n=n+1; this.textContent=n===5?'Done':'Continue '+(n+1); this.disabled=n===5;">Continue 1</button></main>""",
             "/rows": "<main><h1>Products</h1><table>" + "".join("<tr><td>Product {0}</td><td>Price ${1}</td></tr>".format(i, i * 10) for i in range(1, 11)) + "</table></main>",
-            "/api": """<main><h1>API fixture</h1><p aria-busy='true'>Loading results</p></main><script>fetch('/api/items?q=alpha').then(r=>r.json()).then(x=>{let p=document.querySelector('p');p.textContent='Result '+x.data[0].id+' price '+x.data[0].price;p.removeAttribute('aria-busy')})</script>""",
+            "/api": """<main><h1>API fixture</h1><p aria-busy='true'>Loading results</p></main><script>fetch('/api/items?q=alpha',{headers:{'Authorization':'Bearer fixture-auth-token','X-CSRF-Token':'fixture-csrf-token'}}).then(r=>r.json()).then(x=>{let p=document.querySelector('p');p.textContent='Result '+x.data[0].id+' price '+x.data[0].price;p.removeAttribute('aria-busy')})</script>""",
             "/download": """<main><h1>Download fixture</h1><a href='/file.pdf'>Download file</a></main><script>fetch('/file.pdf').then(r=>r.arrayBuffer()).then(()=>document.body.dataset.ready='true')</script>""",
             "/document/d/fixture/edit": """<main class='kix-appview-editor'><h1>Document fixture</h1><p>The editor draws on a canvas.</p><canvas></canvas></main><link rel='alternate' type='text/plain' href='/document/d/fixture/export?format=txt'>""",
             "/paper": "<article><h1>Synthetic paper</h1><p>The study cites two sources.</p><a href='/article'>Source one</a><a href='/rows'>Source two</a></article>",
+            "/thread": """<main><h1>Discussion fixture</h1>
+              <shreddit-post id='t3_fixture' author='fixture-author' created-timestamp='2026-01-01T00:00:00Z' post-title='A local discussion' comment-count='3'></shreddit-post>
+              <shreddit-comment thingid='t1_first' parentid='t3_fixture' author='first-author' created='2026-01-01T00:01:00Z' depth='0'>
+                <div slot='comment'><p>First retained comment.</p></div>
+                <shreddit-comment thingid='t1_second' parentid='t1_first' author='second-author' created='2026-01-01T00:02:00Z' depth='1'>
+                  <div slot='comment'><p>Second retained reply.</p></div>
+                </shreddit-comment>
+                <faceplate-partial loading='action' src='/svc/shreddit/more-comments/r/fixture/t3_fixture?startingDepth=1' method='post'>
+                  <button>Load another reply</button><input type='hidden' name='cursor' value='fixture-next'>
+                </faceplate-partial>
+              </shreddit-comment></main>""",
             "/reference": "<main><h1>Design reference</h1><p>Fluid typography and a measured grid.</p><img src='/image.svg' alt='Reference asset'></main>",
             "/loading": "<main aria-busy='true'><div role='progressbar'>Loading</div></main>",
             "/empty": "<main></main>",

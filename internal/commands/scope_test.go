@@ -17,7 +17,7 @@ func TestScopeCLIHelperProcess(t *testing.T) {
 		return
 	}
 	if sentinel := os.Getenv("REP_SCOPE_TEST_ANDROID_SENTINEL"); sentinel != "" {
-		command, rest, err := rootCmd.Find([]string{"android", "clear"})
+		command, rest, err := rootCmd.Find([]string{"lab", "android", "clear"})
 		if err != nil || len(rest) != 0 || command.Name() != "clear" {
 			t.Fatal("Android command missing")
 		}

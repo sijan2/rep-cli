@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -29,16 +27,16 @@ This is a convenience wrapper - runs:
 The capture runs in foreground by default. Press Ctrl+C to stop.
 
 Examples:
-  rep android capture              Start capture on port 8080
-  rep android capture -p 8888      Use different port
-  rep android capture --bg         Run in background`,
+  rep lab android capture              Start capture on port 8080
+  rep lab android capture -p 8888      Use different port
+  rep lab android capture --bg         Run in background`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Find the capture script
 		home, _ := os.UserHomeDir()
 		scriptPath := filepath.Join(home, ".local/share/rep-cli/scripts/mitm_capture.py")
 
 		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-			return fmt.Errorf("capture script not found at %s\nRun: rep android capture --install", scriptPath)
+			return fmt.Errorf("capture script not found at %s\nRun: rep lab android capture --install", scriptPath)
 		}
 
 		// Check if mitmdump is available

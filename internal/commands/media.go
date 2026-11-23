@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -359,4 +357,4 @@ func writeMediaResult(cmd *cobra.Command, result map[string]any, maxBytes int) e
 	return err
 }
 
-func init() { rootCmd.AddCommand(newMediaCommand()) }
+func init() { labCmd.AddCommand(newMediaCommand()) }

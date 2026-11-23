@@ -86,7 +86,7 @@ func TestJevFailuresKeepTheirClassifiedCause(t *testing.T) {
 	}{
 		{&jev.Error{Code: jev.CodeRateLimited, Message: "Jev API returned HTTP 429: rate limited after 3 attempts; retry after a short wait"}, jev.CodeRateLimited, "HTTP 429", "retry after a short wait"},
 		{&bridge.RPCError{Code: jev.CodeInvalidResponse, Message: "Jev returned an invalid typed decision: question \"selection\" probabilities total 0.9000"}, jev.CodeInvalidResponse, "total 0.9000", "pin JEV_MODEL"},
-		{fmt.Errorf("select: %w", &jev.Error{Code: jev.CodeNotConfigured, Message: "Jev key unavailable"}), jev.CodeNotConfigured, "Jev key unavailable", "rep-lab jev config"},
+		{fmt.Errorf("select: %w", &jev.Error{Code: jev.CodeNotConfigured, Message: "Jev key unavailable"}), jev.CodeNotConfigured, "Jev key unavailable", "rep lab jev config"},
 		{output.NewAgentError("host_outdated", "", "the connected rep-host predates this rep CLI", "rep browser reload-extension --browser arc"), "host_outdated", "predates", "reload-extension"},
 		{errors.New("goal must contain between 1 and 2000 bytes"), output.ErrCodeCommandFailed, "goal must contain", ""},
 	}

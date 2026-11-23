@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -33,12 +31,12 @@ Filters:
   --since       Only requests since duration (5m, 1h)
 
 Examples:
-  rep android -p                           List all packages
-  rep android com.spotify.music            Show requests for Spotify
-  rep android spotify --domain api         Only requests to *api* domains
-  rep android spotify --select errors           Only error responses
-  rep android spotify --since 5m           Last 5 minutes only
-  rep-lab android spotify              JSON output for piping
+  rep lab android -p                           List all packages
+  rep lab android com.spotify.music            Show requests for Spotify
+  rep lab android spotify --domain api         Only requests to *api* domains
+  rep lab android spotify --select errors           Only error responses
+  rep lab android spotify --since 5m           Last 5 minutes only
+  rep lab android spotify              JSON output for piping
   rep body <id>                            Get full body for any request ID`,
 	RunE: runAndroid,
 }
@@ -99,7 +97,7 @@ var (
 )
 
 func init() {
-	rootCmd.AddCommand(androidCmd)
+	labCmd.AddCommand(androidCmd)
 	androidViewFlags.bind(androidCmd, false)
 	androidCmd.Flags().BoolVarP(&androidListPackages, "packages", "p", false, "List packages only")
 	androidCmd.Flags().IntVarP(&androidLimit, "limit", "n", 50, "Max requests to show")
@@ -168,7 +166,7 @@ func listAndroidPackages(data *store.AndroidData) error {
 			}
 		}
 	}
-	fmt.Println("\nUse: rep android <package> to view requests")
+	fmt.Println("\nUse: rep lab android <package> to view requests")
 	return nil
 }
 

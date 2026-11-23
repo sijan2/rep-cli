@@ -119,7 +119,7 @@ func coreBrowserStart(cmd *cobra.Command, args []string, headed bool) error {
 			status, err = headless.Start(ctx, dir, options)
 		}
 		if err != nil {
-			return err
+			return coreErrorf("browser_start_failed", "private browser could not start: %v", err)
 		}
 		// Release before remembering the new epoch or allowing normal tab leases.
 		if err = store.EndLifecycle(browser, reservation, closed); err != nil {
@@ -129,12 +129,12 @@ func coreBrowserStart(cmd *cobra.Command, args []string, headed bool) error {
 	} else {
 		status, err = headless.Start(ctx, dir, options)
 		if err != nil {
-			return err
+			return coreErrorf("browser_start_failed", "private browser could not start: %v", err)
 		}
 	}
 	client, err := headless.Connection(ctx, dir)
 	if err != nil {
-		return err
+		return coreErrorf("browser_connection_failed", "private browser started but its bridge is unavailable: %v", err)
 	}
 	browser = browserIdentity(client, "headless", name)
 	if err = store.ObserveEpoch(browser.Profile, browser.Epoch); err != nil {

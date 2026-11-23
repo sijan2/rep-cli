@@ -18,6 +18,11 @@ import (
 func newCoreReferenceCommand() *cobra.Command {
 	options := corePageOptions{Reference: true}
 	command := &cobra.Command{Use: "reference URL|TAB|p_CURSOR", Short: "Save design evidence", Args: cobra.ExactArgs(1)}
+	command.Long = `Collects computed layout, typography, colors, assets and a screenshot. A URL
+opens a page; a tab handle reuses it. --selector focuses a CSS selector or an
+observed control reference. Follow the returned cursor for remaining sections.`
+	command.Example = `  rep reference https://example.com/
+  rep reference t1 --selector '.hero'`
 	command.Flags().StringVar(&options.Selector, "selector", "", "Focus one CSS selector or control reference")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := corePage(cmd, args, options); err != nil {

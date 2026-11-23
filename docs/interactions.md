@@ -4,6 +4,8 @@
 
 `rep do t3.e12` clicks an observed control. A following VALUE fills a text field, selects an option or sets a checkbox. `--press` takes a key, chord or sequence, for example `rep do t3.e12 query --press Enter`. A value starting with a hyphen follows `--`. Repeat `--file PATH` for uploads through a file input or chooser trigger. Ref validation checks document generation and observed value; it refuses to overwrite changed drafts. Reread before choosing an explicit replacement.
 
+`rep do n_HANDLE t3` clicks a control from `rep records controls t3`, validated against its own node and owning record before input; see [records](records.md).
+
 The result contains a bounded delta of changed text and controls, or a full read after navigation. Native dialogs, popups and downloads that are not observed are labelled accordingly. Verify a performed-but-unobserved action; do not repeat it.
 
 ## Plan schema
@@ -41,4 +43,4 @@ A condition is an exact `url` or a `target` plus `text`, `value`, `checked`, `vi
 
 `rep shot t3 image.png` records an image; `--selector` frames one control, `--full-page` captures the scrollable page, and `--viewport` stays on the owned tab. `rep shot --urls @urls.txt --viewport mobile` uses a bounded pool; the optional positional path is an output directory. URL lists may use stdin and contain one URL per line.
 
-`rep reference t3` saves a screenshot plus computed layout, fonts, assets and timing evidence. `--selector` narrows a CSS selector or observed ref. Follow its section cursor. `rep cdp METHOD JSON t3` is the journaled escape hatch for permitted methods on an owned tab; cookie/storage-reading and browser-global methods are refused. It is not a path around ownership or credential policy.
+`rep reference t3` saves a screenshot plus computed layout, fonts, assets and timing evidence. `--selector` narrows a CSS selector or observed ref. Follow its section cursor. `rep cdp METHOD JSON t3` is the journaled escape hatch for permitted methods on an owned tab; browser-global methods remain outside its scope. Use `rep cookies` for HttpOnly cookie inspection/transfer and `rep eval` for origin-local storage. Explicit `--out` on eval/cdp saves raw result JSON; see [authentication](authentication.md).

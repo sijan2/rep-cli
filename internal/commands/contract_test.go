@@ -1,5 +1,3 @@
-//go:build !replab
-
 package commands
 
 import (
@@ -37,11 +35,24 @@ func TestContractIsGeneratedFromCommandMetadata(t *testing.T) {
 		t.Fatal("root contract duplicated command metadata")
 	}
 	page.Flags().String("find", "", "Match `QUERY`")
+	page.Flags().Int("limit", 50, "Maximum matches")
+	page.Example = "  rep page https://example.com/"
 	page.PersistentFlags().String("unused", "", "")
 	root.PersistentFlags().String("task", "", "context")
 	help := commandContract(page)
-	if !strings.Contains(help, "--find QUERY") || strings.Contains(help, "--task") {
-		t.Fatalf("wrong local flag projection: %s", help)
+	for _, want := range []string{"--find QUERY", "--task", "(default 50)", page.Example} {
+		if !strings.Contains(help, strings.TrimSpace(want)) {
+			t.Fatalf("help omits %q: %s", want, help)
+		}
+	}
+}
+
+func TestRootHelpDiscoversAuthenticatedAndAdvancedWorkflows(t *testing.T) {
+	help := rootContract(rootCmd)
+	for _, want := range []string{"cookies", "REP_PROFILE", "--headed", "rep lab --help", "rep net type:api", "rep replay h_ID --set", "body --out"} {
+		if !strings.Contains(help, want) {
+			t.Errorf("root help omits %q", want)
+		}
 	}
 }
 

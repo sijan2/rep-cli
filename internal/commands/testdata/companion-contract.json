@@ -156,20 +156,20 @@
   },
   {
     "argv": [
+      "lab",
       "jev",
       "config",
       "--env-file",
       "/fixture/fake.env"
     ],
-    "fields": [],
-    "binary": "rep-lab"
+    "fields": []
   },
   {
     "argv": [
+      "lab",
       "jev",
       "status"
     ],
-    "fields": [],
-    "binary": "rep-lab"
+    "fields": []
   }
 ]

@@ -6,16 +6,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/repplus/rep-cli/internal/agentstate"
 	"github.com/repplus/rep-cli/internal/bridge"
 	"github.com/repplus/rep-cli/internal/browserfast"
+	"github.com/repplus/rep-cli/internal/governor"
 	"github.com/repplus/rep-cli/internal/output"
 	"github.com/repplus/rep-cli/internal/scope"
+	"github.com/repplus/rep-cli/internal/sitepolicy"
 	"github.com/repplus/rep-cli/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -74,6 +78,12 @@ func newCoreFetchCommand() *cobra.Command {
 	var method, data string
 	var headers []string
 	command := &cobra.Command{Use: "fetch URL", Short: "Fetch in a private origin tab using browser credentials", Args: cobra.ExactArgs(1)}
+	command.Long = `Runs a request in the selected browser profile, including its cookies. -d implies
+POST unless -X is supplied; -H is repeatable. Browser-controlled headers such as
+Cookie and Host cannot be supplied manually. Use rep cookies for cookie state,
+and rep replay when starting from a captured request.`
+	command.Example = `  rep fetch https://example.com/api/items
+  rep fetch https://example.com/api/items -H 'Content-Type: application/json' -d @payload.json`
 	command.Flags().StringVarP(&method, "X", "X", "", "HTTP method (GET; POST with -d)")
 	command.Flags().StringArrayVarP(&headers, "H", "H", nil, "Request header, repeatable")
 	command.Flags().StringVarP(&data, "d", "d", "", "Request body or @FILE")
@@ -85,11 +95,22 @@ func newCoreFetchCommand() *cobra.Command {
 	}
 	return command
 }
+
+// transportSite keys the governor by the registrable domain of an origin.
+func transportSite(origin string) string {
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return origin
+	}
+	return sitepolicy.RegistrableDomain(parsed.Hostname())
+}
+
 func coreFetch(command *cobra.Command, rawURL, method string, headers []string, data string, hasData bool) error {
 	origin, err := coreRequestURL(rawURL)
 	if err != nil {
 		return err
 	}
+
 	if method == "" {
 		method = "GET"
 		if hasData {
@@ -107,6 +128,9 @@ func coreFetch(command *cobra.Command, rawURL, method string, headers []string, 
 		value = strings.TrimSpace(value)
 		if !ok || !coreHTTPToken.MatchString(name) || strings.ContainsAny(value, "\r\n\x00") {
 			return coreArgument("headers must be Name: value without control characters")
+		}
+		if err := validateExplicitTransportHeader(name, value); err != nil {
+			return err
 		}
 		headerMap[strings.ToLower(name)] = append(headerMap[strings.ToLower(name)], value)
 	}
@@ -219,6 +243,16 @@ func coreRunTransport(command *cobra.Command, variants []fanoutVariant, origin s
 	if err != nil {
 		return err
 	}
+	// Every rep-authored request honors the shared cooldown before any
+	// browser work, so a 429 seen by one process stops all of them.
+	site := transportSite(origin)
+	gov, err := recordsGovernor()
+	if err != nil {
+		return err
+	}
+	if err := governorCooldownError(gov, site); err != nil {
+		return err
+	}
 	ctx, cancel := coreTimeout(command, timeout+15*time.Second)
 	defer cancel()
 	var addressed *agentstate.Tab
@@ -245,14 +279,39 @@ func coreRunTransport(command *cobra.Command, variants []fanoutVariant, origin s
 	outcome := "outcome_unknown"
 	defer func() { _ = index.Journal(transport.tab.Owner, transport.tab.Handle, operation, outcome) }()
 	result := coreTabResult(transport.tab)
-	result.Meta = map[string]any{"operation": operation, "transport": "in-page", "fidelity": "browser-session"}
+	result.Meta = map[string]any{"operation": operation, "transport": "in-page", "realm": "isolated-world", "fidelity": "browser-session"}
+	// The job runs in an isolated world so page scripts can neither observe
+	// nor patch rep's fetch. The browser still attributes the request to the
+	// page: same cookies, Referer, Fetch Metadata and connection.
+	var tree struct {
+		FrameTree struct {
+			Frame struct {
+				ID string `json:"id"`
+			} `json:"frame"`
+		} `json:"frameTree"`
+	}
+	if err = transport.session.Inspect(ctx, "", "Page.getFrameTree", map[string]any{}, &tree); err != nil {
+		outcome = "not_dispatched"
+		return err
+	}
+	var world struct {
+		ExecutionContextID int `json:"executionContextId"`
+	}
+	if err = transport.session.Inspect(ctx, "", "Page.createIsolatedWorld", map[string]any{"frameId": tree.FrameTree.Frame.ID, "worldName": "rep-transport", "grantUniveralAccess": false}, &world); err != nil {
+		outcome = "not_dispatched"
+		return err
+	}
+	if world.ExecutionContextID <= 0 {
+		outcome = "not_dispatched"
+		return agentstate.Failure("isolated_world_unavailable", "the page did not provide an isolated execution context", coreNext("tabs"))
+	}
 	var evaluated struct {
 		Result struct {
 			Value json.RawMessage `json:"value"`
 		} `json:"result"`
 		Exception json.RawMessage `json:"exceptionDetails"`
 	}
-	if err = transport.session.Inspect(ctx, "", "Runtime.evaluate", map[string]any{"expression": script, "awaitPromise": true, "returnByValue": true, "timeout": timeout.Milliseconds()}, &evaluated); err != nil || len(evaluated.Exception) > 0 || len(evaluated.Result.Value) == 0 {
+	if err = transport.session.Inspect(ctx, "", "Runtime.evaluate", map[string]any{"expression": script, "contextId": world.ExecutionContextID, "awaitPromise": true, "returnByValue": true, "timeout": timeout.Milliseconds()}, &evaluated); err != nil || len(evaluated.Exception) > 0 || len(evaluated.Result.Value) == 0 {
 		result.Status = "performed"
 		result.Complete = boolPointer(false)
 		result.Meta.(map[string]any)["observation_error"] = "outcome_unknown; requests were not retried"
@@ -265,17 +324,28 @@ func coreRunTransport(command *cobra.Command, variants []fanoutVariant, origin s
 		result.Complete = boolPointer(false)
 		return emitCore(command, result)
 	}
-	return emitCoreTransport(command, result, recording, variants, evaluated.Result.Value, source, &outcome)
+	return emitCoreTransport(command, result, recording, variants, evaluated.Result.Value, source, &outcome, gov, site)
 }
 
-func emitCoreTransport(command *cobra.Command, result coreResult, recording *coreRecording, variants []fanoutVariant, evaluation json.RawMessage, source *store.Request, outcome *string) error {
+func emitCoreTransport(command *cobra.Command, result coreResult, recording *coreRecording, variants []fanoutVariant, evaluation json.RawMessage, source *store.Request, outcome *string, gov *governor.Governor, site string) error {
 	var execution struct {
-		Attempted int  `json:"attempted"`
-		Retries   int  `json:"retries"`
-		Stopped   bool `json:"stopped"`
+		Attempted   int  `json:"attempted"`
+		Retries     int  `json:"retries"`
+		Stopped     bool `json:"stopped"`
+		RateLimited *struct {
+			RetryMS int `json:"retry_ms"`
+		} `json:"rate_limited"`
 	}
 	if err := json.Unmarshal(evaluation, &execution); err != nil {
 		return err
+	}
+	if execution.RateLimited != nil && gov != nil {
+		// The server's Retry-After becomes a cooldown that every consumer of
+		// this site honors; nothing retries around it.
+		header := http.Header{"Retry-After": {strconv.Itoa((execution.RateLimited.RetryMS + 999) / 1000)}}
+		if stop := gov.Observe(site, http.StatusTooManyRequests, header, ""); stop != nil {
+			result.Meta.(map[string]any)["cooldown"] = map[string]any{"site": site, "until": stop.Until, "reason": stop.Reason}
+		}
 	}
 	// Retry duplicates are paired with the final observation for each URL.
 	requests := recording.snapshot.Requests

@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -47,28 +45,28 @@ var igCmd = &cobra.Command{
 	Short: "Instagram one-shot capture: mitmdump + adb proxy + Frida pinning bypass + spawn",
 	Long: `Full Instagram capture pipeline in one command.
 
-rep ig                            Start mitmdump, set phone proxy, attach Frida
+rep lab ig                            Start mitmdump, set phone proxy, attach Frida
                                   SSL pinning bypass to a running IG. Ctrl+C tears down.
 
-rep ig --proxy 10.0.0.4:8080      Use Burp/Charles/etc. already listening there;
+rep lab ig --proxy 10.0.0.4:8080      Use Burp/Charles/etc. already listening there;
                                   don't start mitmdump. Phone is pointed at that proxy.
 
-rep ig --frida-host 127.0.0.1:27043
+rep lab ig --frida-host 127.0.0.1:27043
                                   Connect to a port-forwarded frida-server (for
                                   renamed/stealth setups). Requires 'adb forward'
                                   already in place.
 
-rep ig --spawn                    Spawn IG under Frida instead of attaching.
+rep lab ig --spawn                    Spawn IG under Frida instead of attaching.
                                   On API 36 this often trips anti-debug — default is attach.
 
-rep ig stop                       Teardown: remove phone proxy, kill mitmdump + frida.
+rep lab ig stop                       Teardown: remove phone proxy, kill mitmdump + frida.
 
-rep ig list [--surface <name>] [--domain <host>] [-n <limit>]
+rep lab ig list [--surface <name>] [--domain <host>] [-n <limit>]
                                   List IG requests with IG-aware filters.
                                   --surface matches X-Fb-Friendly-Name (e.g. clips_profile).
 
-rep ig surface                    Count requests grouped by X-Fb-Friendly-Name.
-rep ig body <id>                  Full request + response (gzip-decoded).
+rep lab ig surface                    Count requests grouped by X-Fb-Friendly-Name.
+rep lab ig body <id>                  Full request + response (gzip-decoded).
 
 Prerequisites:
   - frida-server patched for API 36 running on device
@@ -112,7 +110,7 @@ var igBodyCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(igCmd)
+	labCmd.AddCommand(igCmd)
 	igCmd.AddCommand(igStopCmd)
 	igCmd.AddCommand(igListCmd)
 	igCmd.AddCommand(igSurfaceCmd)
@@ -144,9 +142,9 @@ func runIGStart(cmd *cobra.Command, args []string) error {
 	// reverts on reboot. Skip with --no-selinux if you handle it elsewhere.
 	if !igNoSELinux {
 		if err := setSELinuxPermissive(); err != nil {
-			fmt.Printf("[rep ig] warning: could not set SELinux permissive (%v). If frida attach fails, run: adb shell \"su -c 'setenforce 0'\"\n", err)
+			fmt.Printf("[rep lab ig] warning: could not set SELinux permissive (%v). If frida attach fails, run: adb shell \"su -c 'setenforce 0'\"\n", err)
 		} else {
-			fmt.Println("[rep ig] SELinux set to permissive (reverts on reboot)")
+			fmt.Println("[rep lab ig] SELinux set to permissive (reverts on reboot)")
 		}
 	}
 
@@ -155,7 +153,7 @@ func runIGStart(cmd *cobra.Command, args []string) error {
 	var mitm *exec.Cmd
 	if igExternalProxy != "" {
 		proxyAddr = igExternalProxy
-		fmt.Printf("[rep ig] using external proxy: %s (mitmdump not started)\n", proxyAddr)
+		fmt.Printf("[rep lab ig] using external proxy: %s (mitmdump not started)\n", proxyAddr)
 	} else {
 		hostIP := igHostIP
 		if hostIP == "" {
@@ -169,8 +167,8 @@ func runIGStart(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		scriptPath := mitmScriptPath()
-		fmt.Printf("[rep ig] host=%s  port=%d\n", hostIP, igProxyPort)
-		fmt.Printf("[rep ig] starting mitmdump with %s\n", scriptPath)
+		fmt.Printf("[rep lab ig] host=%s  port=%d\n", hostIP, igProxyPort)
+		fmt.Printf("[rep lab ig] starting mitmdump with %s\n", scriptPath)
 
 		mitm = exec.Command("mitmdump", "-p", fmt.Sprintf("%d", igProxyPort), "--showhost",
 			"--set", "termlog_verbosity=warn", "--set", "flow_detail=0",
@@ -190,7 +188,7 @@ func runIGStart(cmd *cobra.Command, args []string) error {
 		}
 		return fmt.Errorf("set proxy: %w", err)
 	}
-	fmt.Printf("[rep ig] phone proxy -> %s\n", proxyAddr)
+	fmt.Printf("[rep lab ig] phone proxy -> %s\n", proxyAddr)
 
 	// Ensure IG is in the right state before frida connects.
 	if !igSkipFrida {
@@ -199,7 +197,7 @@ func runIGStart(cmd *cobra.Command, args []string) error {
 		} else {
 			// Attach mode: launch IG if not running so there's something to attach to.
 			if pidof(igPackage) == "" {
-				fmt.Println("[rep ig] IG not running — launching via monkey")
+				fmt.Println("[rep lab ig] IG not running — launching via monkey")
 				_ = exec.Command("adb", "shell", "monkey", "-p", igPackage,
 					"-c", "android.intent.category.LAUNCHER", "1").Run()
 				time.Sleep(3500 * time.Millisecond)
@@ -244,11 +242,11 @@ func runIGStart(cmd *cobra.Command, args []string) error {
 			// USB transport but not over -H (remote server has no display-name map).
 			fridaArgs = append(fridaArgs, "-n", igPackage)
 		}
-		fmt.Printf("[rep ig] %s %s\n", fridaBin, strings.Join(fridaArgs, " "))
+		fmt.Printf("[rep lab ig] %s %s\n", fridaBin, strings.Join(fridaArgs, " "))
 		if igSpawn {
-			fmt.Println("[rep ig] IG spawning — use the app now. Ctrl+C to stop.")
+			fmt.Println("[rep lab ig] IG spawning — use the app now. Ctrl+C to stop.")
 		} else {
-			fmt.Println("[rep ig] attached to running IG — use the app now. Ctrl+C to stop.")
+			fmt.Println("[rep lab ig] attached to running IG — use the app now. Ctrl+C to stop.")
 		}
 		fmt.Println()
 
@@ -264,7 +262,7 @@ func runIGStart(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("frida: %w", err)
 		}
 	} else {
-		fmt.Println("[rep ig] --no-frida: open IG manually. Ctrl+C to stop.")
+		fmt.Println("[rep lab ig] --no-frida: open IG manually. Ctrl+C to stop.")
 	}
 
 	// Wait for signal or frida exit
@@ -274,9 +272,9 @@ func runIGStart(cmd *cobra.Command, args []string) error {
 	}
 	select {
 	case <-sigChan:
-		fmt.Println("\n[rep ig] tearing down…")
+		fmt.Println("\n[rep lab ig] tearing down…")
 	case err := <-done:
-		fmt.Printf("\n[rep ig] frida exited: %v\n", err)
+		fmt.Printf("\n[rep lab ig] frida exited: %v\n", err)
 	}
 
 	if frida != nil && frida.Process != nil {
@@ -288,7 +286,7 @@ func runIGStart(cmd *cobra.Command, args []string) error {
 		_ = mitm.Process.Signal(syscall.SIGTERM)
 		_ = mitm.Wait()
 	}
-	fmt.Println("[rep ig] done.")
+	fmt.Println("[rep lab ig] done.")
 	return nil
 }
 
@@ -299,15 +297,15 @@ func runIGStop(cmd *cobra.Command, args []string) error {
 	if err := unsetAndroidProxy(); err != nil {
 		errs = append(errs, "unset proxy: "+err.Error())
 	} else {
-		fmt.Println("[rep ig] phone proxy unset")
+		fmt.Println("[rep lab ig] phone proxy unset")
 	}
 	if out, err := exec.Command("pkill", "-f", "mitmdump").CombinedOutput(); err == nil {
-		fmt.Println("[rep ig] killed mitmdump")
+		fmt.Println("[rep lab ig] killed mitmdump")
 	} else if len(out) > 0 {
 		errs = append(errs, "pkill mitmdump: "+string(out))
 	}
 	if out, err := exec.Command("pkill", "-f", "frida.*com.instagram.android").CombinedOutput(); err == nil {
-		fmt.Println("[rep ig] killed frida IG session")
+		fmt.Println("[rep lab ig] killed frida IG session")
 	} else if len(out) > 0 && strings.TrimSpace(string(out)) != "" {
 		errs = append(errs, "pkill frida: "+string(out))
 	}
@@ -326,7 +324,7 @@ func runIGList(cmd *cobra.Command, args []string) error {
 	}
 	pkg := data.Packages[igPackage]
 	if pkg == nil || len(pkg.Requests) == 0 {
-		fmt.Printf("No Instagram traffic captured yet. Run `rep ig` first.\n")
+		fmt.Printf("No Instagram traffic captured yet. Run `rep lab ig` first.\n")
 		return nil
 	}
 	reqs := pkg.Requests
@@ -369,7 +367,7 @@ func runIGList(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("%s  %s\n", r.ID, line)
 	}
-	fmt.Println("\nUse: rep ig body <id>   (prefix OK — e.g. first 8-12 chars)")
+	fmt.Println("\nUse: rep lab ig body <id>   (prefix OK — e.g. first 8-12 chars)")
 	return nil
 }
 
@@ -394,7 +392,7 @@ func runIGBody(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if match == nil {
-		return fmt.Errorf("no request with id prefix %q (try `rep ig list`)", prefix)
+		return fmt.Errorf("no request with id prefix %q (try `rep lab ig list`)", prefix)
 	}
 	if count > 1 {
 		return fmt.Errorf("prefix %q matched %d requests — supply more characters", prefix, count)
@@ -516,7 +514,7 @@ func runIGSurface(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  %5d  %-44s  %-30s  %s\n", b.count, truncate(b.surface, 44),
 			strings.Join(methodParts, " "), truncate(topDom, 40))
 	}
-	fmt.Println("\nUse: rep ig list --surface <name>   to drill in")
+	fmt.Println("\nUse: rep lab ig list --surface <name>   to drill in")
 	return nil
 }
 

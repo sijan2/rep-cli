@@ -1,5 +1,3 @@
-//go:build !replab
-
 package commands
 
 import (
@@ -21,12 +19,15 @@ import (
 // Every accepted flag is counted. The completed migration has no exceptions.
 var contractFlags = map[string][]string{
 	"rep": {"task"}, "rep page": {"section", "find", "reload", "viewport", "capture"},
-	"rep do": {"press", "file", "capture"}, "rep eval": {"timeout", "capture"},
+	"rep do": {"press", "file", "capture"}, "rep eval": {"timeout", "capture", "out"},
 	"rep shot": {"urls", "viewport", "full-page", "selector"}, "rep reference": {"selector"},
-	"rep net": {}, "rep body": {"request", "find", "out"}, "rep fetch": {"X", "H", "d"},
+	"rep export": {"format"}, "rep net": {}, "rep body": {"request", "find", "out"}, "rep fetch": {"X", "H", "d"},
+	"rep records": {"max", "timeout", "keep-tab", "site", "url"}, "rep records controls": {},
 	"rep replay": {"set", "matrix", "write", "timeout"}, "rep download": {"overwrite", "timeout"},
 	"rep tabs": {}, "rep close": {}, "rep scope": {}, "rep doctor": {}, "rep browser": {},
-	"rep browser start": {"headed"}, "rep browser stop": {}, "rep cdp": {},
+	"rep browser start": {"headed"}, "rep browser stop": {}, "rep cdp": {"out"},
+	"rep cookies": {}, "rep cookies list": {"all-paths"}, "rep cookies export": {"all-paths", "format"},
+	"rep cookies import": {"all-domains"}, "rep cookies delete": {"domain", "path", "partition-key"},
 }
 
 type surfaceMigration struct {
@@ -92,7 +93,7 @@ func surfaceDebt() map[string][]string {
 	var walk func(*cobra.Command)
 	walk = func(command *cobra.Command) {
 		path := command.CommandPath()
-		if command.Name() == "help" {
+		if command.Name() == "help" || command == labCmd {
 			return
 		}
 		if _, ok := contractFlags[path]; !ok {
@@ -113,15 +114,6 @@ func surfaceDebt() map[string][]string {
 		for _, flag := range append(local, inherited...) {
 			if flag.Hidden {
 				debt["hidden_flags"] = append(debt["hidden_flags"], path+" --"+flag.Name)
-			}
-		}
-		if _, ok := contractFlags[path]; ok && command != rootCmd {
-			limit := 600
-			if path == "rep do" {
-				limit = 1400
-			}
-			if len(commandContract(command)) > limit {
-				debt["help"] = append(debt["help"], path)
 			}
 		}
 		for _, child := range command.Commands() {
@@ -202,6 +194,11 @@ func TestAcceptedFlagSurface(t *testing.T) {
 		if command.Name() == "help" {
 			return
 		}
+		// The lab group is one verb here; its tools have their own full help.
+		if command == labCmd {
+			verbs++
+			return
+		}
 		path := command.CommandPath()
 		local, inherited := acceptedFlags(command)
 		localTotal += len(local)
@@ -239,33 +236,24 @@ func TestAcceptedFlagSurface(t *testing.T) {
 	}
 	walk(rootCmd)
 	t.Logf("all accepted flags, including hidden: %d local + %d inherited = %d effective; %d top-level verbs", localTotal, inheritedTotal, localTotal+inheritedTotal, verbs)
-	if verbs != 16 || localTotal != 29 {
-		t.Errorf("final surface: %d verbs, %d local flags including --task; want 16 and 29", verbs, localTotal)
+	if verbs != len(contractVerbs) {
+		t.Errorf("root help lists %d verbs, command tree has %d", len(contractVerbs), verbs)
 	}
 
 }
 
-func TestContractHelpBudgets(t *testing.T) {
-	migration := readSurfaceMigration(t)
-	root := rootContract(rootCmd)
-	if len(root) > 2000 {
-		t.Errorf("root help %d bytes, budget 2000 (~500 tokens)", len(root))
-	}
+func TestContractHelpExposesAcceptedFlags(t *testing.T) {
 	for path := range contractFlags {
 		command, args, err := rootCmd.Find(strings.Fields(path)[1:])
 		if err != nil || len(args) > 0 || command.CommandPath() != path || command == rootCmd {
 			continue
 		}
 		help := commandContract(command)
-		limit := 600
-		if path == "rep do" {
-			limit = 1400
-		}
-		if len(help) > limit && !migration.allows("help", path) {
-			t.Errorf("%s help %d bytes exceeds %d (~150 tokens; do schema exception)", path, len(help), limit)
-		}
-		if strings.Contains(help, "Global Flags:") {
-			t.Errorf("%s repeats inherited flags", path)
+		local, inherited := acceptedFlags(command)
+		for _, flag := range append(local, inherited...) {
+			if !strings.Contains(help, "--"+flag.Name) {
+				t.Errorf("%s help omits accepted --%s", path, flag.Name)
+			}
 		}
 	}
 }

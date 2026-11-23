@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (

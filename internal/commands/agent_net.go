@@ -210,6 +210,14 @@ func (q coreNetQuery) subject(r *store.Request) string {
 }
 func newCoreNetCommand() *cobra.Command {
 	command := &cobra.Command{Use: "net [QUERY...|s_CAPTURE|p_CURSOR]", Short: "Query captured traffic; terms are ANDed", Args: cobra.ArbitraryArgs}
+	command.Long = `Query terms are ANDed. Use METHOD (GET, POST, write), STATUS (200, 4xx, err),
+host:HOST, type:api|script|document|media|image|font|css|xhr, since:DURATION,
+has:TEXT, or ~REGEX. in:url|headers|body chooses the field for has:/~ (default url).
+Pass an s_ capture to select an archive; follow a p_ cursor for the next page.`
+	command.Example = `  rep net type:api
+  rep net GET 2xx host:example.com since:10m
+  rep net in:body has:product
+  rep net s_CAPTURE`
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := coreNet(cmd, args); err != nil {
 			return coreFailure(cmd, err)

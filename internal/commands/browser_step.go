@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -416,7 +414,7 @@ remembered per task and tab (without values) so later steps avoid repeats.`,
 			return output.MarkReported(agentError)
 		},
 	}
-	command.Flags().IntVar(&options.TabID, "tab", -1, "Existing task-owned browser tab")
+	bindLabTabFlag(command.Flags(), &options.TabID, "Existing task-owned browser tab")
 	command.Flags().BoolVar(&apply, "apply", false, "Perform a selected decision through the verified executor")
 	command.Flags().StringArrayVar(&valuePairs, "value", nil, "Named value NAME=TEXT available to TYPE_TEXT (repeatable; names only reach Jev)")
 	command.Flags().StringVar(&text, "text", "", "Shorthand for --value text=TEXT")
@@ -464,7 +462,7 @@ func finishStepEvidence(record *browserOperationEvidence, result stepOutput, app
 // was attempted, or when the executor could not confirm the operation.
 func applyStep(ctx context.Context, browser jevdom.Browser, options jevdom.Options, input jevdom.StepOptions, decision jevdom.StepDecision, values stepValues) (*browserflow.StepResult, *bool, string, error) {
 	if decision.Status != "selected" {
-		return nil, nil, "", output.NewAgentError("step_not_selected", "browser step", "the decision is "+decision.Status+"; nothing was performed: "+decision.Reason, "rep-lab element observe --tab "+strconv.Itoa(options.TabID))
+		return nil, nil, "", output.NewAgentError("step_not_selected", "browser step", "the decision is "+decision.Status+"; nothing was performed: "+decision.Reason, "rep lab element observe --tab "+strconv.Itoa(options.TabID))
 	}
 	observeOptions := input.Options
 	result := &browserflow.StepResult{ID: "step", Status: "performed"}
@@ -489,7 +487,7 @@ func applyStep(ctx context.Context, browser jevdom.Browser, options jevdom.Optio
 		if decision.Operation == jevdom.OpTypeText {
 			value, ok := values.values[decision.ValueKey]
 			if !ok {
-				return nil, nil, "", output.NewAgentError("step_value_required", "browser step", "TYPE_TEXT needs a value; supply --text or --value NAME=TEXT", "rep-lab step --help")
+				return nil, nil, "", output.NewAgentError("step_value_required", "browser step", "TYPE_TEXT needs a value; supply --text or --value NAME=TEXT", "rep lab step --help")
 			}
 			step.Action, step.Value, step.Replace = "fill", &value, true
 		}
@@ -507,7 +505,7 @@ func applyStep(ctx context.Context, browser jevdom.Browser, options jevdom.Optio
 			return result, nil, "", err
 		}
 		if executed.Status != "performed" && executed.Status != "verified" {
-			return result, nil, "", output.NewAgentError("step_not_performed", "browser step", "the executor reported "+executed.Status+" ("+executed.Code+"); unconfirmed actions are never retried", "rep-lab element observe --tab "+strconv.Itoa(options.TabID))
+			return result, nil, "", output.NewAgentError("step_not_performed", "browser step", "the executor reported "+executed.Status+" ("+executed.Code+"); unconfirmed actions are never retried", "rep lab element observe --tab "+strconv.Itoa(options.TabID))
 		}
 	case jevdom.OpScrollDown, jevdom.OpScrollUp:
 		direction := "1"

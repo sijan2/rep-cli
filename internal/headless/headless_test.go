@@ -3,6 +3,7 @@ package headless
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,63 @@ func TestRuntimeDirectoryKeepsPrivateBridgeUnderCallerRoot(t *testing.T) {
 	_, _, second := paths("/fixture/tasks/second")
 	if filepath.Dir(first) != "/private/rep-fixture/ipc" || first == second {
 		t.Fatalf("runtime paths escaped isolation or collided: %q %q", first, second)
+	}
+}
+
+func TestLongRuntimeRootStillProvidesWorkingDistinctSockets(t *testing.T) {
+	data := t.TempDir()
+	runtimeRoot := filepath.Join(t.TempDir(), strings.Repeat("runtime-", 20))
+	t.Setenv("XDG_RUNTIME_DIR", runtimeRoot)
+	_, _, first := paths(data)
+	if filepath.Dir(first) != "/tmp" || len(filepath.Join(first, "bridge-2147483647.sock")) > 103 {
+		t.Fatalf("long runtime path was not shortened: %q", first)
+	}
+	if err := privateDir(first); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(first) })
+	socket := filepath.Join(first, "bridge-2147483647.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatalf("shortened transport cannot bind: %v", err)
+	}
+	defer listener.Close()
+	t.Setenv("XDG_RUNTIME_DIR", runtimeRoot+"-other")
+	_, _, second := paths(data)
+	if first == second {
+		t.Fatal("separate runtime roots share a fallback socket directory")
+	}
+}
+
+func TestStoppedLegacyLongRuntimeProfileCanRestart(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_RUNTIME_DIR", filepath.Join(t.TempDir(), strings.Repeat("runtime-", 20)))
+	root, profile, bridgeDir := paths(data)
+	if err := privateDir(root); err != nil {
+		t.Fatal(err)
+	}
+	state := State{Version: 1, Profile: profile, BridgeDir: legacyBridgeDir(data)}
+	if err := writeState(data, state); err != nil {
+		t.Fatal(err)
+	}
+	read, err := readState(data)
+	if err != nil || read.BridgeDir != bridgeDir {
+		t.Fatalf("stopped legacy state did not recover: %+v %v", read, err)
+	}
+	state.PID = os.Getpid()
+	if err := writeState(data, state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readState(data); err == nil {
+		t.Fatal("rebound an active legacy process to a new bridge directory")
+	}
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	state.PID, state.BridgeDir = 0, ""
+	if err := writeState(data, state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readState(data); err == nil {
+		t.Fatal("treated an absent bridge directory as legacy state")
 	}
 }
 

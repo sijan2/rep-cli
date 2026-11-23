@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -118,7 +116,7 @@ func emitSurfaceAudit(source string, families []surface.Family, candidates []sur
 		if len(candidates) > 0 {
 			env.Suggest = []string{
 				candidates[0].Next,
-				"rep probe add --hypothesis '<h>' --oracle " + string(candidates[0].Oracle) + " --ref " + candidates[0].RefID,
+				"rep lab probe add --hypothesis '<h>' --oracle " + string(candidates[0].Oracle) + " --ref " + candidates[0].RefID,
 			}
 		}
 		buf, err := sonic.MarshalIndent(env, "", "  ")

@@ -19,6 +19,15 @@ func newCoreBodyCommand() *cobra.Command {
 	var request bool
 	var find, out string
 	command := &cobra.Command{Use: "body h_ID [POINTER|#EVENT|p_CURSOR]", Short: "Read captured bytes and metadata", Args: cobra.RangeArgs(1, 2)}
+	command.Long = `Reads existing captured evidence; it does not fetch the URL again. POINTER is a
+JSON pointer, and quoted #EVENT selects a stream event. Large output returns a
+cursor. --out exports the original bytes, including credential fields, to a new
+file. It exports a full body or a selected stream event; omit pointers, cursors
+and --find when exporting.`
+	command.Example = `  rep body h_ID /data/items
+  rep body h_ID '#3'
+  rep body h_ID --request
+  rep body h_ID --out ./response.json`
 	command.Flags().BoolVar(&request, "request", false, "Read the request body")
 	command.Flags().StringVar(&find, "find", "", "Find text in the redacted body")
 	command.Flags().StringVar(&out, "out", "", "Write raw bytes privately; refuse an existing file")

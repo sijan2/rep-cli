@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -123,7 +121,7 @@ func stateAdvice(kind string) string {
 	case "loading":
 		return "Read again with a longer budget; the page is still producing its content."
 	case "login_wall":
-		return "The signed-in session does not cover this page. Sign in manually in the browser profile, then read again. Do not enter credentials through Rep."
+		return "The current browser profile needs a signed-in session. Use rep do on the observed sign-in controls, rep browser start --headed for interactive sign-in, or rep cookies import TAB @FILE to restore cookies. Read the page again after sign-in."
 	case "consent_dialog":
 		return "Dismiss the consent dialog first: locate its accept or reject control, then read again."
 	case "challenge":
@@ -294,11 +292,11 @@ func newBrowserStateCommand(deps jevDOMDependencies) *cobra.Command {
 			}
 			result.Next = fastNext(command, "page", tab, extra)
 		case "locate":
-			result.Next = quoteCommand("rep-lab", "locate", "the button that accepts or closes the consent dialog", "--tab", fmt.Sprint(tab), "--task", selected.Identity())
+			result.Next = quoteCommand("rep", "lab", "locate", "the button that accepts or closes the consent dialog", "--tab", fmt.Sprint(tab), "--task", selected.Identity())
 		}
 		return finish(nil)
 	}
-	command.Flags().IntVar(&tab, "tab", -1, "Existing task-owned tab to classify without navigation")
+	bindLabTabFlag(command.Flags(), &tab, "Existing task-owned tab to classify without navigation")
 	command.Flags().DurationVar(&timeout, "timeout", 15*time.Second, "Observation and decision budget (1s to 60s)")
 	_ = command.MarkFlagRequired("tab")
 	return command

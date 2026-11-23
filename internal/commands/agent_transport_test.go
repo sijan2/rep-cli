@@ -39,6 +39,38 @@ func TestCoreReplayWriteGuardAndMutations(t *testing.T) {
 		t.Fatal("source mutated")
 	}
 }
+
+func TestExplicitBrowserManagedHeadersFailInsteadOfDisappearing(t *testing.T) {
+	source := &store.Request{Method: "GET", URL: "https://example.test/", Headers: store.HeaderMap{"Cookie": {"captured-session"}, "Sec-Fetch-Site": {"same-origin"}}}
+	for _, name := range []string{"Cookie", "cOoKiE", "Set-Cookie", "Origin", "Referer", "User-Agent", "Host", "Content-Length", "Sec-Fetch-Site", "Proxy-Authorization"} {
+		t.Run(name, func(t *testing.T) {
+			// An invalid GET body ensures no browser call even if header validation
+			// regresses. The expected failure must identify the ignored override.
+			err := coreFetch(&cobra.Command{}, source.URL, "GET", []string{name + ": supplied-secret"}, "body", true)
+			if err == nil || !strings.Contains(err.Error(), "browser fetch manages") || strings.Contains(err.Error(), "supplied-secret") {
+				t.Fatalf("fetch did not explain the unsupported header: %v", err)
+			}
+			for _, matrix := range []bool{false, true} {
+				sets, spec := []string{"header." + name + "=supplied-secret"}, ""
+				if matrix {
+					sets, spec = nil, "header."+name+`=["supplied-secret"]`
+				}
+				_, _, err = coreReplayVariants(source, sets, spec, false)
+				if err == nil || !strings.Contains(err.Error(), "browser fetch manages") || strings.Contains(err.Error(), "supplied-secret") {
+					t.Fatalf("replay matrix=%t did not explain the unsupported header: %v", matrix, err)
+				}
+				if strings.Contains(strings.ToLower(name), "cookie") && !strings.Contains(err.Error(), "rep cookies import TAB @FILE") {
+					t.Fatalf("cookie override has no usable session import guidance: %v", err)
+				}
+			}
+		})
+	}
+	variants, _, err := coreReplayVariants(source, []string{"header.Authorization=Bearer fixture", "header.X-CSRF-Token=fixture"}, "", false)
+	if err != nil || len(variants) != 1 || variants[0].Headers["authorization"] != "Bearer fixture" || variants[0].Headers["x-csrf-token"] != "fixture" || variants[0].Headers["cookie"] != "" {
+		t.Fatalf("explicit application credentials or captured browser headers handled incorrectly: %+v %v", variants, err)
+	}
+}
+
 func runCoreTransportJS(t *testing.T, method, fixture string, values int) map[string]any {
 	t.Helper()
 	variants := []fanoutVariant{}
@@ -75,13 +107,27 @@ func TestCoreTransportWriteStopsWithoutRetry(t *testing.T) {
 		t.Fatal(seen)
 	}
 }
-func TestCoreTransportSafeParallelAnd429Backoff(t *testing.T) {
-	result := runCoreTransportJS(t, "GET", coreFetchFixture+`global.fetch=async(url,init)=>{calls++;active++;peak=Math.max(peak,active);const n=calls;await new Promise(r=>setTimeout(r,10));active--;return response(n===1?429:200)};`, 8)
-	if result["calls"] != float64(9) || result["peak"].(float64) > 4 || result["peak"].(float64) < 2 {
+func TestCoreTransportSafeParallelStopsOn429WithoutRetry(t *testing.T) {
+	result := runCoreTransportJS(t, "GET", coreFetchFixture+`global.fetch=async(url,init)=>{calls++;active++;peak=Math.max(peak,active);const n=calls;await new Promise(r=>setTimeout(r,10));active--;const r=response(n===1?429:200);if(n===1)r.headers.set('retry-after','120');return r};`, 8)
+	// The first batch of four runs in parallel; the 429 inside it ends the job.
+	if result["calls"] != float64(4) || result["peak"].(float64) > 4 || result["peak"].(float64) < 2 {
 		t.Fatal(result)
 	}
-	if result["result"].(map[string]any)["retries"] != float64(1) {
-		t.Fatal(result)
+	outcome := result["result"].(map[string]any)
+	if outcome["retries"] != float64(0) || outcome["stopped"] != true || outcome["complete"] != false {
+		t.Fatal(outcome)
+	}
+	if limited, ok := outcome["rate_limited"].(map[string]any); !ok || limited["retry_ms"] != float64(5000) {
+		t.Fatalf("retry-after must be reported, capped, for the governor: %v", outcome["rate_limited"])
+	}
+	unsent := 0
+	for _, variant := range outcome["variants"].([]any) {
+		if variant.(map[string]any)["error"] == "not_sent_after_rate_limit" {
+			unsent++
+		}
+	}
+	if unsent != 4 {
+		t.Fatalf("variants after the rate limit must stay unsent: %v", outcome["variants"])
 	}
 }
 func TestCoreTransport403StopsSafeUnstarted(t *testing.T) {
@@ -174,7 +220,7 @@ func TestCoreTransportRetryKeepsSameURLHeaderVariantsDistinct(t *testing.T) {
 	command.SetOut(&stdout)
 	result := coreResult{Meta: map[string]any{}}
 	outcome := ""
-	if err := emitCoreTransport(command, result, &coreRecording{snapshot: snapshot}, variants, json.RawMessage(`{"attempted":3,"retries":1,"variants":[{"index":0,"status":200,"ok":true},{"index":1,"status":200,"ok":true}]}`), nil, &outcome); err != nil {
+	if err := emitCoreTransport(command, result, &coreRecording{snapshot: snapshot}, variants, json.RawMessage(`{"attempted":3,"retries":1,"variants":[{"index":0,"status":200,"ok":true},{"index":1,"status":200,"ok":true}]}`), nil, &outcome, nil, ""); err != nil {
 		t.Fatal(err)
 	}
 	var decoded struct {

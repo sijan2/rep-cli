@@ -1,0 +1,553 @@
+{
+ "data": {
+  "threaded_conversation_with_injections_v2": {
+   "instructions": [
+    {
+     "type": "TimelineClearCache"
+    },
+    {
+     "entries": [
+      {
+       "content": {
+        "__typename": "TimelineTimelineItem",
+        "entryType": "TimelineTimelineItem",
+        "itemContent": {
+         "__typename": "TimelineTweet",
+         "itemType": "TimelineTweet",
+         "tweetDisplayType": "Tweet",
+         "tweet_results": {
+          "result": {
+           "__typename": "Tweet",
+           "core": {
+            "user_results": {
+             "result": {
+              "__typename": "User",
+              "core": {
+               "name": "Name u1",
+               "screen_name": "u1"
+              },
+              "id": "VXNlcjoyOTIwMDAwMDAwMDAwMDAwMDAx",
+              "rest_id": "2920000000000000001"
+             }
+            }
+           },
+           "legacy": {
+            "bookmark_count": 0,
+            "conversation_id_str": "1920000000000000200",
+            "created_at": "Thu Oct 31 10:00:00 +0000 2024",
+            "display_text_range": [
+             0,
+             55
+            ],
+            "favorite_count": 55,
+            "full_text": "Aliquip ex ea commodo consequat, duis aute irure dolor.",
+            "id_str": "1920000000000000200",
+            "is_quote_status": false,
+            "lang": "en",
+            "quote_count": 0,
+            "reply_count": 9,
+            "retweet_count": 4,
+            "user_id_str": "2920000000000000001"
+           },
+           "rest_id": "1920000000000000200",
+           "views": {
+            "count": "12000",
+            "state": "EnabledWithCount"
+           }
+          }
+         }
+        }
+       },
+       "entryId": "tweet-1920000000000000200",
+       "sortIndex": "1920000000000001990"
+      },
+      {
+       "content": {
+        "__typename": "TimelineTimelineModule",
+        "displayType": "VerticalConversation",
+        "entryType": "TimelineTimelineModule",
+        "items": [
+         {
+          "entryId": "conversationthread-1920000000000000201-tweet-1920000000000000201",
+          "item": {
+           "itemContent": {
+            "__typename": "TimelineTweet",
+            "itemType": "TimelineTweet",
+            "tweetDisplayType": "Tweet",
+            "tweet_results": {
+             "result": {
+              "__typename": "Tweet",
+              "core": {
+               "user_results": {
+                "result": {
+                 "__typename": "User",
+                 "core": {
+                  "name": "Name u2",
+                  "screen_name": "u2"
+                 },
+                 "id": "VXNlcjoyOTIwMDAwMDAwMDAwMDAwMDAy",
+                 "rest_id": "2920000000000000002"
+                }
+               }
+              },
+              "legacy": {
+               "bookmark_count": 0,
+               "conversation_id_str": "1920000000000000200",
+               "created_at": "Thu Oct 31 10:05:00 +0000 2024",
+               "display_text_range": [
+                4,
+                31
+               ],
+               "favorite_count": 1,
+               "full_text": "@u1 Lorem ipsum dolor sit amet.",
+               "id_str": "1920000000000000201",
+               "in_reply_to_screen_name": "u1",
+               "in_reply_to_status_id_str": "1920000000000000200",
+               "in_reply_to_user_id_str": "2920000000000000001",
+               "is_quote_status": false,
+               "lang": "en",
+               "quote_count": 0,
+               "reply_count": 0,
+               "retweet_count": 0,
+               "user_id_str": "2920000000000000002"
+              },
+              "rest_id": "1920000000000000201",
+              "views": {
+               "count": "100",
+               "state": "EnabledWithCount"
+              }
+             }
+            }
+           }
+          }
+         }
+        ],
+        "metadata": {
+         "conversationMetadata": {
+          "allTweetIds": [
+           "1920000000000000201"
+          ],
+          "enableDeduplication": true
+         }
+        }
+       },
+       "entryId": "conversationthread-1920000000000000201",
+       "sortIndex": "1920000000000001970"
+      },
+      {
+       "content": {
+        "__typename": "TimelineTimelineModule",
+        "displayType": "VerticalConversation",
+        "entryType": "TimelineTimelineModule",
+        "items": [
+         {
+          "entryId": "conversationthread-1920000000000000202-tweet-1920000000000000202",
+          "item": {
+           "itemContent": {
+            "__typename": "TimelineTweet",
+            "itemType": "TimelineTweet",
+            "tweetDisplayType": "Tweet",
+            "tweet_results": {
+             "result": {
+              "__typename": "Tweet",
+              "core": {
+               "user_results": {
+                "result": {
+                 "__typename": "User",
+                 "core": {
+                  "name": "Name u3",
+                  "screen_name": "u3"
+                 },
+                 "id": "VXNlcjoyOTIwMDAwMDAwMDAwMDAwMDAz",
+                 "rest_id": "2920000000000000003"
+                }
+               }
+              },
+              "legacy": {
+               "bookmark_count": 0,
+               "conversation_id_str": "1920000000000000200",
+               "created_at": "Thu Oct 31 10:10:00 +0000 2024",
+               "display_text_range": [
+                4,
+                39
+               ],
+               "favorite_count": 2,
+               "full_text": "@u1 Consectetur adipiscing elit sed do.",
+               "id_str": "1920000000000000202",
+               "in_reply_to_screen_name": "u1",
+               "in_reply_to_status_id_str": "1920000000000000200",
+               "in_reply_to_user_id_str": "2920000000000000001",
+               "is_quote_status": false,
+               "lang": "en",
+               "quote_count": 0,
+               "reply_count": 0,
+               "retweet_count": 0,
+               "user_id_str": "2920000000000000003"
+              },
+              "rest_id": "1920000000000000202",
+              "views": {
+               "count": "200",
+               "state": "EnabledWithCount"
+              }
+             }
+            }
+           }
+          }
+         }
+        ],
+        "metadata": {
+         "conversationMetadata": {
+          "allTweetIds": [
+           "1920000000000000202"
+          ],
+          "enableDeduplication": true
+         }
+        }
+       },
+       "entryId": "conversationthread-1920000000000000202",
+       "sortIndex": "1920000000000001960"
+      },
+      {
+       "content": {
+        "__typename": "TimelineSyntheticUnknownA",
+        "entryType": "TimelineSyntheticUnknownA",
+        "payload": {
+         "items": [
+          {
+           "label": "synthetic"
+          }
+         ]
+        }
+       },
+       "entryId": "syntheticunknowna-1920000000000001955",
+       "sortIndex": "1920000000000001955"
+      },
+      {
+       "content": {
+        "__typename": "TimelineTimelineModule",
+        "displayType": "VerticalConversation",
+        "entryType": "TimelineTimelineModule",
+        "items": [
+         {
+          "entryId": "conversationthread-1920000000000000203-tweet-1920000000000000203",
+          "item": {
+           "itemContent": {
+            "__typename": "TimelineTweet",
+            "itemType": "TimelineTweet",
+            "tweetDisplayType": "Tweet",
+            "tweet_results": {
+             "result": {
+              "__typename": "Tweet",
+              "core": {
+               "user_results": {
+                "result": {
+                 "__typename": "User",
+                 "core": {
+                  "name": "Name u4",
+                  "screen_name": "u4"
+                 },
+                 "id": "VXNlcjoyOTIwMDAwMDAwMDAwMDAwMDA0",
+                 "rest_id": "2920000000000000004"
+                }
+               }
+              },
+              "legacy": {
+               "bookmark_count": 0,
+               "conversation_id_str": "1920000000000000200",
+               "created_at": "Thu Oct 31 10:15:00 +0000 2024",
+               "display_text_range": [
+                4,
+                40
+               ],
+               "favorite_count": 3,
+               "full_text": "@u1 Eiusmod tempor incididunt ut labore.",
+               "id_str": "1920000000000000203",
+               "in_reply_to_screen_name": "u1",
+               "in_reply_to_status_id_str": "1920000000000000200",
+               "in_reply_to_user_id_str": "2920000000000000001",
+               "is_quote_status": false,
+               "lang": "en",
+               "quote_count": 0,
+               "reply_count": 0,
+               "retweet_count": 0,
+               "user_id_str": "2920000000000000004"
+              },
+              "rest_id": "1920000000000000203",
+              "views": {
+               "count": "300",
+               "state": "EnabledWithCount"
+              }
+             }
+            }
+           }
+          }
+         }
+        ],
+        "metadata": {
+         "conversationMetadata": {
+          "allTweetIds": [
+           "1920000000000000203"
+          ],
+          "enableDeduplication": true
+         }
+        }
+       },
+       "entryId": "conversationthread-1920000000000000203",
+       "sortIndex": "1920000000000001950"
+      },
+      {
+       "content": {
+        "__typename": "TimelineTimelineModule",
+        "displayType": "VerticalConversation",
+        "entryType": "TimelineTimelineModule",
+        "items": [
+         {
+          "entryId": "conversationthread-1920000000000000204-tweet-1920000000000000204",
+          "item": {
+           "itemContent": {
+            "__typename": "TimelineTweet",
+            "itemType": "TimelineTweet",
+            "tweetDisplayType": "Tweet",
+            "tweet_results": {
+             "result": {
+              "__typename": "Tweet",
+              "core": {
+               "user_results": {
+                "result": {
+                 "__typename": "User",
+                 "core": {
+                  "name": "Name u5",
+                  "screen_name": "u5"
+                 },
+                 "id": "VXNlcjoyOTIwMDAwMDAwMDAwMDAwMDA1",
+                 "rest_id": "2920000000000000005"
+                }
+               }
+              },
+              "legacy": {
+               "bookmark_count": 0,
+               "conversation_id_str": "1920000000000000200",
+               "created_at": "Thu Oct 31 10:20:00 +0000 2024",
+               "display_text_range": [
+                4,
+                35
+               ],
+               "favorite_count": 4,
+               "full_text": "@u1 Et dolore magna aliqua ut enim.",
+               "id_str": "1920000000000000204",
+               "in_reply_to_screen_name": "u1",
+               "in_reply_to_status_id_str": "1920000000000000200",
+               "in_reply_to_user_id_str": "2920000000000000001",
+               "is_quote_status": false,
+               "lang": "en",
+               "quote_count": 0,
+               "reply_count": 0,
+               "retweet_count": 0,
+               "user_id_str": "2920000000000000005"
+              },
+              "rest_id": "1920000000000000204",
+              "views": {
+               "count": "400",
+               "state": "EnabledWithCount"
+              }
+             }
+            }
+           }
+          }
+         }
+        ],
+        "metadata": {
+         "conversationMetadata": {
+          "allTweetIds": [
+           "1920000000000000204"
+          ],
+          "enableDeduplication": true
+         }
+        }
+       },
+       "entryId": "conversationthread-1920000000000000204",
+       "sortIndex": "1920000000000001940"
+      },
+      {
+       "content": {
+        "__typename": "TimelineSyntheticUnknownB",
+        "entryType": "TimelineSyntheticUnknownB",
+        "payload": {
+         "label": "synthetic"
+        }
+       },
+       "entryId": "syntheticunknownb-1920000000000001935",
+       "sortIndex": "1920000000000001935"
+      },
+      {
+       "content": {
+        "__typename": "TimelineTimelineModule",
+        "displayType": "VerticalConversation",
+        "entryType": "TimelineTimelineModule",
+        "items": [
+         {
+          "entryId": "conversationthread-1920000000000000205-tweet-1920000000000000205",
+          "item": {
+           "itemContent": {
+            "__typename": "TimelineTweet",
+            "itemType": "TimelineTweet",
+            "tweetDisplayType": "Tweet",
+            "tweet_results": {
+             "result": {
+              "__typename": "Tweet",
+              "core": {
+               "user_results": {
+                "result": {
+                 "__typename": "User",
+                 "core": {
+                  "name": "Name u6",
+                  "screen_name": "u6"
+                 },
+                 "id": "VXNlcjoyOTIwMDAwMDAwMDAwMDAwMDA2",
+                 "rest_id": "2920000000000000006"
+                }
+               }
+              },
+              "legacy": {
+               "bookmark_count": 0,
+               "conversation_id_str": "1920000000000000200",
+               "created_at": "Thu Oct 31 10:25:00 +0000 2024",
+               "display_text_range": [
+                4,
+                33
+               ],
+               "favorite_count": 5,
+               "full_text": "@u1 Ad minim veniam quis nostrud.",
+               "id_str": "1920000000000000205",
+               "in_reply_to_screen_name": "u1",
+               "in_reply_to_status_id_str": "1920000000000000200",
+               "in_reply_to_user_id_str": "2920000000000000001",
+               "is_quote_status": false,
+               "lang": "en",
+               "quote_count": 0,
+               "reply_count": 0,
+               "retweet_count": 0,
+               "user_id_str": "2920000000000000006"
+              },
+              "rest_id": "1920000000000000205",
+              "views": {
+               "count": "500",
+               "state": "EnabledWithCount"
+              }
+             }
+            }
+           }
+          }
+         }
+        ],
+        "metadata": {
+         "conversationMetadata": {
+          "allTweetIds": [
+           "1920000000000000205"
+          ],
+          "enableDeduplication": true
+         }
+        }
+       },
+       "entryId": "conversationthread-1920000000000000205",
+       "sortIndex": "1920000000000001930"
+      },
+      {
+       "content": {
+        "__typename": "TimelineTimelineModule",
+        "displayType": "VerticalConversation",
+        "entryType": "TimelineTimelineModule",
+        "items": [
+         {
+          "entryId": "conversationthread-1920000000000000206-tweet-1920000000000000206",
+          "item": {
+           "itemContent": {
+            "__typename": "TimelineTweet",
+            "itemType": "TimelineTweet",
+            "tweetDisplayType": "Tweet",
+            "tweet_results": {
+             "result": {
+              "__typename": "Tweet",
+              "core": {
+               "user_results": {
+                "result": {
+                 "__typename": "User",
+                 "core": {
+                  "name": "Name u7",
+                  "screen_name": "u7"
+                 },
+                 "id": "VXNlcjoyOTIwMDAwMDAwMDAwMDAwMDA3",
+                 "rest_id": "2920000000000000007"
+                }
+               }
+              },
+              "legacy": {
+               "bookmark_count": 0,
+               "conversation_id_str": "1920000000000000200",
+               "created_at": "Thu Oct 31 10:30:00 +0000 2024",
+               "display_text_range": [
+                4,
+                38
+               ],
+               "favorite_count": 6,
+               "full_text": "@u1 Exercitation ullamco laboris nisi.",
+               "id_str": "1920000000000000206",
+               "in_reply_to_screen_name": "u1",
+               "in_reply_to_status_id_str": "1920000000000000200",
+               "in_reply_to_user_id_str": "2920000000000000001",
+               "is_quote_status": false,
+               "lang": "en",
+               "quote_count": 0,
+               "reply_count": 0,
+               "retweet_count": 0,
+               "user_id_str": "2920000000000000007"
+              },
+              "rest_id": "1920000000000000206",
+              "views": {
+               "count": "600",
+               "state": "EnabledWithCount"
+              }
+             }
+            }
+           }
+          }
+         }
+        ],
+        "metadata": {
+         "conversationMetadata": {
+          "allTweetIds": [
+           "1920000000000000206"
+          ],
+          "enableDeduplication": true
+         }
+        }
+       },
+       "entryId": "conversationthread-1920000000000000206",
+       "sortIndex": "1920000000000001920"
+      },
+      {
+       "content": {
+        "__typename": "TimelineTimelineCursor",
+        "cursorType": "Bottom",
+        "entryType": "TimelineTimelineCursor",
+        "value": "x_cursor_bottom_1"
+       },
+       "entryId": "cursor-bottom-1920000000000001900",
+       "sortIndex": "1920000000000001900"
+      }
+     ],
+     "type": "TimelineAddEntries"
+    },
+    {
+     "direction": "Top",
+     "type": "TimelineTerminateTimeline"
+    }
+   ],
+   "metadata": {
+    "scribeConfig": {
+     "page": "ranked_replies"
+    }
+   }
+  }
+ }
+}

@@ -24,10 +24,37 @@ type coreScopeInventory struct {
 	Journal         []map[string]any `json:"journal"`
 	JournalComplete bool             `json:"journal_complete"`
 	BridgeDownSince *time.Time       `json:"bridge_down_since,omitempty"`
+	Cooldowns       []map[string]any `json:"cooldowns"`
+}
+
+// activeCooldowns lists the sites every rep transport currently refuses, so
+// an agent can see a rate stop offline instead of discovering it per command.
+func activeCooldowns() []map[string]any {
+	result := []map[string]any{}
+	gov, err := recordsGovernor()
+	if err != nil {
+		return result
+	}
+	entries, err := os.ReadDir(gov.Dir)
+	if err != nil {
+		return result
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		site := strings.TrimSuffix(name, ".json")
+		if until, reason, active := gov.Cooldown(site); active {
+			result = append(result, map[string]any{"site": site, "until": until.UTC().Format(time.RFC3339), "reason": reason})
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i]["site"].(string) < result[j]["site"].(string) })
+	return result
 }
 
 func readCoreScope(selected scope.Scope) (coreScopeInventory, error) {
-	result := coreScopeInventory{Tabs: []string{}, Captures: []map[string]any{}, Storage: map[string]int64{}, Journal: []map[string]any{}, StorageComplete: true, JournalComplete: true}
+	result := coreScopeInventory{Tabs: []string{}, Captures: []map[string]any{}, Storage: map[string]int64{}, Journal: []map[string]any{}, StorageComplete: true, JournalComplete: true, Cooldowns: activeCooldowns()}
 	registry, err := coreStore()
 	if err != nil {
 		return result, err

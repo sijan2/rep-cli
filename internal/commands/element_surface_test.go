@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -190,7 +188,7 @@ func TestElementFlagsHaveOneCanonicalOwner(t *testing.T) {
 }
 
 func TestElementRegisteredCommandsShareBrowserSelector(t *testing.T) {
-	element, rest, err := rootCmd.Find([]string{"element"})
+	element, rest, err := rootCmd.Find([]string{"lab", "element"})
 	if err != nil || len(rest) != 0 {
 		t.Fatal("element missing")
 	}

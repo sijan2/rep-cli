@@ -28,6 +28,10 @@ Actions: fill, replace, choose, check, click, press, wait. Target: name/role or
 selector. Click/press/wait require after:[{target:{selector},text|value|checked|
 visible|enabled|absent}] or after:[{url}]. Press uses keys:["Enter"].
 Replace requires old and value. See docs/interactions.md for the full schema.`, Args: cobra.RangeArgs(1, 33)}
+	command.Example = `  rep do t1.e1 "search words" --press Enter
+  rep do t1.e2
+  rep do t1.e3 --file ./attachment.pdf
+  rep do @plan.json t1`
 	command.Flags().StringVar(&key, "press", "", "Key, chord, or space-separated sequence after filling")
 	command.Flags().StringArrayVar(&files, "file", nil, "Upload a local file to the observed file input")
 	command.Flags().BoolVar(&capture, "capture", false, "Record traffic triggered by this action")
@@ -95,8 +99,10 @@ func coreDo(command *cobra.Command, args []string, key string, files []string, c
 		if len(args) > 1 {
 			target = args[1]
 		}
+	} else if strings.HasPrefix(target, "n_") {
+		return coreDoNode(command, args, keys, files)
 	} else if !agentstate.RefPattern.MatchString(target) {
-		return coreArgument("provide an observed control reference or @plan")
+		return coreArgument("provide an observed control reference, n_ handle, or @plan")
 	}
 	store, err := coreStore()
 	if err != nil {

@@ -174,6 +174,12 @@ func main() {
 	for {
 		message, err := readMessage(os.Stdin)
 		if err != nil {
+			if errors.Is(err, errFrameSkipped) {
+				// Only the sender of this frame loses its answer: a pending RPC
+				// caller times out, and a capture record fails its own session.
+				logError("skip native message", err)
+				continue
+			}
 			if !errors.Is(err, io.EOF) {
 				logError("read native message", err)
 			}
@@ -280,6 +286,11 @@ func loadLiveData() *LiveData {
 		logError("parse existing live.json; starting fresh", err)
 		return &LiveData{Version: "2.0", Requests: []Request{}}
 	}
+	if initial.Browser != nil && initial.Browser.CaptureMode != "" && initial.Browser.CaptureMode != "ambient" {
+		// An earlier host mirrored task captures here. Their sealed snapshots
+		// were handed to the CLI already; the mirror is dropped, not reloaded.
+		return &LiveData{Version: "2.0", Requests: []Request{}}
+	}
 	if initial.Requests == nil {
 		initial.Requests = []Request{}
 	}
@@ -294,6 +305,13 @@ func saveLiveData() error {
 	// accumulated bodies every 200 ms is quadratic I/O and not a sealed view.
 	if browserCaptureActive && liveData.spool != nil {
 		return nil
+	}
+	if !persistLiveView() {
+		// A task-scoped capture never becomes a global mirror. Replace any
+		// earlier copy with an empty view so the file holds no stale headers.
+		empty := &LiveData{Version: "2.0", Requests: []Request{}, ExportedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+		_, _, err := writeLiveDataFile(dataPath, empty, 0)
+		return err
 	}
 	liveData.ExportedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	_, _, err := writeLiveDataFile(dataPath, liveData, 0)
@@ -469,6 +487,9 @@ func handleMessage(message *Message) (map[string]interface{}, bool) {
 		liveData.spool.close()
 		liveData.spool = nil
 		liveData.Requests = append([]Request(nil), message.Requests...)
+		// A panel export replaces the whole view; stale session metadata from
+		// an earlier capture must not keep classifying it as task-scoped.
+		liveData.Browser = nil
 		trimRequestsLocked()
 		browserCaptureActive = false
 		browserCaptureSealed = false
@@ -787,13 +808,25 @@ func trimRequestsLocked() {
 	}
 }
 
+// errFrameSkipped marks a frame the host discarded without leaving the stream.
+// Chrome allows frames up to 64 MiB and a renderer can produce arbitrary JSON;
+// neither may take the host, and every other agent's bridge, down with it.
+var errFrameSkipped = errors.New("native frame skipped")
+
 func readMessage(reader io.Reader) (*Message, error) {
 	var length uint32
 	if err := binary.Read(reader, binary.LittleEndian, &length); err != nil {
 		return nil, err
 	}
-	if length == 0 || length > maxNativeMessageBytes {
-		return nil, fmt.Errorf("invalid native message length %d", length)
+	if length == 0 {
+		return nil, fmt.Errorf("%w: empty native message", errFrameSkipped)
+	}
+	if length > maxNativeMessageBytes {
+		// Consume the oversized payload so the next frame boundary is intact.
+		if _, err := io.CopyN(io.Discard, reader, int64(length)); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w: native message of %d bytes exceeds %d", errFrameSkipped, length, maxNativeMessageBytes)
 	}
 	content := make([]byte, length)
 	if _, err := io.ReadFull(reader, content); err != nil {
@@ -801,9 +834,18 @@ func readMessage(reader io.Reader) (*Message, error) {
 	}
 	var message Message
 	if err := json.Unmarshal(content, &message); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", errFrameSkipped, err)
 	}
 	return &message, nil
+}
+
+// persistLiveView reports whether live.json may describe the current state.
+// Explicit captures belong to the task that requested them: the CLI stores the
+// sealed snapshot under its own task directory, so a global copy would only
+// duplicate request headers for every other process on the machine. Only the
+// ambient all-tab watch, which has no task, keeps live.json as its view.
+func persistLiveView() bool {
+	return liveData == nil || liveData.Browser == nil || liveData.Browser.CaptureMode == "" || liveData.Browser.CaptureMode == "ambient"
 }
 
 func writeMessage(message interface{}) error {

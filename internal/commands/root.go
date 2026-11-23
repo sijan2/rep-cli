@@ -29,7 +29,6 @@ func Execute() {
 		os.Exit(2)
 	}
 	configureCommandGroups()
-	configureBuildHelp(rootCmd)
 	runStarted := trackRuns(rootCmd)
 	if command, err := rootCmd.ExecuteC(); err != nil {
 		// SilenceErrors keeps cobra from printing raw text; every error that a
@@ -63,6 +62,9 @@ func init() {
 			ae.Next, ae.Retry = "rep scope", "needs-agent"
 			return coreFailure(cmd, ae)
 		}
+		if err := configureLabTab(cmd); err != nil {
+			return coreFailure(cmd, err)
+		}
 		return nil
 	}
 }
@@ -85,8 +87,8 @@ func configureInvocationScope(cmd *cobra.Command, args ...string) error {
 	if err != nil {
 		return err
 	}
-	if selected.Scoped && (rootCommandName(cmd) == "android" || rootCommandName(cmd) == "ig" || rootCommandName(cmd) == "watch") {
-		return output.NewAgentError("scope_unsupported", cmd.CommandPath(), "this lab command uses shared device or all-tab state; select REP_TASK=global explicitly", "rep-lab --help")
+	if selected.Scoped && (labCommandName(cmd) == "android" || labCommandName(cmd) == "ig" || labCommandName(cmd) == "watch") {
+		return output.NewAgentError("scope_unsupported", cmd.CommandPath(), "this lab command uses shared device or all-tab state; select REP_TASK=global explicitly", "rep lab --help")
 	}
 	if selected.Scoped {
 		for _, name := range []string{"REPLIVE_PATH", "REPANDROID_PATH"} {
@@ -104,6 +106,16 @@ func rootCommandName(cmd *cobra.Command) string {
 		current = current.Parent()
 	}
 	return current.Name()
+}
+
+// labCommandName is the tool a `rep lab` invocation addresses, or "" for a core verb.
+func labCommandName(cmd *cobra.Command) string {
+	for current := cmd; current.Parent() != nil; current = current.Parent() {
+		if current.Parent() == labCmd {
+			return current.Name()
+		}
+	}
+	return ""
 }
 
 func getOutputMode() string { return "json" }

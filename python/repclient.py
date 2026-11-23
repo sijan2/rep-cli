@@ -3,12 +3,19 @@
 The caller owns task selection. Ambient REP_TASK is ignored unless explicitly
 requested; subprocess environment changes never mutate the parent environment.
 JSON is the default transport; browser and task pins use the child environment.
+
+The governor helpers share rep's per-site cooldown files with the Go CLI, so a
+rate limit observed by any client pauses every client for the same site.
 """
+import email.utils
 import hashlib
 import json
 import os
+import re
 import subprocess
 import stat
+import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -94,3 +101,139 @@ def evaluation_value(response):
     if "untrusted" in response:
         return response["untrusted"].get("value")
     raise RepError("invalid_output", "expected the version-matched eval result")
+
+
+# --- rep governor cooldowns --------------------------------------------------
+#
+# rep's governor keeps one file per site at <GlobalDataDir>/governor/<site>.json:
+#   {"until": RFC3339, "reason": "...", "set_at": RFC3339}
+# GlobalDataDir is $XDG_DATA_HOME/rep-cli, else ~/.local/share/rep-cli (see
+# internal/scope.GlobalDataDir). The site key is the registrable domain, for
+# example "facebook.com". Companions read the file before any browser work and
+# write it when a site answers with a rate limit; nobody sleeps and retries.
+
+RFC3339_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?:[Zz]|([+-])(\d{2}):(\d{2}))$")
+SITE_RE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?:\.(?!-)[a-z0-9-]{1,63})*$")
+MULTI_PART_SUFFIXES = ("co.uk", "org.uk", "ac.uk", "com.au", "co.jp", "co.nz", "com.br", "co.in")
+DEFAULT_COOLDOWN_SECONDS = 60
+MAX_COOLDOWN = timedelta(hours=24)  # same cap as the Go governor
+
+
+def global_data_dir(environment=None):
+    """rep's GlobalDataDir: $XDG_DATA_HOME/rep-cli, else ~/.local/share/rep-cli."""
+    env = os.environ if environment is None else environment
+    base = (env.get("XDG_DATA_HOME") or "").strip()
+    if base:
+        if not os.path.isabs(base):
+            raise RepError("invalid_environment", "XDG_DATA_HOME must be an absolute path")
+        return Path(base) / "rep-cli"
+    home = (env.get("HOME") or "").strip()
+    return (Path(home) if home else Path.home()) / ".local" / "share" / "rep-cli"
+
+
+def registrable_domain(host):
+    """The site key rep uses: the last two labels, or three for a few known multi-part suffixes."""
+    labels = [label for label in (host or "").strip().lower().strip(".").split(".") if label]
+    if len(labels) == 4 and all(label.isdigit() for label in labels):
+        return ".".join(labels)  # an IPv4 literal is its own site
+    if len(labels) > 2 and ".".join(labels[-2:]) in MULTI_PART_SUFFIXES:
+        return ".".join(labels[-3:])
+    return ".".join(labels[-2:])
+
+
+def parse_rfc3339(text):
+    """An aware datetime for an RFC 3339 timestamp (Go's RFC3339 and RFC3339Nano), else None."""
+    match = RFC3339_RE.fullmatch(text.strip()) if isinstance(text, str) else None
+    if not match:
+        return None
+    year, month, day, hour, minute, second, fraction, sign, offset_hours, offset_minutes = match.groups()
+    zone = timezone.utc
+    if sign:
+        delta = timedelta(hours=int(offset_hours), minutes=int(offset_minutes))
+        zone = timezone(-delta if sign == "-" else delta)
+    try:
+        return datetime(int(year), int(month), int(day), int(hour), int(minute), int(second),
+                        int((fraction or "0").ljust(6, "0")[:6]), tzinfo=zone)
+    except ValueError:
+        return None
+
+
+def format_rfc3339(moment):
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def retry_after_seconds(value, now=None):
+    """RFC 9110 Retry-After as whole seconds: delta-seconds or an HTTP-date; None when absent or unusable."""
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        return None
+    if re.fullmatch(r"\d{1,9}", text):
+        return int(text)
+    try:
+        moment = email.utils.parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if moment is None:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return max(0, int((moment - (now or datetime.now(timezone.utc))).total_seconds()))
+
+
+def governor_cooldown_path(site, data_dir=None):
+    if not isinstance(site, str) or not SITE_RE.fullmatch(site):
+        raise ValueError("site must be a registrable domain such as facebook.com")
+    base = Path(data_dir) if data_dir else global_data_dir()
+    return base / "governor" / (site + ".json")
+
+
+def governor_cooldown(site, data_dir=None, now=None):
+    """(until, reason) of an active cooldown for `site`; (None, "") when there is none.
+
+    A missing, unreadable or malformed file is no cooldown. `until` is an aware datetime.
+    """
+    path = governor_cooldown_path(site, data_dir)
+    try:
+        value = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None, ""
+    if not isinstance(value, dict):
+        return None, ""
+    until = parse_rfc3339(value.get("until"))
+    if until is None or until <= (now or datetime.now(timezone.utc)):
+        return None, ""
+    reason = value.get("reason")
+    return until, reason if isinstance(reason, str) else ""
+
+
+def write_governor_cooldown(site, until, reason, data_dir=None, now=None):
+    """Record that `site` must not be contacted before `until`; returns the effective until.
+
+    The file is published atomically with mode 0600 in a 0700 directory. An
+    already recorded later cooldown is kept, so a shorter hint never cuts an
+    earlier back-off short; a cooldown never exceeds 24 hours.
+    """
+    path = governor_cooldown_path(site, data_dir)
+    now = now or datetime.now(timezone.utc)
+    if until.tzinfo is None:
+        until = until.replace(tzinfo=timezone.utc)
+    until = min(until, now + MAX_COOLDOWN)
+    existing, _ = governor_cooldown(site, data_dir, now)
+    if existing is not None and existing >= until:
+        return existing
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(path.parent, 0o700)
+    descriptor, temporary = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w") as handle:
+            json.dump({"until": format_rfc3339(until), "reason": str(reason or "")[:200], "set_at": format_rfc3339(now)}, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return until

@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -18,7 +16,7 @@ var jevCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(jevCmd)
+	labCmd.AddCommand(jevCmd)
 	var envFile string
 	configCommand := &cobra.Command{
 		Use: "config --env-file PATH", Short: "Remember a local env file for both CLI and native host", Args: cobra.NoArgs,

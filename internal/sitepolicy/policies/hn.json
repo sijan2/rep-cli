@@ -1,0 +1,28 @@
+{
+  "id": "hn",
+  "version": "1",
+  "hosts": ["news.ycombinator.com"],
+  "tos_risk": "low",
+  "replay": "read_only",
+  "signature_headers": [],
+  "body_ops": [
+    {"op": "item", "method": "GET", "host": "news.ycombinator.com", "path_re": "^/item$", "types": ["Document"], "decoder": "hn_html"}
+  ],
+  "private_paths": ["/login", "/threads", "/changepw", "/favorites", "/upvoted", "/hidden", "/flagged"],
+  "primary": {"op": "item", "path_re": "^/item$"},
+  "inputs": ["item"],
+  "continuations": [
+    {"kind": "cursor", "selector": "a.morelink", "trigger": "click"}
+  ],
+  "dom_keys": {"container": "tr.athing.comtr", "key": "id"},
+  "contracts": {"id": 0, "parent": 0.01, "author": 0.05, "time": 0.05, "text": 0.1, "unknown_share": 0.1},
+  "expected": "comment_count",
+  "pacing": {"min_interval_ms": 2000, "max_in_flight": 1, "advances_per_read": 20, "reserve_min": 0, "reserve_fraction": 0, "daily_records": 0},
+  "stop": {
+    "statuses": [401, 403, 429],
+    "headers": [],
+    "title_contains": [],
+    "redirect_path_prefixes": ["/login"],
+    "redirect_query_keys": []
+  }
+}

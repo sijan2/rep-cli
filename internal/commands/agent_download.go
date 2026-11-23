@@ -16,6 +16,12 @@ func newCoreDownloadCommand() *cobra.Command {
 	var overwrite bool
 	var timeout time.Duration
 	command := &cobra.Command{Use: "download h_ID|URL PATH", Short: "Save a GET privately with browser credentials and validation", Args: cobra.ExactArgs(2)}
+	command.Long = `Uses the selected browser profile and its cookies. A captured h_ handle keeps
+its source archive and request metadata; a URL starts a new GET. The destination
+is validated by its extension, so an HTML login page is not accepted as a PDF.
+Use --overwrite to atomically replace an existing file.`
+	command.Example = `  rep download h_ID ./report.pdf
+  rep download https://example.com/report.pdf ./report.pdf --timeout 5m`
 	command.Flags().BoolVar(&overwrite, "overwrite", false, "Atomically replace an existing destination")
 	command.Flags().DurationVar(&timeout, "timeout", 2*time.Minute, "Total transfer budget (1s–30m)")
 	command.RunE = func(cmd *cobra.Command, args []string) error {

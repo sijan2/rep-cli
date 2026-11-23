@@ -70,6 +70,9 @@ type Tab struct {
 	Viewport        string         `json:"viewport,omitempty"`
 	HasInput        bool           `json:"has_input,omitempty"`
 	Dialog          bool           `json:"dialog,omitempty"`
+	// Ledger names the extension's per-tab network ledger opened for records
+	// reads, so a later read of the same tab can resume it.
+	Ledger string `json:"ledger,omitempty"`
 }
 
 func (t *Tab) Busy(now time.Time) bool { return t.Lease != nil && t.Lease.Until.After(now) }

@@ -55,15 +55,15 @@ func jevAgentError(command string, err error) output.AgentError {
 func jevSuggestions(code string) []string {
 	switch code {
 	case jev.CodeNotConfigured:
-		return []string{"rep-lab jev config --env-file /absolute/path/to/.env", "rep-lab jev status"}
+		return []string{"rep lab jev config --env-file /absolute/path/to/.env", "rep lab jev status"}
 	case jev.CodeUnauthorized:
-		return []string{"rep-lab jev status", "rep-lab jev doctor"}
+		return []string{"rep lab jev status", "rep lab jev doctor"}
 	case jev.CodeRateLimited, jev.CodeOverloaded, jev.CodeServerError, jev.CodeTimeout, jev.CodeConnection, jev.CodeUnclassified:
-		return []string{"retry after a short wait; the lookup did not act on the page", "rep-lab jev doctor"}
+		return []string{"retry after a short wait; the lookup did not act on the page", "rep lab jev doctor"}
 	case jev.CodeContextExceeded, jev.CodeInvalidRequest:
-		return []string{"narrow the lookup with --frame and --root-node, or lower --limit", "rep-lab element observe --tab ID --kind KIND  # inspect candidates without a model call"}
+		return []string{"narrow the lookup with --frame and --root-node, or lower --limit", "rep lab element observe --tab ID --kind KIND  # inspect candidates without a model call"}
 	case jev.CodeInvalidResponse:
-		return []string{"retry; if it repeats, pin JEV_MODEL (for example jev-1.13.0) and keep this message", "rep-lab jev doctor"}
+		return []string{"retry; if it repeats, pin JEV_MODEL (for example jev-1.13.0) and keep this message", "rep lab jev doctor"}
 	case output.ErrCodeBrowserUnavailable:
 		return []string{"rep tabs", "rep tabs"}
 	}

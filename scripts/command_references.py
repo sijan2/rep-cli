@@ -42,25 +42,8 @@ def extract(root):
     rows, seen = [], set()
 
     def add(path, line, argv, kind, binary="rep"):
-        if argv and argv[0] in ("rep", "rep-lab"):
+        if argv and argv[0] == "rep":
             binary, argv = argv[0], argv[1:]
-        # During the staged migration old examples of moved commands are
-        # checked by the replab suite; their docs are rewritten in step 7.
-        lab_roots = {"android", "ig", "arc", "audit", "engine", "probe", "packets", "media", "jev", "locate", "element", "step", "state", "native-capture", "watch"}
-        lab_browser = {"locate", "element", "select", "select-batch", "observe", "validate", "step", "state", "native-capture", "watch"}
-        path_args, index = [], 0
-        while index < len(argv):
-            arg = argv[index]
-            if arg in ("--workspace", "--task", "--output", "-o", "--run", "--browser"):
-                index += 2
-                continue
-            if arg.startswith("-"):
-                index += 1
-                continue
-            path_args.append(arg)
-            index += 1
-        if path_args and (path_args[0] in lab_roots or (len(path_args) > 1 and path_args[0] == "browser" and path_args[1] in lab_browser)):
-            binary = "rep-lab"
         if not argv:
             return
         # Prose and Cobra placeholders do not promise an executable command.
@@ -97,7 +80,7 @@ def extract(root):
                             parts = node.args[2:]  # wrapper's first two args are scope
                 if isinstance(node, (ast.List, ast.Tuple)) and node.elts:
                     first = node.elts[0]
-                    if isinstance(first, ast.Constant) and first.value in ("rep", "rep-lab", "browser", "body", "list", "detail", "summary", "jev", "scope"):
+                    if isinstance(first, ast.Constant) and first.value in ("rep", "browser", "body", "list", "detail", "summary", "scope"):
                         parts = node.elts
                 if parts:
                     add(path, node.lineno, [x.value if isinstance(x, ast.Constant) and isinstance(x.value, str) else "VALUE" for x in parts], "argv")
@@ -105,14 +88,14 @@ def extract(root):
         # metacharacter inside an argument. Multi-line code blocks are scanned
         # separately as command lines. Plain prose is deliberately not a call.
         for number, line in enumerate(source.splitlines(), 1):
-            for match in re.finditer(r'`(rep(?:-lab)?(?:\s+[^`\n]*)?)`', line):
+            for match in re.finditer(r'`(rep(?:\s+[^`\n]*)?)`', line):
                 add(path, number, tokens(match.group(1)), "example")
             stripped = line.strip().lstrip("$ ")
             stripped = re.split(r"\s{2,}(?=[A-Z])", stripped)[0]
-            if (path.suffix in (".md", ".sh", ".go") or path.name == "Makefile") and (stripped.startswith(("rep ", "rep-lab ")) or stripped in ("rep", "rep-lab")):
+            if (path.suffix in (".md", ".sh", ".go") or path.name == "Makefile") and (stripped.startswith("rep ") or stripped == "rep"):
                 add(path, number, tokens(stripped), "example")
             if path.suffix in (".go", ".js", ".mjs"):
-                for match in re.finditer(r'"(rep(?:-lab)? [^"\n]+)"', line):
+                for match in re.finditer(r'"(rep [^"\n]+)"', line):
                     add(path, number, tokens(match.group(1)), "hint")
     return sorted(rows, key=lambda row: (row["file"], row["line"], row["argv"]))
 

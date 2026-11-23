@@ -1,0 +1,38 @@
+{
+  "id": "x",
+  "version": "1",
+  "hosts": ["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"],
+  "tos_risk": "high",
+  "replay": "never",
+  "signature_headers": ["x-client-transaction-id"],
+  "body_ops": [
+    {"op": "tweet_detail", "method": "GET", "host": "x.com", "path_re": "^/i/api/graphql/[^/]+/(TweetDetail|TweetResultByRestId)$", "types": ["XHR", "Fetch"], "decoder": "x_tweetdetail"}
+  ],
+  "private_paths": [
+    "/i/api/1.1/dm/",
+    "/i/api/2/notifications",
+    "/i/api/1.1/account/",
+    "x.com/messages",
+    "DMInbox",
+    "DmAllSearch"
+  ],
+  "primary": {"op": "tweet_detail", "path_re": "^/i/api/graphql/[^/]+/TweetDetail$"},
+  "inputs": ["status"],
+  "continuations": [
+    {"kind": "bottom", "selector": "article[data-testid=\"tweet\"]:last-of-type", "trigger": "scroll"},
+    {"kind": "show_more", "selector": "div[data-testid=\"cellInnerDiv\"] button[role=\"button\"]", "trigger": "click"},
+    {"kind": "show_more_threads", "selector": "div[data-testid=\"cellInnerDiv\"] button[role=\"button\"]", "trigger": "click"},
+    {"kind": "spam_prompt", "selector": "div[data-testid=\"cellInnerDiv\"] button[role=\"button\"]", "trigger": "click"}
+  ],
+  "dom_keys": {"container": "article[data-testid=\"tweet\"]", "key": "status", "permalink": "a[href*=\"/status/\"] time"},
+  "contracts": {"id": 0, "parent": 0.01, "author": 0.05, "time": 0.05, "text": 0.1, "unknown_share": 0.1},
+  "expected": "reply_count",
+  "pacing": {"min_interval_ms": 1500, "max_in_flight": 1, "advances_per_read": 15, "reserve_min": 10, "reserve_fraction": 0.4, "daily_records": 2000},
+  "stop": {
+    "statuses": [401, 403, 429],
+    "headers": [],
+    "title_contains": [],
+    "redirect_path_prefixes": ["/login", "/i/flow/login"],
+    "redirect_query_keys": []
+  }
+}

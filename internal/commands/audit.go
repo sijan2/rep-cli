@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -45,16 +43,16 @@ interest. Full value-graph + per-request flags are spilled to
 data without blowing the token budget.
 
 Examples:
-  rep audit                    Top 20 findings from live.json
-  rep audit --top 50           Top 50 findings
-  rep audit --saved latest     Audit most recent saved session
-  rep audit --primary-only     Restrict to primary-domain requests
-  rep audit --force            Bypass cache and recompute`,
+  rep lab audit                    Top 20 findings from live.json
+  rep lab audit --top 50           Top 50 findings
+  rep lab audit --saved latest     Audit most recent saved session
+  rep lab audit --primary-only     Restrict to primary-domain requests
+  rep lab audit --force            Bypass cache and recompute`,
 	RunE: runAudit,
 }
 
 func init() {
-	rootCmd.AddCommand(auditCmd)
+	labCmd.AddCommand(auditCmd)
 	auditCmd.Flags().StringVar(&auditSaved, "saved", "", "Read from saved session (ID, prefix, or 'latest')")
 	auditCmd.Flags().IntVar(&auditTop, "top", 20, "Number of findings to return")
 	auditCmd.Flags().BoolVar(&auditPrimaryOnly, "primary-only", false, "Restrict to primary-domain requests")

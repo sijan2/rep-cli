@@ -2,7 +2,7 @@
   const results = new Array(job.variants.length);
   const deadline = performance.now() + job.timeout_ms;
   let width = job.safe ? Math.min(4, job.variants.length) : 1;
-  let stopped = false, attempted = 0, retries = 0;
+  let stopped = false, attempted = 0, retries = 0, rateLimited = null;
   const run = async (variant) => {
     const result = { index: variant.index, status: 0, ok: false, bytes: 0 };
     const controller = new AbortController();
@@ -38,19 +38,16 @@
       results[entry.variant.index] = result;
       return { entry, result };
     }));
-    let backoff = 0;
-    for (const { entry, result } of received) {
-      if (result.status === 403 || (!job.safe && !result.ok)) stopped = true;
-      if (job.safe && result.status === 429) {
-        width = Math.max(1, Math.floor(width / 2));
-        backoff = Math.max(backoff, result.retry_ms * (entry.tries + 1));
-        if (entry.tries < 2) { pending.push({ variant: entry.variant, tries: entry.tries + 1 }); retries++; }
-      }
+    for (const { result } of received) {
+      // A rate limit, a refusal or any unsafe failure ends the job. Nothing is
+      // retried around a 429: the CLI records the server's Retry-After as a
+      // cooldown that every later request to this site honors.
+      if (result.status === 429 || result.status === 403 || (!job.safe && !result.ok)) stopped = true;
+      if (result.status === 429) rateLimited = { retry_ms: result.retry_ms };
     }
-    if (backoff && !stopped) await new Promise(resolve => setTimeout(resolve, Math.min(backoff, Math.max(0, deadline - performance.now()))));
   }
   for (const variant of job.variants) {
-    if (!results[variant.index]) results[variant.index] = {index: variant.index, status: 0, ok: false, bytes: 0, error: stopped ? 'not_sent_after_failure' : 'not_sent_deadline'};
+    if (!results[variant.index]) results[variant.index] = {index: variant.index, status: 0, ok: false, bytes: 0, error: stopped ? (rateLimited ? 'not_sent_after_rate_limit' : 'not_sent_after_failure') : 'not_sent_deadline'};
   }
-  return { variants: results, attempted, retries, stopped, complete: !pending.length && !stopped };
+  return { variants: results, attempted, retries, stopped, rate_limited: rateLimited, complete: !pending.length && !stopped };
 })(__REP_TRANSPORT_JOB__)

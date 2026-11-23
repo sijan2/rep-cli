@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -32,7 +30,7 @@ func newPacketsCommand() *cobra.Command {
 }
 
 func newPacketsCommandWith(backend packetCommandBackend, open evidenceOpener) *cobra.Command {
-	command := &cobra.Command{Use: "packets", Short: "Collect filtered native packets or inspect bounded pcap headers", Long: "Passive native diagnostics with explicit interface, filter and resource bounds. Live capture requires macOS, cgo/libpcap and access to a BPF capture device. Output is bounded JSON. Read rep-lab packets --help for coverage and encryption limits."}
+	command := &cobra.Command{Use: "packets", Short: "Collect filtered native packets or inspect bounded pcap headers", Long: "Passive native diagnostics with explicit interface, filter and resource bounds. Live capture requires macOS, cgo/libpcap and access to a BPF capture device. Output is bounded JSON. Read rep lab packets --help for coverage and encryption limits."}
 	command.AddCommand(&cobra.Command{Use: "interfaces", Short: "List native capture interfaces without opening a capture", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		interfaces, err := backend.interfaces()
 		if err != nil {
@@ -300,4 +298,4 @@ func (record *packetEvidence) finish(result packetcapture.Result, captureErr err
 	return evidenceErr
 }
 
-func init() { rootCmd.AddCommand(newPacketsCommand()) }
+func init() { labCmd.AddCommand(newPacketsCommand()) }

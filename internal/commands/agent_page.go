@@ -24,6 +24,13 @@ type corePageOptions struct {
 func newCorePageCommand() *cobra.Command {
 	options := corePageOptions{}
 	command := &cobra.Command{Use: "page [TAB] [URL|/path|p_CURSOR]", Short: "Read or navigate", Args: cobra.MaximumNArgs(2)}
+	command.Long = `Open a URL, follow a relative path in a tab, or refresh an observation with a tab handle.
+With --capture on an existing tab, the page reloads to record its traffic. Read
+complete and page_state; run a returned next verbatim to continue loading or paging.`
+	command.Example = `  rep page https://example.com/ --capture
+  rep page t1 --section "Results"
+  rep page t1 --find "role:button Load more"
+  rep page t1 /products --viewport mobile`
 	command.Flags().StringVar(&options.Section, "section", "", "Read one heading section")
 	command.Flags().StringVar(&options.Find, "find", "", "Find text, css:SELECTOR, or role:ROLE NAME")
 	command.Flags().BoolVar(&options.Reload, "reload", false, "Reload before reading")

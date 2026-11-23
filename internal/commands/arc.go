@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -78,9 +76,9 @@ var arcCDPCmd = &cobra.Command{
 	Long: `Send a CDP command to Arc's browser target.
 
 Examples:
-  rep arc cdp Browser.getVersion
-  rep arc cdp Target.getTargets
-  rep arc cdp Target.createTarget --params '{"url":"https://github.com","background":true}'`,
+  rep lab arc cdp Browser.getVersion
+  rep lab arc cdp Target.getTargets
+  rep lab arc cdp Target.createTarget --params '{"url":"https://github.com","background":true}'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		params, err := readJSONObject(arcCDPParams)
@@ -403,13 +401,13 @@ func emitArcError(command string, err error) error {
 		output.ErrCodeBrowserRPC,
 		command,
 		err.Error(),
-		fmt.Sprintf("rep arc launch --port %d --restart", arcDebugPort),
-		fmt.Sprintf("rep arc status --port %d", arcDebugPort),
+		fmt.Sprintf("rep lab arc launch --port %d --restart", arcDebugPort),
+		fmt.Sprintf("rep lab arc status --port %d", arcDebugPort),
 	), getOutputMode() == "json")
 }
 
 func init() {
-	rootCmd.AddCommand(arcCmd)
+	labCmd.AddCommand(arcCmd)
 	arcCmd.AddCommand(arcStatusCmd, arcTargetsCmd, arcCDPCmd, arcReloadExtensionCmd, arcLaunchCmd)
 	arcCmd.PersistentFlags().IntVar(&arcDebugPort, "port", defaultArcDebugPort, "ArcCore loopback DevTools port")
 	arcCmd.PersistentFlags().StringVar(&arcDebugOrigin, "origin", "", "WebSocket Origin allowed by Arc (default: loopback port URL)")

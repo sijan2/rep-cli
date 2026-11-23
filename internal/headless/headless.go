@@ -84,8 +84,25 @@ func paths(dataDir string) (root, profile, bridgeDir string) {
 		bridgeDir = filepath.Join("/tmp", fmt.Sprintf("rep-headless-%d-%x", os.Getuid(), sum[:10]))
 	} else {
 		bridgeDir = filepath.Join(runtimeDir, fmt.Sprintf("r-%x", sum[:10]))
+		// XDG_RUNTIME_DIR itself can be long (notably macOS's per-user
+		// temporary directories). Hashing only our suffix does not make the
+		// resulting sockaddr_un fit. Keep browser data at its requested path,
+		// but use a deterministic owner-private transport directory when needed.
+		if len(filepath.Join(bridgeDir, "bridge-2147483647.sock")) > 103 {
+			sum = sha256.Sum256([]byte(filepath.Clean(dataDir) + "\x00" + filepath.Clean(runtimeDir)))
+			bridgeDir = filepath.Join("/tmp", fmt.Sprintf("rep-headless-%d-%x", os.Getuid(), sum[:10]))
+		}
 	}
 	return
+}
+
+func legacyBridgeDir(dataDir string) string {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" || !filepath.IsAbs(runtimeDir) {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(dataDir)))
+	return filepath.Join(runtimeDir, fmt.Sprintf("r-%x", sum[:10]))
 }
 
 func privateDir(path string) error {
@@ -133,8 +150,18 @@ func readState(dataDir string) (State, error) {
 		return State{}, errors.New("headless state exceeds its size limit")
 	}
 	var state State
-	if json.Unmarshal(data, &state) != nil || state.Version != 1 || state.Profile != profile || state.BridgeDir != bridgeDir || state.PID < 0 {
+	if json.Unmarshal(data, &state) != nil || state.Version != 1 || state.Profile != profile || state.PID < 0 {
 		return State{}, errors.New("headless state does not match this task")
+	}
+	if state.BridgeDir != bridgeDir {
+		// Failed starts in older builds persisted their overlong transport
+		// directory with PID zero. Recover that stopped profile automatically;
+		// an active process must never be rebound to a different socket root.
+		legacy := legacyBridgeDir(dataDir)
+		if state.PID != 0 || legacy == "" || state.BridgeDir != legacy {
+			return State{}, errors.New("headless state does not match this task")
+		}
+		state.BridgeDir = bridgeDir
 	}
 	return state, nil
 }

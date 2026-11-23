@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -86,7 +84,7 @@ func TestStateAsksJevWhenSignalsAreAmbiguous(t *testing.T) {
 	if json.Unmarshal(stdout.Bytes(), &result) != nil || result.Kind != "login_wall" || result.Basis != "jev_screenshot_choice" || result.ModelRequests != 1 || result.Judgment == nil || result.Judgment.Confidence != 0.91 {
 		t.Fatalf("ambiguous signals must be decided by one Jev choice: %s", stdout.String())
 	}
-	if result.Next != "" || !strings.Contains(result.Advice, "Sign in manually") {
+	if result.Next != "" || !strings.Contains(result.Advice, "observed sign-in controls") || !strings.Contains(result.Advice, "rep cookies import") {
 		t.Fatalf("a login wall has no automatic next command: %s", stdout.String())
 	}
 	if len(asker.request.Questions["state"].Choices) != len(stateKinds) || asker.request.Questions["state"].Type != "choice" {

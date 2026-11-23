@@ -1,5 +1,3 @@
-//go:build replab
-
 package commands
 
 import (
@@ -25,7 +23,7 @@ type probeAddResult struct {
 }
 
 func init() {
-	rootCmd.AddCommand(probeCmd)
+	labCmd.AddCommand(probeCmd)
 }
 
 func probeNewCommand() *cobra.Command {
@@ -74,7 +72,7 @@ input_reflection, mutation_side_effect, rate_or_lockout, information_disclosure.
 			return probeEmit(cmd, probeAddResult{Probe: p, Created: created}, nil, 0, 0, probeSuggestions(p))
 		}}
 	add.Flags().StringVar(&hypothesis, "hypothesis", "", "One sentence describing the hypothesis and why it matters")
-	add.Flags().StringVar(&oracle, "oracle", "", "Fixed oracle kind (see rep probe --help and rep probe coverage)")
+	add.Flags().StringVar(&oracle, "oracle", "", "Fixed oracle kind (see rep lab probe --help and rep lab probe coverage)")
 	add.Flags().StringVar(&ref, "ref", "", "Captured request ID or unambiguous alias in this task")
 	add.Flags().StringVar(&precondition, "precondition", "", "Prerequisite for an interpretable result (default: oracle-specific)")
 	add.Flags().StringVar(&mutationShape, "mutation-shape", "", "Stable mutation descriptor; defaults to the oracle's standard experiment")
@@ -316,11 +314,11 @@ func probeSuggestions(p probe.Probe) []string {
 }
 
 func probeCommandLine(args ...string) string {
-	binary := "rep"
+	parts := []string{"rep"}
 	if len(args) > 0 && args[0] == "probe" {
-		binary = "rep-lab"
+		parts = append(parts, "lab")
 	}
-	parts := append([]string{binary}, args...)
+	parts = append(parts, args...)
 	if selected, err := scope.Current(); err == nil && selected.Scoped {
 		parts = append(parts, "--task", selected.Identity())
 	}
