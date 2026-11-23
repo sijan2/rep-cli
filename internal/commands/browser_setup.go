@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"path/filepath"
-
+	"runtime"
 	"strings"
 )
 
@@ -24,24 +24,59 @@ func nativeManifestPaths(selector string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := filepath.Join(home, "Library", "Application Support")
-	paths := map[string]string{
-		// Dia keeps Chrome's branding paths and reads Chrome's user-level native
-		// hosts, so it shares this manifest with Chrome.
-		"dia":      filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", "com.repplus.host.json"),
-		"arc":      filepath.Join(base, "Arc", "NativeMessagingHosts", "com.repplus.host.json"),
-		"chrome":   filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", "com.repplus.host.json"),
-		"chromium": filepath.Join(base, "Chromium", "NativeMessagingHosts", "com.repplus.host.json"),
-		"edge":     filepath.Join(base, "Microsoft Edge", "NativeMessagingHosts", "com.repplus.host.json"),
-		"brave":    filepath.Join(base, "BraveSoftware", "Brave-Browser", "NativeMessagingHosts", "com.repplus.host.json"),
+	return nativeManifestPathsFor(runtime.GOOS, home, os.Getenv("XDG_CONFIG_HOME"), selector)
+}
+
+func nativeManifestPathsFor(goos, home, xdgConfig, selector string) ([]string, error) {
+	const file = "com.repplus.host.json"
+	var paths map[string]string
+	defaults := []string{"dia", "arc", "chromium"}
+	if goos == "linux" {
+		// Linux browsers read user-level hosts from their config directory.
+		// Dia does not ship for Linux; its default selector maps to Chrome so
+		// rep doctor's default repair works. Arc is unavailable.
+		base := xdgConfig
+		if base == "" {
+			base = filepath.Join(home, ".config")
+		}
+		paths = map[string]string{
+			"dia":      filepath.Join(base, "google-chrome", "NativeMessagingHosts", file),
+			"chrome":   filepath.Join(base, "google-chrome", "NativeMessagingHosts", file),
+			"chromium": filepath.Join(base, "chromium", "NativeMessagingHosts", file),
+			"edge":     filepath.Join(base, "microsoft-edge", "NativeMessagingHosts", file),
+			"brave":    filepath.Join(base, "BraveSoftware", "Brave-Browser", "NativeMessagingHosts", file),
+		}
+		defaults = []string{"chrome", "chromium"}
+	} else {
+		base := filepath.Join(home, "Library", "Application Support")
+		paths = map[string]string{
+			// Dia keeps Chrome's branding paths and reads Chrome's user-level native
+			// hosts, so it shares this manifest with Chrome.
+			"dia":      filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", file),
+			"arc":      filepath.Join(base, "Arc", "NativeMessagingHosts", file),
+			"chrome":   filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", file),
+			"chromium": filepath.Join(base, "Chromium", "NativeMessagingHosts", file),
+			"edge":     filepath.Join(base, "Microsoft Edge", "NativeMessagingHosts", file),
+			"brave":    filepath.Join(base, "BraveSoftware", "Brave-Browser", "NativeMessagingHosts", file),
+		}
 	}
 	selector = strings.ToLower(strings.TrimSpace(selector))
 	if selector == "" || selector == "any" || selector == "all" {
-		return []string{paths["dia"], paths["arc"], paths["chromium"]}, nil
+		selected := make([]string, 0, len(defaults))
+		for _, name := range defaults {
+			selected = append(selected, paths[name])
+		}
+		return selected, nil
 	}
 	path, ok := paths[selector]
 	if !ok {
-		return nil, fmt.Errorf("unsupported browser %q (want dia, arc, chrome, chromium, edge, brave, or any)", selector)
+		names := make([]string, 0, len(paths))
+		for _, name := range []string{"dia", "arc", "chrome", "chromium", "edge", "brave"} {
+			if _, present := paths[name]; present {
+				names = append(names, name)
+			}
+		}
+		return nil, fmt.Errorf("unsupported browser %q on %s (want %s, or any)", selector, goos, strings.Join(names, ", "))
 	}
 	return []string{path}, nil
 }

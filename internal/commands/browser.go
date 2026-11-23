@@ -15,7 +15,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultBrowser = "dia"
+// defaultBrowser is the --browser default for lab and decision commands:
+// REP_BROWSER when set, as core commands and rep doctor already honor it,
+// otherwise dia. Agents can then set REP_BROWSER=headless once.
+var defaultBrowser = defaultBrowserFromEnv()
+
+func defaultBrowserFromEnv() string {
+	if selected := strings.ToLower(strings.TrimSpace(os.Getenv("REP_BROWSER"))); selected != "" {
+		return selected
+	}
+	return "dia"
+}
 
 var (
 	browserSelector string
